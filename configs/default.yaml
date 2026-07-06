@@ -32,6 +32,24 @@ lhmm:
   hazard_prob_threshold: 0.35
   hazard_dwell_ticks: 2
 
+envelope:
+  # DynamicSSMEnvelope -- the certified speed floor (ISO/TS 15066 SSM with the
+  # MEASURED approach speed v_proj, not the fixed K prior). Its stop distance is
+  #   S(t) = max(0, v_proj)*T + C + Sa
+  # reusing T, C, Sa from the `zones` block (SINGLE SOURCE -- never re-typed here).
+  # `ramp` is the band above S(t) over which permissible speed scales 0 -> 1.
+  ramp: 0.30          # width (m) of the speed-scaling band above the dynamic stop distance
+
+horizon:
+  # Horizon prediction replaces the ~vacuous 16 ms one-step p@A lookahead. We
+  # extrapolate where the operator will BE (constant-acceleration) and ask whether
+  # they breach the red radius within `horizon_s`, then fuse with the state posterior.
+  horizon_s: 0.5          # constant-acceleration lookahead (s)
+  imminence_steepness: 8.0  # sigmoid steepness fusing time-to-breach into a risk score
+  risk_threshold: 0.35    # sustained risk >= this (for dwell ticks) -> pre-emptive stop
+  max_human_accel: 4.0    # clamp on extrapolated accel (m/s^2, ~0.4g) -- rejects jitter
+  min_closing_speed: 0.6  # min v_proj (m/s) for a breach to count as imminent (not noise)
+
 controller:
   speed_reduced: 0.35        # speed-slider fraction under reduced-speed command
   working_stability_ticks: 30  # ticks of stable working before treated as steady state
@@ -43,6 +61,11 @@ scenario:
   walk_speed: 1.2                # nominal walking speed between stances (m/s)
   work_sway_speed: 0.3           # lateral sway while fastening (m/s)
   slip_speed: 2.2                # rapid lunge speed during the simulated slip (m/s)
+  # Cued DISTRACTORS -- fast motions that are NOT hazards (ground-truth non-hazard).
+  # They test SPECIFICITY: a good controller must not stop for fast motion that isn't
+  # closing on the robot column. See scenario.py docstring.
+  distractor_dart_speed: 2.0     # fast LATERAL dart across the work face (m/s; ~zero closing)
+  distractor_retreat_speed: 2.0  # sudden fast RETREAT away from the column (m/s; opening)
 
 robot:
   host: "127.0.0.1"   # URSim / UR controller IP
