@@ -1,0 +1,50 @@
+# Default configuration for the adaptive-vs-static HRC safety experiment.
+# All tunables live here so the reported experiment is reproducible from one file.
+#
+# NOTE ON CALIBRATION: values marked "pilot placeholder" MUST be re-measured
+# during pilot calibration (see docs/experiment_plan.md) before any reported run.
+
+zones:
+  # ISO/TS 15066 Speed-and-Separation Monitoring protective distance:
+  #   S0 = K*T + C + Sa
+  K: 1.6            # human approach speed toward the robot (m/s), ISO/TS 15066 default
+  T: 0.40           # system reaction + stopping time (s) -- PILOT PLACEHOLDER; measure end-to-end
+  C: 0.20           # intrusion distance of the sensing system (m)
+  Sa: 0.10          # position uncertainty of the operator (m) -- PILOT PLACEHOLDER; measure
+  yellow_margin: 1.6  # yellow (warning) radius = yellow_margin * S0
+  hysteresis: 0.05  # exit hysteresis band (m); leaving a zone requires clearing boundary + this
+
+features:
+  sample_rate_hz: 60
+  velocity_window: 5  # samples in the least-squares velocity slope window
+  accel_window: 3     # samples in the least-squares acceleration slope window
+
+lhmm:
+  states: ["approaching", "working", "retreating", "hazard"]
+  # COLD-START ONLY. The reported transition matrix A is FITTED from labelled
+  # pilot loops (fit_transitions). Reporting these hand-set numbers would be
+  # circular validation -- they exist solely to bootstrap before data exists.
+  transition_prior:
+    - [0.80, 0.15, 0.03, 0.02]  # from approaching
+    - [0.10, 0.80, 0.07, 0.03]  # from working
+    - [0.03, 0.07, 0.85, 0.05]  # from retreating
+    - [0.20, 0.10, 0.20, 0.50]  # from hazard
+  hazard_prob_threshold: 0.35
+  hazard_dwell_ticks: 2
+
+controller:
+  speed_reduced: 0.35        # speed-slider fraction under reduced-speed command
+  working_stability_ticks: 30  # ticks of stable working before treated as steady state
+
+scenario:
+  tcp_position: [0.0, 0.0, 2.2]  # robot TCP holding the panel overhead (m)
+  work_radius: 1.1               # human fastening stance distance from the robot column (m)
+  bench_clearance: 0.4           # bench sits this far beyond the yellow radius (m)
+  walk_speed: 1.2                # nominal walking speed between stances (m/s)
+  work_sway_speed: 0.3           # lateral sway while fastening (m/s)
+  slip_speed: 2.2                # rapid lunge speed during the simulated slip (m/s)
+
+robot:
+  host: "127.0.0.1"   # URSim / UR controller IP
+  rtde_port: 30004    # RTDE data port
+  dashboard_port: 29999  # Dashboard server port (pause/play for protective stop)

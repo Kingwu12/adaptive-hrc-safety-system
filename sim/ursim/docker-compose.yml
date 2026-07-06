@@ -1,0 +1,34 @@
+# URSim (UR e-Series) simulator for validating the command path before hardware.
+#
+# First run:
+#   docker compose -f sim/ursim/docker-compose.yml up
+#   Open http://localhost:6080  (noVNC) to see the pendant.
+#   In the pendant: power on + brake release, then load/run a program so the
+#   RTDE speed slider and Dashboard pause/play have an active program to act on.
+#
+# Ports:
+#   6080         -> noVNC web UI (the virtual teach pendant)
+#   29999        -> Dashboard server (protective stop = pause / resume = play)
+#   30001-30004  -> primary / secondary / realtime / RTDE interfaces
+#
+# The command path (setSpeedSlider + Dashboard pause/play) is IDENTICAL in URSim
+# and on the real UR10e, so a green run here is a faithful dry-run for the cell.
+services:
+  ursim:
+    image: universalrobots/ursim_e-series:latest
+    container_name: ursim_e_series
+    ports:
+      - "6080:6080"     # noVNC web UI
+      - "29999:29999"   # Dashboard server
+      - "30001:30001"   # primary
+      - "30002:30002"   # secondary
+      - "30003:30003"   # realtime
+      - "30004:30004"   # RTDE
+    environment:
+      - ROBOT_MODEL=UR10
+    # URSim keeps its state under /ursim; persist it so calibration survives restarts.
+    volumes:
+      - ursim_data:/ursim
+
+volumes:
+  ursim_data:
