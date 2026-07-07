@@ -30,7 +30,8 @@ from hrc_safety.features import FeatureExtractor, FeatureFrame
 from hrc_safety.horizon import fused_risk, time_to_breach
 from hrc_safety.lhmm.upper import STATES, GaussianEmissions, UpperHMM
 from hrc_safety.logging_schema import Command, DecisionRecord
-from hrc_safety.metrics import compute_metrics
+from hrc_safety.metrics import compute_metrics, compute_phase_metrics
+from hrc_safety.panel_cycle import PHASES, CollaborativeMode, Phase
 from hrc_safety.prediction import predict_next
 from hrc_safety.sim.runner import run_controller
 from hrc_safety.sim.scenario import generate_loop
@@ -386,3 +387,131 @@ def test_three_rungs_emit_identical_schema():
         if keys is None:
             keys = rec_keys
         assert rec_keys == keys  # identical schema across all rungs
+
+
+# --- 17. v2 Panel Cycle: the scenario emits all five phases + certified modes -----
+
+def test_scenario_v2_emits_all_phases_and_modes():
+    config = load_config()
+    tr = generate_loop(config, seed=7)
+    # phases and modes are aligned one-to-one with the raw samples.
+    assert len(tr.phases) == len(tr.times) == len(tr.robot_modes) == len(tr.labels)
+    assert set(tr.phases) == set(PHASES)  # all five phases present
+    # HAND_GUIDE runs entirely under the certified compliant-hold mode, at near-contact.
+    hg = [i for i, p in enumerate(tr.phases) if p == Phase.HAND_GUIDE.value]
+    assert hg
+    assert all(tr.robot_modes[i] == CollaborativeMode.HAND_GUIDE.value for i in hg)
+    tcp = np.asarray(config["scenario"]["tcp_position"])
+    red = build_zone_model(config).red_radius
+    hg_horizontal = [float(np.hypot(*(tr.positions[i, :2] - tcp[:2]))) for i in hg]
+    assert min(hg_horizontal) < red  # the human really reaches contact under the panel
+    # HOLD_BOLT is a safety-rated monitored stop; TRANSIT/RETRACT are speed-and-separation.
+    def mode_of(phase):
+        i = tr.phases.index(phase)
+        return tr.robot_modes[i]
+    assert mode_of(Phase.HOLD_BOLT.value) == CollaborativeMode.MONITORED_STOP.value
+    assert mode_of(Phase.TRANSIT_UP.value) == CollaborativeMode.SSM.value
+
+
+# --- 18. THE v2 HEADLINE: hand-guiding feasible for envelope rungs, not fixed-zone -
+# P3 is the maximum-divergence measurement window. The fixed-zone baseline is mode-blind,
+# so it protective-stops on the contact and hand-guiding is INFEASIBLE under it; the
+# envelope rungs honour the certified compliant-hold mode and permit the contact.
+
+def test_hand_guide_feasible_for_envelope_infeasible_for_fixed_zone():
+    config = load_config()
+    fitted = fit_hmm(config)
+    trace = generate_loop(config, seed=7)
+    hg = Phase.HAND_GUIDE.value
+
+    def hand_guide_phase(name):
+        run = run_controller(config, build_controller(name, config, fitted), trace)
+        pm = compute_phase_metrics(
+            run.records, run.phases, run.robot_modes, trace.dt,
+            slip_windows=trace.slip_windows,
+        )
+        return pm[hg]
+
+    fixed = hand_guide_phase("fixed_zone")
+    dynamic = hand_guide_phase("dynamic_ssm")
+    adaptive = hand_guide_phase("adaptive")
+
+    # Fixed-zone stalls on the contact for most of the phase -> infeasible.
+    assert fixed.human_idle_s > 0.5 * fixed.duration_s
+    # The envelope rungs permit the compliant contact -> zero idle, hand-guiding feasible.
+    assert dynamic.human_idle_s == 0.0
+    assert adaptive.human_idle_s == 0.0
+    assert adaptive.collaborative_mode == CollaborativeMode.HAND_GUIDE.value
+
+
+# --- 19. the certified collaborative MODE governs the envelope floor ----------------
+
+def test_collaborative_mode_governs_envelope_floor():
+    zm = _zone_model()
+    obs = np.array([0.12, 0.0, 0.9, 0.0])  # working-like, at contact distance (in RED)
+    ctrl = _adaptive(zm, _forced_hmm("working", obs))
+    contact = _frame(d=0.12, v_proj=0.05, v_lat_frac=0.3)
+
+    # SSM at contact -> the fixed-RED hard stop still fires (the invariant is intact).
+    assert ctrl.decide(contact, robot_mode="ssm").command == Command.PROTECTIVE_STOP.value
+    # Monitored-stop -> robot commanded dead still.
+    assert ctrl.decide(contact, robot_mode="monitored_stop").command == Command.PROTECTIVE_STOP.value
+    # Hand-guiding at contact, moving slowly -> compliant contact PERMITTED, not stopped.
+    rec = ctrl.decide(contact, robot_mode="hand_guide")
+    assert rec.command == Command.REDUCED_SPEED.value
+    assert rec.speed_fraction == pytest.approx(0.20)  # the compliant-hold speed floor
+    assert rec.robot_mode == "hand_guide"
+
+
+# --- 20. hand-guiding still stops for a genuine fast-closing lunge (learned caution) -
+
+def test_hand_guide_still_stops_for_fast_lunge():
+    zm = _zone_model()
+    obs = np.array([0.12, 2.0, 0.1, 1.5])  # hazard-like fast closing at contact
+    ctrl = _adaptive(zm, _forced_hmm("hazard", obs))
+    rec = None
+    for i in range(5):  # sustained fast-closing lunge during hand-guiding
+        rec = ctrl.decide(
+            _frame(d=0.12, v_proj=2.0, v_lat_frac=0.1, a_proj=1.5, t=i),
+            robot_mode="hand_guide",
+        )
+    # The learned layer may ADD caution atop the compliant-hold floor: a real lunge stops.
+    assert rec.command == Command.PROTECTIVE_STOP.value
+
+
+# --- 21. per-phase reporting excludes the P4 hold (and P1 load) from measurement ---
+# Measuring the P4 monitored-stop hold was the exact confusion v2 resolved.
+
+def test_measurement_windows_exclude_hold_bolt_and_load():
+    config = load_config()
+    fitted = fit_hmm(config)
+    trace = generate_loop(config, seed=7)
+    run = run_controller(config, build_controller("adaptive", config, fitted), trace)
+    pm = compute_phase_metrics(
+        run.records, run.phases, run.robot_modes, trace.dt,
+        slip_windows=trace.slip_windows,
+    )
+    assert pm[Phase.TRANSIT_UP.value].is_measurement_window
+    assert pm[Phase.HAND_GUIDE.value].is_measurement_window
+    assert pm[Phase.RELEASE_RETRACT.value].is_measurement_window
+    assert not pm[Phase.HOLD_BOLT.value].is_measurement_window
+    assert not pm[Phase.LOAD.value].is_measurement_window
+    # P4 is identical static-vs-adaptive: run the fixed-zone rung and confirm the hold.
+    assert pm[Phase.HOLD_BOLT.value].collaborative_mode == CollaborativeMode.MONITORED_STOP.value
+
+
+# --- 22. adaptive beats static on burden at equal safety (the paper hypothesis) ----
+
+def test_adaptive_beats_static_burden_at_equal_safety():
+    config = load_config()
+    fitted = fit_hmm(config)
+    trace = generate_loop(config, seed=7)
+    m_fixed = score(config, build_controller("fixed_zone", config, None), trace)
+    m_adaptive = score(config, build_controller("adaptive", config, fitted), trace)
+
+    # Safety parity: identical minimum separation, both catch the true slip.
+    assert m_adaptive.min_separation == pytest.approx(m_fixed.min_separation)
+    assert m_adaptive.hazard_sensitivity == 1.0
+    assert m_fixed.hazard_sensitivity == 1.0
+    # Efficiency: adaptive carries strictly less interruption burden than static.
+    assert m_adaptive.interruption_burden_s < m_fixed.interruption_burden_s

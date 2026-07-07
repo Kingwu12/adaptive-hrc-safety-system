@@ -53,13 +53,24 @@ horizon:
 controller:
   speed_reduced: 0.35        # speed-slider fraction under reduced-speed command
   working_stability_ticks: 30  # ticks of stable working before treated as steady state
+  # P3 hand-guiding: under the CERTIFIED compliant-hold collaborative mode the robot is
+  # permitted to hold the panel at this low, force-limited speed fraction while the human
+  # nudges it a few mm. The fixed-zone baseline cannot (it protective-stops on the
+  # contact), so hand-guiding is FEASIBLE for the envelope rungs and INFEASIBLE for
+  # fixed-zone -- the maximum static-vs-adaptive divergence.
+  compliant_hold_speed: 0.20
 
 scenario:
+  # v2 Panel Cycle: one repeating LOAD -> TRANSIT_UP -> HAND_GUIDE -> HOLD_BOLT ->
+  # RELEASE_RETRACT cycle. Stances are distances (m) from the robot's occupied column.
   tcp_position: [0.0, 0.0, 2.2]  # robot TCP holding the panel overhead (m)
-  work_radius: 1.1               # human fastening stance distance from the robot column (m)
-  bench_clearance: 0.4           # bench sits this far beyond the yellow radius (m)
+  work_radius: 1.1               # generic fastening stance distance from the column (m)
+  load_radius: 0.85              # P1: human at the end-effector plate (arm parked at waist)
+  prep_radius: 1.25              # P2/P5: tending stance (inside worst-case zone, low closing)
+  contact_radius: 0.12           # P3/P4: human directly under the panel (hand-guide / bolt)
+  bench_clearance: 0.4           # staging bench sits this far beyond the yellow radius (m)
   walk_speed: 1.2                # nominal walking speed between stances (m/s)
-  work_sway_speed: 0.3           # lateral sway while fastening (m/s)
+  work_sway_speed: 0.3           # lateral sway while fastening / nudging (m/s)
   slip_speed: 2.2                # rapid lunge speed during the simulated slip (m/s)
   # Cued DISTRACTORS -- fast motions that are NOT hazards (ground-truth non-hazard).
   # They test SPECIFICITY: a good controller must not stop for fast motion that isn't

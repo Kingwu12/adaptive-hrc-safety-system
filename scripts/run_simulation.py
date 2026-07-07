@@ -33,13 +33,16 @@ from hrc_safety.analysis import (  # noqa: E402
     build_controller,
     fit_hmm,
     metrics_to_dict,
-    score,
+    phase_metrics_from_run,
+    phase_metrics_to_dict,
+    score_run,
 )
 from hrc_safety.config import build_zone_model, load_config  # noqa: E402
 from hrc_safety.envelope import build_envelope  # noqa: E402
 from hrc_safety.lhmm.upper import STATES  # noqa: E402
 from hrc_safety.logging_schema import JsonlLogger  # noqa: E402
 from hrc_safety.metrics import recognition_report  # noqa: E402
+from hrc_safety.panel_cycle import PHASES  # noqa: E402
 from hrc_safety.sim.runner import extract_frames, observation_matrix, run_controller  # noqa: E402
 from hrc_safety.sim.scenario import generate_loop  # noqa: E402
 
@@ -56,13 +59,20 @@ def _print_matrix(A) -> None:
 
 
 def _run_and_log(config, name, controller, trace):
-    """Run a controller, write its JSONL log, and score it."""
+    """Run a controller ONCE, write its JSONL log, and derive flat + per-phase metrics.
+
+    Running once matters: controllers are stateful (LHMM belief + risk streaks), so the
+    logged records and the scored metrics MUST come from the same pass -- re-running the
+    same instance would carry state across the boundary and desync the two.
+    """
     run = run_controller(config, controller, trace)
     logger = JsonlLogger(os.path.join(LOG_DIR, f"{name}.jsonl"))
     for rec in run.records:
         logger.log(rec)
     logger.flush()
-    return score(config, controller, trace)
+    flat = score_run(config, run, trace)
+    phase = phase_metrics_from_run(run, trace)
+    return flat, phase
 
 
 def _print_table(columns, results) -> None:
@@ -92,6 +102,35 @@ def _print_table(columns, results) -> None:
     row("slowdown episodes", "slowdown_episodes", "{:d}")
     row("unnecessary interruption (s)", "unnecessary_interruption_s")
     row("hazard response latency (s)", "hazard_response_latency_s")
+
+
+def _print_phase_table(columns, phase_metrics) -> None:
+    """Print, per phase, the key per-condition numbers with one column per controller."""
+    width = 14
+    for phase in PHASES:
+        # Header line with the phase and its measurement-window / mode annotation.
+        sample = next((phase_metrics[c].get(phase) for c in columns if phase_metrics[c].get(phase)), None)
+        if sample is None:
+            continue
+        tag = "MEASURE" if sample["is_measurement_window"] else "not measured"
+        print(f"\n  [{phase}]  mode={sample['collaborative_mode']}  ({tag})")
+        head = f"    {'metric':<26}" + "".join(f"{c[:width - 1]:>{width}}" for c in columns)
+        print(head)
+
+        def row(label, key, fmt="{:.3f}"):
+            cells = ""
+            for c in columns:
+                pm = phase_metrics[c].get(phase)
+                v = None if pm is None else pm.get(key)
+                cells += f"{('n/a' if v is None else fmt.format(v)):>{width}}"
+            print(f"    {label:<26}{cells}")
+
+        row("duration / cycle time (s)", "duration_s")
+        row("min separation (m)", "min_separation")
+        row("protective-stop count", "stop_episodes", "{:d}")
+        row("stop duration (s)", "stop_duration_s")
+        row("human idle (s)", "human_idle_s")
+        row("speed deficit (s)", "speed_deficit_s")
 
 
 def main() -> None:
@@ -134,15 +173,21 @@ def main() -> None:
     # --- THREE-RUNG comparison + the two ablations (dedupe: 'adaptive' shared) -
     all_names = list(dict.fromkeys(RUNGS + ABLATIONS))  # preserve order, no repeats
     metrics = {}
+    phase_metrics = {}
     for name in all_names:
         controller = build_controller(name, config, fitted)
-        metrics[name] = metrics_to_dict(_run_and_log(config, name, controller, test_trace))
+        flat, phase = _run_and_log(config, name, controller, test_trace)
+        metrics[name] = metrics_to_dict(flat)
+        phase_metrics[name] = phase_metrics_to_dict(phase)
 
     print("\nThree-rung metric comparison (identical test trace):")
     _print_table(list(RUNGS), metrics)
 
     print("\nAblation (full system minus one ingredient):")
     _print_table(list(ABLATIONS), metrics)
+
+    print("\nPer-phase measurement-window comparison (P4 HOLD_BOLT is NOT measured):")
+    _print_phase_table(list(RUNGS), phase_metrics)
 
     # --- machine-readable metrics for the paper pipeline ----------------------
     os.makedirs(ANALYSIS_DIR, exist_ok=True)
@@ -160,6 +205,7 @@ def main() -> None:
             "hazard_recall": rep.hazard_recall,
         },
         "metrics": metrics,
+        "phase_metrics": phase_metrics,
     }
     metrics_path = os.path.join(ANALYSIS_DIR, "metrics.json")
     with open(metrics_path, "w", encoding="utf-8") as fh:

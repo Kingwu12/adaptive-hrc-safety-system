@@ -2,11 +2,43 @@
 
 **To:** Yizhe (Will) Wang (supervisor)
 **From:** Zenan Wu, Luke Siniakov, Michael Magila
-**Re:** Sem-2 methodology changes + ethics timeline
+**Re:** Sem-2 methodology changes + the v2 task + ethics timeline
 **Date:** 2026-07-06
 
 One page on what we are changing for semester 2 and why, plus the one thing that is
 time-critical (ethics). Full detail in `docs/design/sem2-redesign.md`.
+
+## 0. The task changed — one repeating "Panel Cycle" (this is the biggest change)
+
+**What changed from the prior scenario.** The old task was a generic "approach a work face,
+fasten at a few stances, retreat" loop. It never contained a phase where a fixed safety
+distance was genuinely impossible to satisfy, so static and adaptive only differed by
+*degree*. The v2 task is one repeating **Panel Cycle** of ceiling-panel installation with a
+phase that static logic essentially *cannot do at all*.
+
+**The cycle in one paragraph.** The robot is a lifting jack with a releasable
+gripper (nothing is ever bolted to the robot); the participant is loader, aligner, and
+bolter. Five phases repeat: **P1 LOAD** (arm parked at waist, human slides the panel on);
+**P2 TRANSIT** (robot lifts and aligns the panel while the human tends the shared space —
+concurrent motion); **P3 HAND-GUIDE** (robot holds the panel *compliantly* and the human
+nudges it a few mm *by hand* — real contact, ISO/TS 15066 hand-guiding mode); **P4 BOLT**
+(human bolts the panel into the *ceiling* while the robot holds dead still); **P5 RELEASE**
+(robot releases and lowers as the human finishes and steps down — concurrent motion again).
+
+**Why the measurement windows are the transitions and the hand-guiding, NOT the hold.** We
+only compare static vs adaptive where they *can* differ. That is P2 and P5 (concurrent
+motion — adaptive can keep working for a person who is not actually closing) and P3
+(hand-guiding — adaptive permits the contact by recognising the *certified compliant-hold
+mode*; static protective-stops and the task is infeasible). We **explicitly do not** measure
+P4: there the robot is meant to be dead still, so static and adaptive are identical —
+comparing "how well each holds still" measures nothing. Saying this out loud is deliberate:
+mistaking the P4 hold for a measurement window was the confusion this redesign resolved.
+
+**Metrics, per phase.** cycle time, protective-stop count, minimum separation distance, and
+human idle time — reported for the measurement windows (P2/P3/P5) separately from the P4
+hold, plus a post-condition fluency/trust questionnaire. **Hypothesis:** adaptive matches
+static on safety (zero separation violations) while improving cycle time, stops, and idle
+time, with P3 **near-binary** — feasible under adaptive, effectively infeasible under static.
 
 ## 1. Metric redefinition (resolves a contradiction in the sem-1 Table I)
 

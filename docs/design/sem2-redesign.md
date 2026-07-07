@@ -10,6 +10,153 @@ certify, and make the scoreboard measure the thing you claim to improve.**
 
 ---
 
+## The experimental task — one "Panel Cycle" (v2)
+
+This section explains the v2 task in plain English. No robotics background is needed; the
+ISO/TS 15066 terms are used precisely where they matter.
+
+### Why this task exists
+
+We want to compare two ways of keeping a person safe next to a moving robot:
+
+- **Static** safety logic: one fixed safety distance, drawn for the worst case. Simple,
+  certified, deployed everywhere today — but blunt. It slows or stops the robot for a
+  person who is standing still or moving away, because it always assumes they might lunge.
+- **Adaptive** safety logic: the same certified safety floor, plus a learned layer that
+  reads what the person is doing and lets the robot keep working when it is genuinely safe
+  to — while never being allowed to make the robot *faster* than the certified floor.
+
+The task has to be a real collaborative job where a fixed distance is genuinely in the
+way, so the difference between the two shows up as something you can measure.
+
+### The job and the roles
+
+The job is installing ceiling panels. One **Panel Cycle** installs one panel, and it
+repeats. Two players share the space:
+
+- **The robot** is a lifting/holding jack. It has a gripper/vacuum end-effector that grabs
+  the panel and can release it. **Nothing is ever bolted to the robot** — it only ever
+  *holds* the panel. So the robot is never load-bearing after the bolts go in; it can
+  always let go and back away.
+- **The human participant** does three things across the cycle: **loader** (puts the panel
+  on the robot), **aligner** (nudges the panel into place), and **bolter** (drives the
+  bolts into the ceiling).
+
+### The five phases
+
+Each phase below lists: what the robot is doing, what the human is doing, how close they
+are, the ISO/TS 15066 **collaborative mode** that governs it, and whether it is a
+**measurement window** (a phase where static and adaptive can differ, so we score it).
+
+**P1 — LOAD.** The arm is lowered to waist height and parked. The human slides the panel
+onto the end-effector plate. They are close, but the arm is not moving.
+Robot: parked. Human: loading. Proximity: close. Mode: **safety-rated monitored stop**
+(the arm is held still). *Not a primary measurement window* — it is a distinct task step,
+not a place static and adaptive differ.
+
+**P2 — TRANSIT / LIFT.** The robot lifts the panel to the ceiling and aligns it flush with
+the frame. **At the same time** the human is still in the shared space — fetching the bolt
+gun, repositioning their platform. Robot and human both move, close together.
+Robot: lifting + aligning. Human: preparing. Proximity: shared workspace. Mode:
+**speed-and-separation monitoring (SSM)**. **Measurement window.** Static SSM uses the
+worst-case distance, so every cycle it either forces the human out of that zone or
+protective-stops. Adaptive recognises "robot transiting, human on a predictable prep path,
+not closing" and shrinks the zone, so the two can work at the same time.
+
+**P3 — HAND-GUIDED FINE ALIGNMENT (the v2 addition).** Real panels never line up with the
+bolt holes on the first try. The robot holds the panel **compliantly** (it yields to a
+push), and the human nudges it a few millimetres **by hand**. This is deliberate physical
+**contact**. Robot: compliant hold. Human: nudging by hand. Proximity: **contact**. Mode:
+**hand-guiding** (ISO/TS 15066). **Measurement window — maximum divergence.** Static logic
+essentially **forbids** this: to a fixed-distance controller, a hand at the panel is a
+zone breach, so it protective-stops and the task cannot proceed. Adaptive **permits** it —
+not by the learned layer overriding anything, but because the robot's **certified**
+compliant-hold mode is recognised, and in that mode contact is expected and permitted at a
+low, force-limited "compliant-hold" speed. This respects the envelope invariant (Change 1):
+the learned layer can only add caution; hand-guiding is unlocked by a *certified mode*, not
+by a learned belief.
+
+**P4 — BOLT / HOLD.** The human drives the bolts through the panel **into the ceiling
+structure** while the robot holds the panel **dead still**. Robot: held still (equivalent
+to a safety-rated monitored stop). Human: bolting. Proximity: contact. Mode: **safety-rated
+monitored stop**. **Explicitly NOT a measurement window.** Here static and adaptive are
+**identical** — both hold the robot still. We say this plainly in the paper because
+*measuring this hold* was the exact confusion the v2 redesign removed: a stopped robot is a
+stopped robot, and comparing "how well each controller holds still" measures nothing.
+
+**P5 — RELEASE / RETRACT.** The robot releases the panel (now bolted to the ceiling) and
+lowers, while the human finishes the last bolt and steps down. Robot and human move, close
+together, again. Robot: releasing + lowering. Human: finishing / descending. Proximity:
+shared workspace. Mode: **speed-and-separation monitoring (SSM)** (the robot holds still
+until the human has cleared the safety distance, then lowers). **Measurement window.** As
+in P2, static reduces speed for a person who is actually moving *away*; adaptive recognises
+the retreat and keeps working.
+
+So three of the five phases are measurement windows (P2, P3, P5); the other two (P1 load,
+P4 bolt) are not. Two of the three windows are speed-and-separation phases (P2, P5) where
+**minimum separation** is a real safety number; the third (P3) is a contact phase where
+~0 m of separation is *by design*, so P3 is scored on **feasibility** (does the controller
+permit the task) rather than distance.
+
+### Why this task, and not the obvious alternatives
+
+We deliberately rejected three simpler-sounding designs:
+
+- **A handover cycle** (human hands the panel to the robot, or vice versa). Rejected: it
+  reintroduces a person manually holding an overhead panel — the ergonomic hazard the whole
+  project exists to remove — and it creates a *forced-contact* moment whose ISO/TS 15066
+  collaborative mode is ambiguous (is it hand-guiding? power-and-force-limiting? a plain
+  transfer?). Ambiguity in the governing mode is fatal for a safety comparison.
+- **The robot picking panels off a stack itself.** Rejected: that is an *orthogonal*
+  problem — robot perception and grasping of a bin of parts — with no bearing on the safety
+  question. It would add a large, unrelated engineering risk and dilute the contribution.
+- **A hold-only task (no hand-guiding).** Rejected: with no contact phase, the divergence
+  between static and adaptive is small, because speed-and-separation monitoring already
+  solves the transit phases well. The hand-guiding phase is what makes the static/adaptive
+  gap near-binary (feasible vs infeasible), which is the sharpest evidence for the paper.
+
+The Panel Cycle keeps the human out of load-bearing holds, keeps every phase in one
+unambiguous collaborative mode, and puts the decisive comparison (P3) front and centre.
+
+### Participant protocol
+
+- **Briefing.** The participant is told the task (load, tend, hand-guide, bolt, release),
+  the cued-event signals, and the safety measures (e-stop within reach, continuous
+  supervision, a lightweight surrogate panel). They are **not told** which safety
+  controller is active, so their behaviour is not biased by it.
+- **Conditions.** Two controller conditions: **static** (fixed-zone) and **adaptive**. Each
+  participant completes **N complete Panel Cycles per condition** (N fixed during pilot
+  calibration; enough cycles for stable per-condition estimates).
+- **Counterbalancing.** The order of the two conditions is **counterbalanced across
+  participants** (half do static first, half adaptive first) to cancel out learning and
+  fatigue effects.
+- **Per-condition metrics.** For each condition we log, per phase and overall: **cycle
+  time**, **protective-stop count**, **minimum separation distance**, and **human idle
+  time** (time the human waits on the robot). The speed-and-separation windows (P2, P5) and
+  the hand-guiding window (P3) are reported **separately** from the P4 hold.
+- **Subjective measures.** After each condition the participant fills in a short
+  **fluency / trust questionnaire** (perceived smoothness of the collaboration and trust in
+  the robot), so we capture the human's experience, not just the machine's numbers.
+
+### Hypothesis
+
+Adaptive **matches** static on safety — **zero separation violations**, identical response
+to the cued slip — while **improving** cycle time, protective-stop count, and human idle
+time. The hand-guiding phase (P3) is expected to be **near-binary**: **feasible under
+adaptive, effectively infeasible under static**, because a fixed-distance controller cannot
+permit the intended contact.
+
+Code: `sim/scenario.py` (the Panel Cycle generator, with per-sample phase + certified
+collaborative mode), `panel_cycle.py` (the phase / mode vocabulary), `metrics.py`
+(`compute_phase_metrics` for the per-phase reporting), `controllers/controllers.py` (the
+mode-aware certified floor). Tests: `test_scenario_v2_emits_all_phases_and_modes`,
+`test_hand_guide_feasible_for_envelope_infeasible_for_fixed_zone`,
+`test_collaborative_mode_governs_envelope_floor`, `test_hand_guide_still_stops_for_fast_lunge`,
+`test_measurement_windows_exclude_hold_bolt_and_load`,
+`test_adaptive_beats_static_burden_at_equal_safety`.
+
+---
+
 ## Change 1 — Safety-envelope architecture (runtime assurance / shielding)
 
 **What changed.** New `src/hrc_safety/envelope.py` implements the ISO/TS 15066
@@ -136,10 +283,16 @@ Code: `controllers/controllers.py`, `analysis.py`, `scripts/replay.py`,
 
 **What changed.** `sim/scenario.py` gains two **cued distractor** events, ground-truth
 labelled **not** hazard: (a) a fast **lateral dart** across the work face (high speed,
-~zero closing), and (b) a sudden fast **retreat** (high speed, opening). The trace now
-carries `slip_windows` and `distractor_windows`. `metrics.py` reports **false-stop rate**
-on distractor windows and **hazard sensitivity** on slip windows, so hazard evaluation
-reports **sensitivity AND specificity**.
+~zero closing), and (b) a sudden fast **retreat** (high speed, opening). In v2 both sit in
+the **speed-and-separation measurement windows** — the dart in P2 (transit), the retreat in
+P5 (release) — where separation is the safety quantity and a nuisance stop would actually
+cost throughput. The single cued **slip** (the one true hazard) also sits in an SSM window
+(P2), so it *must* stop the robot; contrast that with the identical-looking small
+separation in P3 hand-guiding, which is safe because the certified mode is compliant hold —
+proof that separation alone cannot decide, the collaborative mode must. The trace carries
+`slip_windows` and `distractor_windows`; `metrics.py` reports **false-stop rate** on
+distractor windows and **hazard sensitivity** on slip windows, so hazard evaluation reports
+**sensitivity AND specificity**.
 
 **WHY (the one line): "a controller that stops for any fast motion is useless."** A slip
 is a fast motion near the robot. A lazy controller could ace a sensitivity-only test by
@@ -179,7 +332,18 @@ dice."** Freezing the metric definition *before* looking at outcomes is what kee
 result honest — you are not tuning the scoreboard to flatter the system. That is the
 process discipline the redesign encodes.
 
-Code: `metrics.py`. Tests: `test_interruption_burden_excludes_hazard_and_red`.
+**v2 consistency (not a re-tune, the same principle extended).** The Panel Cycle adds two
+phases where a reduced or zero speed is *prescribed by the task*, not a controller failing:
+hand-guiding (compliant-hold reduced speed) and the monitored-stop holds (P1, P4). Charging
+those deficits as burden would repeat the *exact* Table-I category error this change fixed —
+penalising a controller for doing what the task requires. So the burden integral is measured
+over **speed-and-separation operation only** (P2 transit, P5 retract): the phases where a
+slow-down is a *choice* the controller makes, and therefore the only place "who is cautious
+when they needn't be" is a fair question. This is the same rule as before (exclude periods
+where the reduction is warranted), now also excluding the non-SSM collaborative modes.
+
+Code: `metrics.py`. Tests: `test_interruption_burden_excludes_hazard_and_red`,
+`test_adaptive_beats_static_burden_at_equal_safety`.
 
 ---
 

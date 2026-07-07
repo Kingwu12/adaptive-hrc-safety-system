@@ -20,7 +20,8 @@ USAGE
 
 TRACE FILE FORMAT (.npz), so real pilot data can be dropped in the same shape:
     times (T,), positions (T,3), labels (T,) str, dt (), hazard_onset_t (),
-    slip_windows (S,2), distractor_windows (D,2).
+    slip_windows (S,2), distractor_windows (D,2),
+    phases (T,) str, robot_modes (T,) str      # v2 Panel Cycle phase + certified mode.
 
 NOTE: synthetic traces are for pipeline validation only and never appear in reported
 results (see docs/experiment_plan.md).
@@ -64,12 +65,17 @@ def save_trace(path: str, trace: LoopTrace) -> None:
         hazard_onset_t=np.array(trace.hazard_onset_t),
         slip_windows=np.array(trace.slip_windows, dtype=float).reshape(-1, 2),
         distractor_windows=np.array(trace.distractor_windows, dtype=float).reshape(-1, 2),
+        phases=np.array(trace.phases, dtype=object),
+        robot_modes=np.array(trace.robot_modes, dtype=object),
     )
 
 
 def load_trace(path: str) -> LoopTrace:
     """Load a LoopTrace from an .npz written by save_trace (or matching pilot data)."""
     z = np.load(path, allow_pickle=True)
+    # Phases/modes are optional for backward compatibility with pre-v2 saved traces.
+    phases = [str(x) for x in z["phases"]] if "phases" in z.files else []
+    robot_modes = [str(x) for x in z["robot_modes"]] if "robot_modes" in z.files else []
     return LoopTrace(
         times=z["times"],
         positions=z["positions"],
@@ -79,6 +85,8 @@ def load_trace(path: str) -> LoopTrace:
         hazard_onset_t=float(z["hazard_onset_t"]),
         slip_windows=[tuple(w) for w in z["slip_windows"]],
         distractor_windows=[tuple(w) for w in z["distractor_windows"]],
+        phases=phases,
+        robot_modes=robot_modes,
     )
 
 

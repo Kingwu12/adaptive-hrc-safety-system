@@ -22,6 +22,23 @@ SAFETY INVARIANT (locked by test_red_zone_always_stops_adaptive_even_if_model_sa
     A fixed-RED-zone breach forces a protective stop, checked FIRST, regardless of any
     model belief OR the (speed-aware, possibly-permissive) envelope. The fixed red
     radius remains the absolute certified floor beneath the dynamic envelope.
+
+COLLABORATIVE MODE (v2 -- the certified floor is mode-aware, the learned layer is not):
+    Each tick carries the robot's certified collaborative mode (a robot-reported FACT,
+    never a learned inference): SSM / hand-guiding / monitored-stop. The certified floor
+    keys off it:
+      * MONITORED_STOP  -- robot commanded dead still (P1 load, P4 bolt).
+      * HAND_GUIDE      -- compliant hold: contact is permitted by design at the certified
+                           compliant-hold speed, so the fixed-RED breach does NOT stop
+                           (P3). The learned layer may still ADD caution on top -- a
+                           sustained genuine hazard still stops -- but never removes it.
+      * SSM             -- the dynamic envelope + fixed-RED hard stop govern, exactly as
+                           before (P2 transit, P5 retract).
+    `FixedZoneController` is MODE-BLIND (deployed practice predates mode integration): it
+    only sees distance, so at contact range (P3) it protective-stops -- hand-guiding is
+    infeasible under it. That mode-blindness is the P3 static-vs-adaptive divergence, and
+    it is why the certified compliant-hold recognition lives in the FLOOR (shared by the
+    envelope rungs), never in the learned layer.
 """
 
 from __future__ import annotations
@@ -33,8 +50,13 @@ from ..features import FeatureFrame
 from ..horizon import fused_risk, time_to_breach
 from ..logging_schema import Command, DecisionRecord
 from ..lhmm.upper import STATES, UpperHMM
+from ..panel_cycle import CollaborativeMode
 from ..prediction import hazard_probability, predict_next
 from ..zones import Zone, ZoneModel
+
+_SSM = CollaborativeMode.SSM.value
+_HAND_GUIDE = CollaborativeMode.HAND_GUIDE.value
+_MONITORED_STOP = CollaborativeMode.MONITORED_STOP.value
 
 _NEUTRAL = [0.0, 0.0, 0.0, 0.0]
 
@@ -70,7 +92,10 @@ class FixedZoneController:
         self.speed_reduced = float(speed_reduced)
         self.condition = condition
 
-    def decide(self, frame: FeatureFrame) -> DecisionRecord:
+    def decide(self, frame: FeatureFrame, robot_mode: str = _SSM) -> DecisionRecord:
+        # MODE-BLIND by design: the deployed fixed-zone baseline sees only distance. The
+        # certified mode is recorded for traceability but never changes the decision --
+        # which is exactly why hand-guiding (contact range) is infeasible under it.
         zone = self.zones.update(frame.d)
         if zone == Zone.RED:
             command, speed, rule = (
@@ -105,6 +130,7 @@ class FixedZoneController:
             rule=rule,
             command=command.value,
             speed_fraction=speed,
+            robot_mode=robot_mode,
         )
 
 
@@ -136,6 +162,7 @@ class EnvelopeAdaptiveController:
         upper_hmm: UpperHMM | None = None,
         envelope: DynamicSSMEnvelope | None = None,
         speed_reduced: float = 0.35,
+        compliant_hold_speed: float = 0.20,
         hazard_prob_threshold: float = 0.35,
         hazard_dwell_ticks: int = 2,
         working_stability_ticks: int = 30,
@@ -157,6 +184,7 @@ class EnvelopeAdaptiveController:
             T=zone_model.T, C=zone_model.C, Sa=zone_model.Sa, ramp=ramp
         )
         self.speed_reduced = float(speed_reduced)
+        self.compliant_hold_speed = float(compliant_hold_speed)
         self.hazard_prob_threshold = float(hazard_prob_threshold)
         self.hazard_dwell_ticks = int(hazard_dwell_ticks)
         self.working_stability_ticks = int(working_stability_ticks)
@@ -173,7 +201,7 @@ class EnvelopeAdaptiveController:
         self._hazard_streak = 0
         self._working_streak = 0
 
-    def decide(self, frame: FeatureFrame) -> DecisionRecord:
+    def decide(self, frame: FeatureFrame, robot_mode: str = _SSM) -> DecisionRecord:
         zone = self.zones.update(frame.d)
 
         # ---- certified floor: envelope from geometry + measured approach speed ----
@@ -221,7 +249,15 @@ class EnvelopeAdaptiveController:
         else:
             self._working_streak = 0
 
-        command, speed, rule = self._decide_command(zone, env.max_speed, inferred, risk)
+        # A genuine hazard is a FAST CLOSING motion. During certified hand-guiding this is
+        # the only thing that should still stop the robot: slow, deliberate contact (the
+        # normal case) must not, or hand-guiding is not feasible. The sticky state
+        # posterior naturally lights up near the robot, so it alone cannot gate the stop.
+        closing_fast = frame.v_proj >= self.min_closing_speed
+
+        command, speed, rule = self._decide_command(
+            zone, env.max_speed, inferred, risk, robot_mode, closing_fast
+        )
 
         ttb_out = None if ttb == float("inf") else float(ttb)
         return DecisionRecord(
@@ -239,11 +275,45 @@ class EnvelopeAdaptiveController:
             envelope_max_speed=float(env.max_speed),
             risk=float(risk),
             time_to_breach_s=ttb_out,
+            robot_mode=robot_mode,
         )
 
     def _decide_command(
-        self, zone: Zone, envelope_max: float, inferred: str, risk: float
+        self, zone: Zone, envelope_max: float, inferred: str, risk: float,
+        robot_mode: str, closing_fast: bool,
     ) -> tuple[Command, float, str]:
+        # ---- CERTIFIED COLLABORATIVE MODE governs the floor first (certified fact) ----
+        # The robot-reported mode is not a learned belief; it selects which certified
+        # floor applies. The learned layer below may only ADD caution, never remove it.
+        if robot_mode == _MONITORED_STOP:
+            # Safety-rated monitored stop (P1 load, P4 bolt): robot commanded dead still.
+            return (
+                Command.PROTECTIVE_STOP,
+                0.0,
+                "certified MONITORED-STOP mode -> robot held dead still (SMS)",
+            )
+        if robot_mode == _HAND_GUIDE:
+            # Hand-guiding (P3): the robot holds the panel compliantly and the human
+            # nudges it -- contact is permitted BY DESIGN, so the fixed-RED breach does
+            # NOT stop. The learned layer may still ADD caution: a sustained AND genuinely
+            # fast-closing hazard (a real lunge, not a slow deliberate touch) still forces a
+            # pre-emptive stop. The closing-speed gate is what keeps ordinary hand-guiding
+            # feasible while preserving the "learned layer only adds caution" guarantee.
+            if closing_fast and self._hazard_streak >= self.hazard_dwell_ticks:
+                return (
+                    Command.PROTECTIVE_STOP,
+                    0.0,
+                    f"sustained fast-closing hazard (risk={risk:.2f}) during hand-guiding "
+                    "-> stop (learned layer adds caution atop the compliant-hold floor)",
+                )
+            return (
+                Command.REDUCED_SPEED,
+                float(self.compliant_hold_speed),
+                "certified HAND-GUIDING mode -> compliant contact permitted at "
+                f"compliant-hold speed {self.compliant_hold_speed:.2f}",
+            )
+
+        # ---- SSM mode (P2 transit, P5 retract): the dynamic envelope + hard stop ----
         # ---- SAFETY INVARIANT, FIRST AND ABSOLUTE ------------------------
         # A fixed-RED breach stops the robot no matter what the model believes and
         # no matter how permissive the speed-aware envelope is. The fixed red radius
@@ -303,6 +373,7 @@ class DynamicSSMController(EnvelopeAdaptiveController):
         zone_model: ZoneModel,
         envelope: DynamicSSMEnvelope | None = None,
         speed_reduced: float = 0.35,
+        compliant_hold_speed: float = 0.20,
         ramp: float = 0.30,
         condition: str = "dynamic_ssm",
     ) -> None:
@@ -311,6 +382,7 @@ class DynamicSSMController(EnvelopeAdaptiveController):
             upper_hmm=None,
             envelope=envelope,
             speed_reduced=speed_reduced,
+            compliant_hold_speed=compliant_hold_speed,
             ramp=ramp,
             use_state_layer=False,
             use_horizon=False,

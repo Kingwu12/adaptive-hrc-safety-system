@@ -25,8 +25,13 @@ from .controllers import (
 )
 from .envelope import build_envelope
 from .lhmm.upper import UpperHMM
-from .metrics import Metrics, compute_metrics
-from .sim.runner import extract_frames, observation_matrix, run_controller
+from .metrics import (
+    Metrics,
+    PhaseMetrics,
+    compute_metrics,
+    compute_phase_metrics,
+)
+from .sim.runner import RunResult, extract_frames, observation_matrix, run_controller
 from .sim.scenario import LoopTrace, generate_loop
 
 # The three reported rungs, plus the two ablations. Order is display order.
@@ -100,9 +105,13 @@ def build_controller(name: str, config: dict, fitted: UpperHMM | None):
     )
 
 
-def score(config: dict, controller, trace: LoopTrace) -> Metrics:
-    """Run a controller over a trace and score it against the trace's ground truth."""
-    run = run_controller(config, controller, trace)
+def score_run(config: dict, run: RunResult, trace: LoopTrace) -> Metrics:
+    """Score an already-executed run against the trace's ground truth (single run).
+
+    Split out from `score` so the pipeline can run a controller ONCE and derive both the
+    flat metrics and the per-phase metrics from the same records (controllers are stateful
+    -- re-running the same instance would carry belief/streak state across the boundary).
+    """
     return compute_metrics(
         run.records,
         run.labels,
@@ -111,9 +120,31 @@ def score(config: dict, controller, trace: LoopTrace) -> Metrics:
         red_radius=build_zone_model(config).red_radius,
         slip_windows=trace.slip_windows,
         distractor_windows=trace.distractor_windows,
+        robot_modes=run.robot_modes,
     )
+
+
+def phase_metrics_from_run(run: RunResult, trace: LoopTrace) -> dict[str, PhaseMetrics]:
+    """Per-phase metrics from an already-executed run (v2 measurement-window reporting)."""
+    return compute_phase_metrics(
+        run.records,
+        run.phases,
+        run.robot_modes,
+        trace.dt,
+        slip_windows=trace.slip_windows,
+    )
+
+
+def score(config: dict, controller, trace: LoopTrace) -> Metrics:
+    """Run a controller over a trace and score it against the trace's ground truth."""
+    return score_run(config, run_controller(config, controller, trace), trace)
 
 
 def metrics_to_dict(m: Metrics) -> dict:
     """Plain-dict form of Metrics for JSON emission (feeds make_paper_tables.py)."""
     return asdict(m)
+
+
+def phase_metrics_to_dict(pm: dict[str, PhaseMetrics]) -> dict:
+    """Plain-dict form of per-phase metrics for JSON emission."""
+    return {phase: asdict(m) for phase, m in pm.items()}

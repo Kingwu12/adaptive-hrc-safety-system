@@ -47,6 +47,10 @@ class DecisionRecord:
     envelope_max_speed: float = 1.0  # certified speed floor permitted this tick
     risk: float = 0.0                # fused hazard risk (posterior + breach imminence)
     time_to_breach_s: float | None = None  # predicted s until red-radius breach (None = n/a)
+    # v2: the CERTIFIED robot collaborative mode this tick was decided under. It is a
+    # robot-reported fact (ssm | hand_guide | monitored_stop), not a learned inference,
+    # and it selects the certified floor the command was clamped to.
+    robot_mode: str = "ssm"
 
     def to_json(self) -> str:
         return json.dumps(self._serialisable())

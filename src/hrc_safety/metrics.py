@@ -33,6 +33,10 @@ import numpy as np
 
 from .logging_schema import Command, DecisionRecord
 from .lhmm.upper import STATES
+from .panel_cycle import PHASES, CollaborativeMode, is_measurement_window
+
+_SSM = CollaborativeMode.SSM.value
+_MONITORED_STOP_MODE = CollaborativeMode.MONITORED_STOP.value
 
 
 def _is_stop(rec: DecisionRecord) -> bool:
@@ -98,19 +102,33 @@ def compute_metrics(
     red_radius: float | None = None,
     slip_windows: list[tuple[float, float]] | None = None,
     distractor_windows: list[tuple[float, float]] | None = None,
+    robot_modes: list[str] | None = None,
 ) -> Metrics:
     """Compute the head-to-head safety/efficiency metrics for one controller run.
 
     red_radius / slip_windows / distractor_windows enable the sem-2 metrics; when
     omitted, those fields come back as None so callers with only a sem-1 trace still
     work.
+
+    robot_modes (v2, optional): the certified collaborative mode per record. When given,
+    MINIMUM SEPARATION is measured only over SSM-mode ticks -- the phases where separation
+    is a genuine safety quantity. In hand-guiding / monitored-stop the human is at the
+    panel by design (~0 m), so including those ticks would report a spurious "breach"
+    every cycle. With no modes supplied, min separation is over all ticks (sem-1 behaviour).
     """
     if len(records) != len(gt_labels):
         raise ValueError("records and gt_labels must be the same length")
     slip_windows = slip_windows or []
     distractor_windows = distractor_windows or []
 
-    min_sep = min((r.d for r in records), default=float("nan"))
+    if robot_modes is not None:
+        if len(robot_modes) != len(records):
+            raise ValueError("robot_modes and records must be the same length")
+        ssm_d = [r.d for r, m in zip(records, robot_modes) if m == _SSM]
+        # Fall back to all ticks only if the run never entered SSM (defensive).
+        min_sep = min(ssm_d, default=min((r.d for r in records), default=float("nan")))
+    else:
+        min_sep = min((r.d for r in records), default=float("nan"))
 
     stop_flags = [_is_stop(r) for r in records]
     slow_flags = [_is_slowdown(r) for r in records]
@@ -123,8 +141,19 @@ def compute_metrics(
     # stopping there is CORRECT and must not be charged as burden. Every controller is
     # scored against the SAME ground truth, so the metric isolates who is cautious when
     # they need not be.
+    #
+    # v2: burden is measured over SSM OPERATION ONLY (when robot_modes is supplied). In
+    # hand-guiding the compliant-hold reduced speed is INTENDED, and in monitored-stop the
+    # robot is meant to be still -- charging those deficits would repeat the exact
+    # category error the metric was frozen to avoid (penalising a controller for doing what
+    # the task prescribes). So the burden isolates unwarranted caution during the
+    # speed-and-separation phases (P2 transit, P5 retract), where contextual reasoning is
+    # what actually differs between controllers. With no modes supplied (a sem-1 trace),
+    # every tick counts as before.
     burden = 0.0
-    for rec in records:
+    for i, rec in enumerate(records):
+        if robot_modes is not None and robot_modes[i] != _SSM:
+            continue  # non-SSM mode: the reduced/stopped command is intended, not burden
         in_hazard = _in_windows(rec.t, slip_windows)
         in_red = (red_radius is not None and rec.d <= red_radius)
         if in_hazard or in_red:
@@ -199,6 +228,114 @@ def compute_metrics(
         unnecessary_interruption_s=float(unnecessary_s),
         hazard_response_latency_s=latency,
     )
+
+
+@dataclass
+class PhaseMetrics:
+    """Per-phase outcome for one controller run (v2 Panel Cycle).
+
+    Reporting per phase is what lets the measurement windows (P2 transit, P3 hand-guide,
+    P5 retract) be read SEPARATELY from the P4 bolt HOLD -- where static and adaptive are
+    identical and which is explicitly NOT a measurement window. Measuring that hold was
+    the exact confusion the v2 redesign resolved.
+    """
+
+    phase: str
+    collaborative_mode: str            # dominant certified robot mode in this phase
+    is_measurement_window: bool
+    duration_s: float                  # phase cycle time (wall time spent in the phase)
+    min_separation: float              # min d in-phase (a safety quantity only in SSM windows)
+    stop_episodes: int                 # protective-stop count (rising edges) in-phase
+    stop_duration_s: float
+    slowdown_duration_s: float
+    speed_deficit_s: float             # time-integrated (1 - commanded speed) over the phase
+    human_idle_s: float                # robot-stop time that blocks the human (0 outside
+                                       # measurement windows and during warranted slip stops)
+
+
+def _dominant(values: list[str]) -> str:
+    """The most frequent string in a list ("" if empty)."""
+    if not values:
+        return ""
+    counts: dict[str, int] = {}
+    for v in values:
+        counts[v] = counts.get(v, 0) + 1
+    return max(counts, key=counts.get)
+
+
+def compute_phase_metrics(
+    records: list[DecisionRecord],
+    phases: list[str],
+    robot_modes: list[str],
+    dt: float,
+    *,
+    slip_windows: list[tuple[float, float]] | None = None,
+) -> dict[str, PhaseMetrics]:
+    """Per-phase metrics keyed by phase name, for the v2 measurement-window reporting.
+
+    `phases` / `robot_modes` are aligned one-to-one with `records` (see runner.RunResult).
+    Phases are reported in the canonical P1->P5 order; any phase absent from the run is
+    skipped. `human_idle_s` counts protective-stop time only in measurement-window phases
+    and only outside true-hazard (slip) windows -- a warranted stop for a real slip, and
+    the intended SMS hold in P4, are not "idle waiting".
+    """
+    if not (len(records) == len(phases) == len(robot_modes)):
+        raise ValueError("records, phases, and robot_modes must be the same length")
+    slip_windows = slip_windows or []
+
+    by_phase: dict[str, list[tuple[DecisionRecord, str]]] = {}
+    for rec, phase, mode in zip(records, phases, robot_modes):
+        by_phase.setdefault(phase, []).append((rec, mode))
+
+    out: dict[str, PhaseMetrics] = {}
+    for phase in PHASES:
+        rows = by_phase.get(phase)
+        if not rows:
+            continue
+        recs = [r for r, _ in rows]
+        modes = [m for _, m in rows]
+        measurement = is_measurement_window(phase)
+
+        stop_flags = [_is_stop(r) for r in recs]
+        slow_flags = [_is_slowdown(r) for r in recs]
+        stop_episodes, stop_duration = _episodes(stop_flags, dt)
+        _, slowdown_duration = _episodes(slow_flags, dt)
+
+        deficit = sum((1.0 - float(r.speed_fraction)) * dt for r in recs)
+
+        # Minimum separation is a safety quantity only over SSM ticks: in hand-guiding /
+        # monitored-stop the human is at the panel by design, so those ticks are excluded
+        # (nan if the phase has no SSM ticks -- separation simply is not the metric there).
+        ssm_d = [r.d for r, m in zip(recs, modes) if m == _SSM]
+        min_sep = min(ssm_d, default=float("nan"))
+
+        # Human idle = the robot stopping when it need not, in a measurement window. It
+        # EXCLUDES monitored-stop holds (the stop is intended, not waiting) and true-hazard
+        # (slip) windows (a warranted safety stop). What remains is SSM nuisance stops and
+        # hand-guiding infeasibility -- the real time the human loses to the controller.
+        idle = 0.0
+        if measurement:
+            for rec, mode in zip(recs, modes):
+                if (
+                    _is_stop(rec)
+                    and mode != _MONITORED_STOP_MODE
+                    and not _in_windows(rec.t, slip_windows)
+                ):
+                    idle += dt
+
+        out[phase] = PhaseMetrics(
+            phase=phase,
+            collaborative_mode=_dominant(modes),
+            is_measurement_window=measurement,
+            duration_s=len(recs) * dt,
+            min_separation=min_sep,
+            stop_episodes=stop_episodes,
+            stop_duration_s=float(stop_duration),
+            slowdown_duration_s=float(slowdown_duration),
+            speed_deficit_s=float(deficit),
+            human_idle_s=float(idle),
+        )
+    return out
 
 
 @dataclass
