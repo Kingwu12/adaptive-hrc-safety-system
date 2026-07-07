@@ -6,19 +6,32 @@ PILOT data collected in the lab (see docs/experiment_plan.md); synthetic traces
 exist only to exercise the code path pilot data will follow.
 
 The loop, with per-sample ground-truth labels:
-    bench dwell -> approach -> fasten L (lateral sway) -> shuffle to R ->
-    fasten R -> retreat to bench -> approach -> fasten -> SIMULATED SLIP
-    (rapid lunge toward the robot column, breaching red) -> recover -> final retreat.
+    bench dwell -> approach -> fasten L (lateral sway) -> DISTRACTOR: fast lateral
+    dart at the working stance -> shuffle to R -> fasten R -> DISTRACTOR: sudden fast
+    retreat -> retreat to bench -> approach -> fasten -> SIMULATED SLIP (rapid lunge
+    toward the robot column, breaching red) -> recover -> final retreat.
 
 Geometry (all distances are to the robot's occupied column, at the origin in xy):
     fastening stances sit at work_radius (inside yellow, outside red);
     the bench is DERIVED as yellow_radius + bench_clearance, so the retreat to the
     bench produces a clean exit through both zone boundaries for the comparison.
+
+WHY DISTRACTORS (specificity, not just sensitivity):
+    A slip is a FAST motion near the robot. A naive speed-aware or hazard-tuned
+    controller could pass the slip test simply by stopping for ANY fast motion --
+    which would make it useless in practice (constant nuisance stops). The two
+    cued DISTRACTORS are fast motions that are NOT hazards:
+      (a) a fast LATERAL dart across the work face (high speed, ~zero closing) --
+          fast, but not toward the column;
+      (b) a sudden fast RETREAT (high speed, opening) -- fast, but moving away.
+    They are ground-truth-labelled non-hazard (working / retreating). A good
+    controller must NOT stop for them. This is what lets us report SPECIFICITY
+    (correctly not stopping) alongside sensitivity (correctly stopping for slips).
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import numpy as np
 
@@ -41,6 +54,11 @@ class LoopTrace:
     events: list[tuple[str, float]]  # (name, timestamp)
     dt: float
     hazard_onset_t: float  # ground-truth slip onset (== hazard-latency reference)
+    # Ground-truth evaluation windows (start_t, end_t), in the SAME time base as
+    # `times` -- which is also each DecisionRecord.t (frames carry the raw sample
+    # time), so windows compare directly against rec.t with no shifting.
+    slip_windows: list[tuple[float, float]] = field(default_factory=list)  # true hazard
+    distractor_windows: list[tuple[float, float]] = field(default_factory=list)  # non-hazard fast motions
 
 
 def _smoothstep(u: np.ndarray) -> np.ndarray:
@@ -105,38 +123,68 @@ def generate_loop(config: dict, seed: int = 0) -> LoopTrace:
     def n(seconds: float) -> int:
         return max(2, int(round(seconds * sample_rate)))
 
-    segments: list[tuple[np.ndarray, str]] = []
+    # Distractor kinematics: fast (>= slip-scale) but NOT closing on the column.
+    dart_speed = float(scn.get("distractor_dart_speed", 2.0))
+    retreat_speed = float(scn.get("distractor_retreat_speed", 2.0))
+    dart_dist = 0.35   # lateral out-and-back amplitude (m)
+    fast_retreat_r = bench_r  # sudden retreat overshoots straight out to bench radius
 
-    def add_move(p0, p1, seconds, label):
-        segments.append((_move(p0, p1, n(seconds)), label))
+    # A segment tag drives ground-truth WINDOW bookkeeping (not the per-sample label):
+    #   None -> ordinary; "slip" -> true hazard window; "distractor" -> non-hazard fast.
+    segments: list[tuple[np.ndarray, str, str | None]] = []
 
-    def add_dwell(p, seconds, label):
-        segments.append((_dwell(p, n(seconds), sway, rng, tangent), label))
+    def add_move(p0, p1, seconds, label, tag=None):
+        segments.append((_move(p0, p1, n(seconds)), label, tag))
+
+    def add_dwell(p, seconds, label, tag=None):
+        segments.append((_dwell(p, n(seconds), sway, rng, tangent), label, tag))
+
+    # The dart must be TRULY tangential at fasten_l (perpendicular to the radial
+    # direction there) so it has ~zero closing component -- otherwise a global-y dart
+    # at 22 deg carries a sin(22 deg) closing part and reads as an approach.
+    _a_l = np.radians(22.0)
+    tangent_l = np.array([-np.sin(_a_l), np.cos(_a_l), 0.0])
+    dart_pt = fasten_l + dart_dist * tangent_l        # lateral dart target (true tangent)
+    fast_retreat_pt = stance(fast_retreat_r, -22.0)   # straight-out from fasten_r
 
     # --- the loop -----------------------------------------------------------
     add_dwell(bench, 1.2, _WORKING)               # bench dwell (tool retrieval)
     add_move(bench, fasten_l, 1.6, _APPROACH)     # approach the work face
     add_dwell(fasten_l, 2.6, _WORKING)            # fasten L (with sway)
+    # DISTRACTOR (a): fast LATERAL dart across the work face -- fast, ~zero closing.
+    add_move(fasten_l, dart_pt, dart_dist / dart_speed, _WORKING, tag="distractor")
+    add_move(dart_pt, fasten_l, dart_dist / dart_speed, _WORKING, tag="distractor")
     add_move(fasten_l, fasten_r, 1.1, _WORKING)   # shuffle L -> R (lateral)
     add_dwell(fasten_r, 2.6, _WORKING)            # fasten R
-    add_move(fasten_r, bench, 1.6, _RETREAT)      # retreat to bench
+    # DISTRACTOR (b): sudden fast RETREAT -- fast, but OPENING (moving away).
+    add_move(fasten_r, fast_retreat_pt,
+             (fast_retreat_r - work_r) / retreat_speed, _RETREAT, tag="distractor")
+    add_move(fast_retreat_pt, bench, 0.8, _RETREAT)  # settle to the bench
     add_move(bench, fasten_c, 1.6, _APPROACH)     # approach again
     add_dwell(fasten_c, 1.8, _WORKING)            # fasten (centre)
-    slip_seg = _move(fasten_c, slip_pt, n(0.5))   # SIMULATED SLIP (lunge in)
-    segments.append((slip_seg, _HAZARD))
+    # SIMULATED SLIP (lunge in, breaching red) -- the ONE true hazard.
+    add_move(fasten_c, slip_pt, 0.5, _HAZARD, tag="slip")
     add_move(slip_pt, fasten_c, 0.8, _RETREAT)    # recover outward
     add_move(fasten_c, bench, 1.7, _RETREAT)      # final retreat
 
-    # --- assemble, tracking the slip onset timestamp ------------------------
+    # --- assemble, tracking event timestamps and ground-truth windows -------
     positions_chunks: list[np.ndarray] = []
     labels: list[str] = []
     events: list[tuple[str, float]] = []
+    slip_windows: list[tuple[float, float]] = []
+    distractor_windows: list[tuple[float, float]] = []
     hazard_onset_t = 0.0
     idx = 0
-    for chunk, label in segments:
-        if label == _HAZARD and not events:
-            hazard_onset_t = idx * dt
-            events.append(("slip_onset", hazard_onset_t))
+    for chunk, label, tag in segments:
+        start_t = idx * dt
+        end_t = (idx + len(chunk)) * dt
+        if tag == "slip":
+            if not slip_windows:
+                hazard_onset_t = start_t
+                events.append(("slip_onset", hazard_onset_t))
+            slip_windows.append((start_t, end_t))
+        elif tag == "distractor":
+            distractor_windows.append((start_t, end_t))
         positions_chunks.append(chunk)
         labels.extend([label] * len(chunk))
         idx += len(chunk)
@@ -154,4 +202,6 @@ def generate_loop(config: dict, seed: int = 0) -> LoopTrace:
         events=events,
         dt=dt,
         hazard_onset_t=hazard_onset_t,
+        slip_windows=slip_windows,
+        distractor_windows=distractor_windows,
     )

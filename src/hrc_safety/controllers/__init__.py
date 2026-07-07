@@ -1,5 +1,17 @@
-"""Static baseline and adaptive controllers."""
+"""The three-rung controller ladder: fixed-zone, dynamic-SSM, envelope-adaptive."""
 
-from .controllers import StaticController, AdaptiveController
+from .controllers import (
+    AdaptiveController,
+    DynamicSSMController,
+    EnvelopeAdaptiveController,
+    FixedZoneController,
+    StaticController,
+)
 
-__all__ = ["StaticController", "AdaptiveController"]
+__all__ = [
+    "FixedZoneController",
+    "StaticController",
+    "DynamicSSMController",
+    "EnvelopeAdaptiveController",
+    "AdaptiveController",
+]

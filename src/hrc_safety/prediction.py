@@ -1,8 +1,17 @@
 """One-step state prediction (paper Eq.1).
 
+SUPERSEDED AS THE ANTICIPATION MECHANISM (sem-2). See src/hrc_safety/horizon.py.
+    At 60 Hz one step is 16 ms, and the upper HMM's transition matrix is sticky, so
+    p_{t+1} = normalize(p_t @ A) is almost identical to p_t -- too small a lookahead
+    to buy meaningful lead time before a red-zone breach. The anticipation claim now
+    rests on KINEMATIC horizon prediction (constant-acceleration time-to-breach)
+    fused with the state posterior, not on this one-step propagation.
+    Eq.1 SURVIVES as a component: it is the transition-prediction half of the
+    forward filter (UpperHMM.step). This module is retained for backward
+    compatibility and for the ablation that removes horizon prediction.
+
 Isolated in its own module because its output is AUDITED: the predicted next-step
-posterior drives the adaptive controller's pre-emptive protective stop, so the
-prediction step must be independently testable and traceable.
+posterior is traceable and independently testable.
 
     Eq.1:  p_{t+1} = normalize( p_t @ A )
 

@@ -16,11 +16,21 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
+from hrc_safety.analysis import build_controller, fit_hmm, score
 from hrc_safety.config import build_zone_model, load_config
-from hrc_safety.controllers import AdaptiveController, StaticController
+from hrc_safety.controllers import (
+    AdaptiveController,
+    DynamicSSMController,
+    EnvelopeAdaptiveController,
+    FixedZoneController,
+    StaticController,
+)
+from hrc_safety.envelope import DynamicSSMEnvelope
 from hrc_safety.features import FeatureExtractor, FeatureFrame
+from hrc_safety.horizon import fused_risk, time_to_breach
 from hrc_safety.lhmm.upper import STATES, GaussianEmissions, UpperHMM
-from hrc_safety.logging_schema import Command
+from hrc_safety.logging_schema import Command, DecisionRecord
+from hrc_safety.metrics import compute_metrics
 from hrc_safety.prediction import predict_next
 from hrc_safety.sim.runner import run_controller
 from hrc_safety.sim.scenario import generate_loop
@@ -60,6 +70,33 @@ def _adaptive(zone_model: ZoneModel, hmm: UpperHMM) -> AdaptiveController:
     return AdaptiveController(
         zone_model, hmm, speed_reduced=0.35,
         hazard_prob_threshold=0.35, hazard_dwell_ticks=2, working_stability_ticks=30,
+    )
+
+
+def _always_working_hmm() -> UpperHMM:
+    """An HMM whose posterior is ALWAYS 'working' for any observation (adversarial).
+
+    Non-working states are given far-off, tight Gaussians so they never win; 'working'
+    is given a broad, flat one so it always dominates. Used to prove the envelope
+    shields the command even when the learned layer is certain the scene is safe.
+    """
+    n = len(STATES)
+    w = STATES.index("working")
+    means = np.full((n, 4), 1000.0)
+    variances = np.full((n, 4), 1e-3)
+    means[w] = 0.0
+    variances[w] = 1e6
+    A = np.full((n, n), 1.0 / n)
+    return UpperHMM(transition_matrix=A, emissions=GaussianEmissions(means=means, variances=variances))
+
+
+def _rec(t, d, speed, command) -> DecisionRecord:
+    """Minimal DecisionRecord for metric unit tests."""
+    return DecisionRecord(
+        t=t, condition="test", d=d, zone="n/a",
+        state_posterior=[0, 0, 0, 0], predicted_posterior=[0, 0, 0, 0],
+        p_hazard_next=0.0, inferred_state="n/a", rule="",
+        command=command.value, speed_fraction=speed,
     )
 
 
@@ -215,3 +252,137 @@ def test_end_to_end_slip_forces_stop():
     # Minimum separation dips below the red radius (the slip really breaches red).
     min_sep = min(r.d for r in adaptive_run.records)
     assert min_sep < build_zone_model(config).red_radius
+
+
+# --- 11. THE ARCHITECTURAL INVARIANT: adaptive never exceeds the envelope -----
+# NON-NEGOTIABLE #4 (README). The learned layers are SHIELDED by the certified SSM
+# envelope: at every tick the commanded speed must be <= the envelope's permitted
+# speed, even when the model is adversarially certain the scene is 'working' during a
+# fast approach. A recognition error may only ADD caution, never raise speed.
+
+def test_adaptive_never_exceeds_envelope():
+    envelope = DynamicSSMEnvelope(T=0.40, C=0.20, Sa=0.10, ramp=0.30)
+    hmm = _always_working_hmm()
+    ctrl = EnvelopeAdaptiveController(
+        _zone_model(), hmm, envelope=envelope, speed_reduced=0.35,
+        hazard_dwell_ticks=2, min_closing_speed=0.6,
+    )
+
+    constrained_somewhere = False
+    for d in (0.5, 0.7, 0.9, 0.94, 1.0, 1.2, 1.5, 2.0, 2.5):
+        for v in (-1.0, 0.0, 0.5, 1.0, 2.0, 3.0):
+            for a in (-2.0, 0.0, 2.0):
+                frame = _frame(d=d, v_proj=v, v_lat_frac=0.2, a_proj=a, t=0.0)
+                rec = ctrl.decide(frame)
+                env_speed = envelope.max_speed(d, v)
+                # The model is adversarially certain it is safe...
+                assert rec.inferred_state == "working"
+                # ...yet the command never exceeds the certified floor.
+                assert rec.speed_fraction <= env_speed + 1e-9, (d, v, a, rec.speed_fraction, env_speed)
+                if rec.speed_fraction < env_speed - 1e-9 or env_speed == 0.0:
+                    constrained_somewhere = True
+    # The envelope (or the hard stop) actually bit somewhere in the sweep.
+    assert constrained_somewhere
+
+
+# --- 12. horizon time-to-breach: constant velocity, retreat, accel clamp -------
+
+def test_time_to_breach_kinematics_and_accel_clamp():
+    # Constant velocity closing: gap = 1.94 - 0.94 = 1.0 m at 1.0 m/s -> 1.0 s.
+    assert time_to_breach(1.94, 1.0, 0.0, 0.94, horizon=0.5) == pytest.approx(1.0)
+    # Moving away -> never breaches.
+    assert time_to_breach(1.5, -1.0, 0.0, 0.94) == float("inf")
+    # Already inside red -> 0.
+    assert time_to_breach(0.5, 0.0, 0.0, 0.94) == 0.0
+    # A physically-impossible noisy acceleration is CLAMPED to max_accel: with v=0,
+    # gap=1.0, a clamped to 4 -> 0.5*4*tau^2 = 1 -> tau = sqrt(0.5).
+    got = time_to_breach(1.94, 0.0, 1000.0, 0.94, max_accel=4.0)
+    assert got == pytest.approx((2.0 * 1.0 / 4.0) ** 0.5)
+
+
+def test_fused_risk_gated_by_closing_speed():
+    # Imminent breach geometry, but the operator is barely closing (below the gate):
+    # imminence is suppressed, so risk falls back to p_hazard alone.
+    r_slow = fused_risk(0.1, ttb=0.05, horizon=0.5, steepness=8.0, v_proj=0.1, min_closing=0.6)
+    assert r_slow == pytest.approx(0.1)
+    # Same geometry but genuinely closing fast: imminence dominates.
+    r_fast = fused_risk(0.1, ttb=0.05, horizon=0.5, steepness=8.0, v_proj=1.5, min_closing=0.6)
+    assert r_fast > 0.9
+
+
+# --- 13. anticipation lead time: full system pre-empts, fixed zone reacts ------
+
+def test_full_system_anticipates_before_fixed_zone():
+    config = load_config()
+    fitted = fit_hmm(config)
+    trace = generate_loop(config, seed=7)
+
+    m_full = score(config, build_controller("adaptive", config, fitted), trace)
+    m_fixed = score(config, build_controller("fixed_zone", config, None), trace)
+
+    # Full system stops BEFORE the operator crosses the red radius (positive lead).
+    assert m_full.anticipation_lead_time_s is not None
+    assert m_full.anticipation_lead_time_s > 0.0
+    # The fixed-zone baseline only reacts on the breach itself: no anticipation.
+    assert m_fixed.anticipation_lead_time_s is not None
+    assert m_fixed.anticipation_lead_time_s <= 0.0
+
+
+# --- 14. SPECIFICITY: distractors must not trigger stops, slips still do -------
+# The cued distractors (fast lateral dart, fast retreat) are ground-truth non-hazard.
+# A controller must NOT stop for them (specificity) while still stopping for the slip
+# (sensitivity). This is what separates a useful controller from one that just stops
+# for any fast motion.
+
+def test_distractors_do_not_trigger_stops():
+    config = load_config()
+    fitted = fit_hmm(config)
+    trace = generate_loop(config, seed=7)
+    assert trace.distractor_windows  # the scenario really contains distractors
+    assert trace.slip_windows        # ...and a real slip
+
+    for name in ("fixed_zone", "dynamic_ssm", "adaptive"):
+        m = score(config, build_controller(name, config, fitted), trace)
+        assert m.hazard_sensitivity == 1.0, name   # stops for the real slip
+        assert m.hazard_specificity == 1.0, name   # never stops during a distractor
+        assert m.false_stop_rate == 0.0, name
+
+
+# --- 15. interruption_burden counts only ground-truth-safe speed deficit -------
+
+def test_interruption_burden_excludes_hazard_and_red():
+    dt = 0.1
+    red = 0.94
+    records = [
+        _rec(t=0.0, d=1.5, speed=1.0, command=Command.FULL_SPEED),      # safe, full -> 0
+        _rec(t=0.1, d=1.5, speed=0.4, command=Command.REDUCED_SPEED),  # safe, deficit 0.6*dt
+        _rec(t=0.2, d=1.2, speed=0.0, command=Command.PROTECTIVE_STOP),  # slip window -> excluded
+        _rec(t=0.3, d=0.5, speed=0.0, command=Command.PROTECTIVE_STOP),  # red occupancy -> excluded
+    ]
+    labels = ["working", "working", "hazard", "hazard"]
+    m = compute_metrics(
+        records, labels, dt, hazard_onset_t=0.2, red_radius=red,
+        slip_windows=[(0.2, 0.35)], distractor_windows=[],
+    )
+    # Only the single safe slowdown contributes: (1 - 0.4) * dt.
+    assert m.interruption_burden_s == pytest.approx(0.6 * dt)
+
+
+# --- 16. the three rungs all emit the identical DecisionRecord schema ----------
+
+def test_three_rungs_emit_identical_schema():
+    config = load_config()
+    fitted = fit_hmm(config)
+    frame = _frame(d=1.2, v_proj=0.3, v_lat_frac=0.2, a_proj=0.0)
+
+    fixed = FixedZoneController(build_zone_model(config))
+    dynamic = DynamicSSMController(build_zone_model(config))
+    adaptive = build_controller("adaptive", config, fitted)
+
+    keys = None
+    for ctrl in (fixed, dynamic, adaptive):
+        rec = ctrl.decide(frame)
+        rec_keys = set(vars(rec).keys())
+        if keys is None:
+            keys = rec_keys
+        assert rec_keys == keys  # identical schema across all rungs

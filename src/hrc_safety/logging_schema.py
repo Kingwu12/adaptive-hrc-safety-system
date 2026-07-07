@@ -24,10 +24,16 @@ class Command(str, Enum):
 
 @dataclass
 class DecisionRecord:
-    """One tick of controller decision, fully traceable."""
+    """One tick of controller decision, fully traceable.
+
+    The sem-2 fields (envelope_max_speed, risk, time_to_breach_s) default so the
+    fixed-zone baseline -- which carries no envelope or horizon -- still emits the
+    identical schema. They make the runtime-assurance floor and the anticipation
+    signal auditable per tick, which is the whole point of the redesign.
+    """
 
     t: float
-    condition: str  # "static" | "adaptive"
+    condition: str  # "static"/"fixed_zone" | "dynamic_ssm" | "adaptive"
     d: float
     zone: str
     state_posterior: list[float]
@@ -37,6 +43,10 @@ class DecisionRecord:
     rule: str
     command: str
     speed_fraction: float
+    # --- sem-2 traceability (optional; baseline leaves them at defaults) --------
+    envelope_max_speed: float = 1.0  # certified speed floor permitted this tick
+    risk: float = 0.0                # fused hazard risk (posterior + breach imminence)
+    time_to_breach_s: float | None = None  # predicted s until red-radius breach (None = n/a)
 
     def to_json(self) -> str:
         return json.dumps(self._serialisable())
