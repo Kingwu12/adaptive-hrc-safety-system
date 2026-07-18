@@ -35,3 +35,4 @@ paper/*.synctex.gz
 .DS_Store
 .idea/
 .vscode/
+sim/ursim/docker-compose.local.yml
