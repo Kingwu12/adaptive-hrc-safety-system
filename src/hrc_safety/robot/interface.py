@@ -59,7 +59,7 @@ class URRobot:
     ) -> None:
         # Lazy import so `pip install -e .` (no robot extra) still imports the pkg.
         try:
-            from rtde_control import RTDEControlInterface
+            from rtde_io import RTDEIOInterface
             from dashboard_client import DashboardClient
         except ImportError as exc:  # pragma: no cover - requires the robot extra
             raise ImportError(
@@ -67,7 +67,7 @@ class URRobot:
             ) from exc
 
         self.host = host
-        self._rtde = RTDEControlInterface(host)
+        self._rtde = RTDEIOInterface(host)
         self._dashboard = DashboardClient(host)
         self._dashboard.connect()
         self._paused = False
@@ -75,11 +75,18 @@ class URRobot:
     def apply(self, command: Command, speed_fraction: float) -> None:  # pragma: no cover
         if command == Command.PROTECTIVE_STOP:
             if not self._paused:
-                self._dashboard.pause()
+                try:
+                    self._dashboard.pause()
+                except RuntimeError:
+                    pass  # no loaded program to pause; slider 0 below still halts
                 self._paused = True
+            self._rtde.setSpeedSlider(0.0)
             return
         # A speed command implies the cell should be running.
         if self._paused:
-            self._dashboard.play()
+            try:
+                self._dashboard.play()
+            except RuntimeError:
+                pass  # no loaded program (e.g. bare URSim); slider alone drives
             self._paused = False
         self._rtde.setSpeedSlider(max(0.0, min(1.0, float(speed_fraction))))

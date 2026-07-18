@@ -120,6 +120,7 @@ make paper                                  # regenerate result tables; build th
 ```bash
 pip install -e ".[robot]"                       # ur-rtde
 docker compose -f sim/ursim/docker-compose.yml up
+python scripts/demo_ursim.py --log adaptive        # replay a logged rung onto URSim live (see also --log fixed_zone)
 ```
 
 `URRobot` maps full/reduced speed to the RTDE speed slider and a protective stop to the
