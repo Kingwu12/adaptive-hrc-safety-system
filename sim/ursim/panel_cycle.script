@@ -6,6 +6,13 @@
 # ONLY through the external speed slider + Dashboard stops - this
 # script never changes between conditions. That invariance is the method.
 #
+# STRUCTURE NOTE: plain statements only - NO def wrapper, NO trailing
+# call. PolyScope inlines this file into its own generated program when
+# the .urp plays; a def+call wrapper here collides with that wrapper and
+# throws "Compile error: Duplicate label". For headless testing via raw
+# 30002 injection (no .urp), wrap on the fly:
+#   { echo "def t():"; sed 's/^/  /' panel_cycle.script; echo "end"; echo "t()"; }
+#
 # Five phases (matches src/hrc_safety/sim/scenario.py):
 #   P1 LOAD       - park at waist, wait for panel weight  (monitored stop, not measured)
 #   P2 TRANSIT    - lift panel to ceiling pose            (SSM, measured)
@@ -20,38 +27,35 @@
 #   - P3 compliant hold -> hold still here; on hardware replace with
 #     force_mode() compliant in tool-z, panel weight compensated.
 
-def panel_cycle():
-  # Joint poses (rad). Base near -90 deg matches the sim workcell frame.
-  # Big shoulder travel between waist and ceiling = clearly visible motion.
-  q_waist   = [d2r(-90), d2r(-60),  d2r(-110), d2r(-100), d2r(90), d2r(0)]
-  q_ceiling = [d2r(-90), d2r(-110), d2r(-40),  d2r(-120), d2r(90), d2r(0)]
+# Joint poses (rad). Base near -90 deg matches the sim workcell frame.
+# Big shoulder travel between waist and ceiling = clearly visible motion.
+q_waist   = [d2r(-90), d2r(-60),  d2r(-110), d2r(-100), d2r(90), d2r(0)]
+q_ceiling = [d2r(-90), d2r(-110), d2r(-40),  d2r(-120), d2r(90), d2r(0)]
 
-  # Conservative motion params (scaled live by the external speed slider).
-  acc = 0.8  # rad/s^2
-  vel = 0.6  # rad/s
+# Conservative motion params (scaled live by the external speed slider).
+acc = 0.8  # rad/s^2
+vel = 0.6  # rad/s
 
-  while (True):
-    # ---- P1 LOAD ----
-    textmsg("P1 LOAD: at waist, waiting for panel")
-    movej(q_waist, a=acc, v=vel)
-    # SIM: timed stand-in for the panel-weight trigger (see header).
-    sleep(4.0)
+while (True):
+  # ---- P1 LOAD ----
+  textmsg("P1 LOAD: at waist, waiting for panel")
+  movej(q_waist, a=acc, v=vel)
+  # SIM: timed stand-in for the panel-weight trigger (see header).
+  sleep(4.0)
 
-    # ---- P2 TRANSIT ----
-    textmsg("P2 TRANSIT: lifting panel to ceiling")
-    movej(q_ceiling, a=acc, v=vel)
+  # ---- P2 TRANSIT ----
+  textmsg("P2 TRANSIT: lifting panel to ceiling")
+  movej(q_ceiling, a=acc, v=vel)
 
-    # ---- P3 HAND-GUIDE ----
-    textmsg("P3 HAND-GUIDE: compliant hold (sim: hold still)")
-    sleep(6.0)
+  # ---- P3 HAND-GUIDE ----
+  textmsg("P3 HAND-GUIDE: compliant hold (sim: hold still)")
+  sleep(6.0)
 
-    # ---- P4 BOLT ----
-    textmsg("P4 BOLT: dead-still hold while human bolts")
-    sleep(5.0)
+  # ---- P4 BOLT ----
+  textmsg("P4 BOLT: dead-still hold while human bolts")
+  sleep(5.0)
 
-    # ---- P5 RELEASE ----
-    textmsg("P5 RELEASE: lowering to waist")
-    movej(q_waist, a=acc, v=vel)
-  end
+  # ---- P5 RELEASE ----
+  textmsg("P5 RELEASE: lowering to waist")
+  movej(q_waist, a=acc, v=vel)
 end
-panel_cycle()
