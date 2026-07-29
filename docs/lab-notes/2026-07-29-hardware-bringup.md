@@ -50,6 +50,9 @@ Everything below was verified live this session (not recalled).
 
 ## Open questions (for Yizhe)
 
-1. IMU position drift: anchoring policy (per-loop re-zero on taped home
-   point?) + measure Sa INCLUDING drift over a loop; larger Sa raises S0.
-2. MUHREC this week's submission must describe the Xsens wearable.
+1. ~~IMU position drift: anchoring policy?~~ **ANSWERED (Yizhe, from
+   experience, 2026-07-29): strap super tight, no wiggle room; clean
+   restart/recalibration every ~5 minutes.** Design consequence: loops fit
+   inside 5-min windows between re-anchors; Sa measured within a window.
+2. MUHREC submission must describe the Xsens wearable — CHECK the submitted
+   application text mentions the suit/straps, not cameras.
