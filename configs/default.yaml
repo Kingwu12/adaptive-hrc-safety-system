@@ -79,6 +79,6 @@ scenario:
   distractor_retreat_speed: 2.0  # sudden fast RETREAT away from the column (m/s; opening)
 
 robot:
-  host: "127.0.0.1"   # URSim / UR controller IP
+  host: "192.168.1.101"   # lab UR10 (serial 20185000750); URSim = 127.0.0.1
   rtde_port: 30004    # RTDE data port
   dashboard_port: 29999  # Dashboard server port (pause/play for protective stop)
