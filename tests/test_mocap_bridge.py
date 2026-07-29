@@ -87,3 +87,40 @@ def test_bridge_feeds_feature_extractor_seam():
             frame = fx.push(s.t, s.position)
     assert frame is not None              # extractor warmed up and emitted
     assert frame.d_dot < 0                # and saw the operator CLOSING
+
+
+# ---------- Xsens transport (parser + live UDP loopback) ----------
+
+from hrc_safety.mocap.xsens_transport import (  # noqa: E402
+    XsensListener, build_mxtp02, parse_mxtp02)
+
+
+def test_mxtp02_roundtrip_and_segment_select():
+    pkt = build_mxtp02({1: (0.1, 0.2, 0.3), 5: (9, 9, 9)}, time_code_ms=2500)
+    ts, pos = parse_mxtp02(pkt, segment_id=1)
+    assert ts == 2.5 and np.allclose(pos, [0.1, 0.2, 0.3])
+    assert parse_mxtp02(pkt, segment_id=7) is None      # absent segment
+    assert parse_mxtp02(b"garbage", 1) is None          # malformed: no raise
+    assert parse_mxtp02(pkt[:20], 1) is None            # truncated: no raise
+    assert parse_mxtp02(b"MXTP01" + pkt[6:], 1) is None  # wrong message type
+
+
+def test_udp_listener_feeds_bridge_end_to_end():
+    import socket as sk
+    import time as tm
+    b = MocapBridge()
+    lst = XsensListener(b, host="127.0.0.1", port=0)     # ephemeral port
+    port = lst._sock.getsockname()[1]
+    lst.start()
+    tx = sk.socket(sk.AF_INET, sk.SOCK_DGRAM)
+    tx.sendto(build_mxtp02({1: (1.0, 2.0, 3.0)}, 1000), ("127.0.0.1", port))
+    deadline = tm.monotonic() + 2.0
+    s = None
+    while tm.monotonic() < deadline:
+        s = b.tick(tm.monotonic())
+        if s is not None:
+            break
+        tm.sleep(0.01)
+    lst.stop(); tx.close()
+    assert s is not None and np.allclose(s.position, [1.0, 2.0, 3.0])
+    assert s.motive_timestamp == 1.0

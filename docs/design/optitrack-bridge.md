@@ -1,5 +1,16 @@
 # OptiTrack Integration — Scoping Proposal
 
+> **SUPERSEDED (transport half) — 2026-07-29.** The lab tracker is an **Xsens
+> IMU suit**, not OptiTrack. Implemented instead: MVN network-stream UDP
+> transport (`src/hrc_safety/mocap/xsens_transport.py`, MXTP02 parser +
+> listener, no vendored SDK needed). The bridge, 60 Hz decimate/hold,
+> staleness fallback, recorder, and Kabsch calibration below carry over
+> UNCHANGED. **Open design question for supervisor:** Xsens position is
+> inertial and drifts (no absolute anchor) — needs an anchoring policy
+> (e.g. per-loop re-zero on a taped home point) and Sa measured to INCLUDE
+> drift over a loop; drift-inflated Sa raises S0. First real MVN packet must
+> be verified against the parser once on the lab machine.
+
 Companion to `docs/experiment_plan.md`. Scope for wiring the lab's OptiTrack
 system into the existing pipeline. Nothing here is speculative hardware — the
 lab owns the tracker; the needed code is deliberately thin. Three components,
