@@ -1,0 +1,34 @@
+# HRC Operator Motion Console
+
+Local web interface for the Monash adaptive HRC safety FYP. The UI displays
+the Xsens-derived position and motion features produced by
+`scripts/dashboard_server.py`, captures participant/trial metadata, applies
+ground-truth labels, and shows the current layered-HMM posterior.
+
+## Run locally
+
+Use Node.js 22.13 or newer. From the repository root, open two terminals:
+
+```bash
+python scripts/dashboard_server.py
+```
+
+```bash
+cd dashboard
+npm install
+npm run dev
+```
+
+Open <http://localhost:3000>. In MVN Analyze, stream `Position + Quaternion`
+over UDP to this Mac on port `9763`.
+
+## Trusted lab-network viewing
+
+```bash
+python scripts/dashboard_server.py --share
+cd dashboard && npm run dev -- --host 0.0.0.0
+```
+
+Teammates can use the Mac's LAN address to view the console. Remote browsers
+are view-only unless the host deliberately adds `--allow-remote-control`.
+Recorded JSONL data stays under `data/xsens/` and is ignored by Git.

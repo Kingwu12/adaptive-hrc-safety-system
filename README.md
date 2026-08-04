@@ -37,6 +37,14 @@ JSON to `data/analysis/metrics.json`.
 
 ```bash
 python scripts/replay.py --controller all   # offline replay/ablation over a logged trace
+
+# Local Xsens experiment console (run both in separate terminals)
+python scripts/dashboard_server.py          # localhost-only sensor service
+cd dashboard && npm run dev                 # open http://localhost:3000
+
+# Optional group viewing on trusted lab Wi-Fi (remote browsers are view-only)
+python scripts/dashboard_server.py --share
+cd dashboard && npm run dev -- --host 0.0.0.0
 make paper                                  # regenerate result tables; build the PDF if latexmk present
 ```
 
