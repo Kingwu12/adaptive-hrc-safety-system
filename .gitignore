@@ -37,3 +37,4 @@ paper/*.synctex.gz
 .idea/
 .vscode/
 sim/ursim/docker-compose.local.yml
+data/xsens/

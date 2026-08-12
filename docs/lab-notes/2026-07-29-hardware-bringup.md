@@ -44,8 +44,11 @@ Everything below was verified live this session (not recalled).
   assumed). Transport implemented: `src/hrc_safety/mocap/xsens_transport.py`
   (MVN MXTP02 UDP parser + listener, default port 9763, pelvis segment).
   Bridge/recorder/calibration unchanged. Commits c463c1d, a3e740f; 31/31.
-- MVN Analyze setup: Options -> Network Streamer -> UDP, "Position +
-  Quaternion", target = laptop IP : 9763. Verify the FIRST real packet
+- Xsens Analyze/Animate and the Awinda USB driver require a Windows 10/11
+  host. Attach the Awinda dongle to that Windows machine; the Mac is the UDP
+  receiver and does not need an Xsens USB driver.
+- MVN setup on Windows: Options -> Network Streamer -> UDP, "Position +
+  Quaternion", target = Mac LAN IP : 9763. Verify the FIRST real packet
   against the parser once.
 
 ## Open questions (for Yizhe)

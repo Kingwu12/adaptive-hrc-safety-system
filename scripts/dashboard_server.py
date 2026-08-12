@@ -361,6 +361,10 @@ input[type=range]{width:65%;vertical-align:middle}
 <h2>Gripper &nbsp;<span class="v" id="vacv">60</span>% <input type="range" id="vac" min="10" max="80" value="60" oninput="vacv.innerText=this.value"></h2>
 <button class="go" onclick="post('/api/gripper',{action:'grip',channel:'BOTH',vacuum:vac()})">Grip</button>
 <button onclick="post('/api/gripper',{action:'release',channel:'BOTH'})">Release</button>
+<h2>Xsens</h2>
+<button class="go" onclick="post('/api/xsens/reset',{type:'grid'})">RESET (grid)</button>
+<button onclick="post('/api/xsens/reset',{type:'heading'})">Heading only</button>
+<button onclick="post('/api/xsens/reset',{type:'position'})">Position only</button>
 <h2>Robot</h2>
 <button onclick="post('/api/robot',{action:'power_on'})">Power on</button>
 <button onclick="post('/api/robot',{action:'brake_release'})">Brake release</button>
@@ -407,6 +411,24 @@ class ApiHandler(BaseHTTPRequestHandler):
         self._headers(status)
         self.wfile.write(json.dumps(value).encode("utf-8"))
 
+    def _xsens_reset(self, reset_type: str) -> dict:
+        """Forward a reset to the Windows MVN laptop's keystroke listener.
+
+        Target host:port lives in data/xsens/.mvn_remote (editable without
+        restart). Default is the Windows mobile-hotspot host address.
+        """
+        import urllib.request
+        remote_file = Path("data/xsens/.mvn_remote")
+        target = "192.168.137.1:9764"
+        if remote_file.exists():
+            target = remote_file.read_text().strip() or target
+        url = f"http://{target}/reset?type={reset_type}"
+        try:
+            with urllib.request.urlopen(url, timeout=4) as resp:
+                return json.loads(resp.read().decode("utf-8"))
+        except Exception as exc:
+            return {"ok": False, "error": f"MVN listener unreachable at {target}: {exc}"}
+
     def do_OPTIONS(self) -> None:
         self._headers(204)
 
@@ -434,7 +456,7 @@ class ApiHandler(BaseHTTPRequestHandler):
             remote = self.client_address[0] not in {"127.0.0.1", "::1"}
             length = int(self.headers.get("Content-Length", "0"))
             body = json.loads(self.rfile.read(length) or b"{}")
-            rig_paths = {"/api/gripper", "/api/robot", "/api/demo"}
+            rig_paths = {"/api/gripper", "/api/robot", "/api/demo", "/api/xsens/reset"}
             if self.path in rig_paths:
                 # rig control needs the key from any remote browser
                 if remote and self.headers.get("X-Control-Key", "") != self.control_key:
@@ -445,6 +467,8 @@ class ApiHandler(BaseHTTPRequestHandler):
                         int(body.get("vacuum", 60)))
                 elif self.path == "/api/robot":
                     result = self.rig.robot_action(str(body.get("action")))
+                elif self.path == "/api/xsens/reset":
+                    result = self._xsens_reset(str(body.get("type", "grid")))
                 else:
                     if body.get("action") == "start":
                         result = self.rig.demo_start(int(body.get("vacuum", 60)))

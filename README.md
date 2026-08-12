@@ -42,6 +42,9 @@ python scripts/replay.py --controller all   # offline replay/ablation over a log
 python scripts/dashboard_server.py          # localhost-only sensor service
 cd dashboard && npm run dev                 # open http://localhost:3000
 
+# On a Windows 10/11 machine, run Xsens Analyze/Animate with the Awinda
+# dongle attached. Stream Position + Quaternion over UDP to this Mac:9763.
+
 # Optional group viewing on trusted lab Wi-Fi (remote browsers are view-only)
 python scripts/dashboard_server.py --share
 cd dashboard && npm run dev -- --host 0.0.0.0
