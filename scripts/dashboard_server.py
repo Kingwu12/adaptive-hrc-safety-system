@@ -240,12 +240,13 @@ class RigControl:
         cmds = {
             "power_on": ["power on"],
             "brake_release": ["brake release"],
-            "load_panel_cycle": ["load panel_cycle.urp"],
             "play": ["play"],
             "pause": ["pause"],
             "stop": ["stop"],
             "unlock": ["unlock protective stop"],
         }
+        if action == "run_cycle":
+            return {"action": action, **self.run_cycle_only()}
         if action not in cmds:
             raise ValueError(f"Unknown robot action: {action}")
         replies = self._dash(*cmds[action])
@@ -281,22 +282,39 @@ class RigControl:
         """Inject the panel-cycle task program over the primary interface.
 
         No .urp needed: the plain-statement script from the repo is wrapped in
-        a def/end on the fly and becomes the running program (the same ritual
-        verified on URSim and the real arm). Robot must be in Remote Control.
+        a def/end on the fly and becomes the running program. Protocol facts
+        learned on the real arm 2026-08-12: the def block alone auto-starts
+        (a trailing call line is a parse error), and the socket must STAY OPEN
+        or the controller kills the program. First statement declares the
+        VG10's payload (1.7 kg) so joint collision detection has the right
+        dynamics model -- without it the shoulder trips C157A1 on the first
+        acceleration. Robot must be in Remote Control.
         """
+        self.close_program_socket()
         path = os.path.join(os.path.dirname(__file__), "..",
                             "sim", "ursim", "panel_cycle.script")
         with open(path, "r", encoding="utf-8") as fh:
             body = fh.read()
         prog = "def panel_cycle_t():\n"
+        prog += "  set_payload(1.7, [0.0, 0.0, 0.06])\n"
         prog += "".join("  " + line + "\n" for line in body.splitlines())
-        prog += "end\npanel_cycle_t()\n"
-        with socket.create_connection((self.robot_host, 30001), timeout=4) as s:
-            s.sendall(prog.encode("utf-8"))
-            time.sleep(0.8)
+        prog += "end\n"
+        self._prog_sock = socket.create_connection(
+            (self.robot_host, 30001), timeout=5)
+        self._prog_sock.sendall(prog.encode("utf-8"))
+        time.sleep(0.8)
         state = self._dash("programState", "running")
         return {"sent_bytes": len(prog), "program_state": state[0],
                 "running": state[1]}
+
+    def close_program_socket(self) -> None:
+        sock = getattr(self, "_prog_sock", None)
+        if sock is not None:
+            try:
+                sock.close()
+            except OSError:
+                pass
+            self._prog_sock = None
 
     def demo_start(self, vacuum: int) -> dict:
         """Suck the panel, then run the panel-cycle program on the arm."""
@@ -315,8 +333,13 @@ class RigControl:
     def demo_stop(self) -> dict:
         steps: dict = {}
         steps["robot"] = self._dash("stop")
+        self.close_program_socket()
         steps["release"] = self.gripper_action("release", "BOTH", 0)
         return steps
+
+    def run_cycle_only(self) -> dict:
+        """Motion check: run the panel cycle without touching the gripper."""
+        return self.send_panel_cycle()
 
 
 CONTROL_PAGE = """<!doctype html><html><head><meta charset="utf-8">

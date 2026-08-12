@@ -231,6 +231,8 @@ export default function Home() {
             <button onClick={() => rigPost("/api/gripper", { action: "release", channel: "BOTH" })}>Release</button>
             <button onClick={() => rigPost("/api/robot", { action: "power_on" })}>Power on</button>
             <button onClick={() => rigPost("/api/robot", { action: "brake_release" })}>Brake release</button>
+            <button onClick={() => rigPost("/api/robot", { action: "run_cycle" })}>Run cycle (no grip)</button>
+            <button onClick={() => rigPost("/api/robot", { action: "unlock" })}>Unlock protective stop</button>
             <button onClick={() => rigPost("/api/robot", { action: "play" })}>Play</button>
             <button onClick={() => rigPost("/api/robot", { action: "pause" })}>Pause</button>
           </div>
