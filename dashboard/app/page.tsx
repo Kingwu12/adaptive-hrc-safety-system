@@ -72,6 +72,16 @@ function Sparkline({ values, color }: { values: number[]; color: string }) {
   return <canvas className="spark" ref={canvas} aria-label="Recent signal history" />;
 }
 
+type Rig = {
+  gripper?: { vacuum_A_permille?: number; vacuum_B_permille?: number; pump_rpm?: number; current_mA?: number; error?: string };
+  robot?: { reachable?: boolean; robotmode?: string; safety?: string; program_state?: string; error?: string };
+};
+
+function controlKey() {
+  if (typeof window === "undefined") return "";
+  return new URLSearchParams(window.location.search).get("k") || "";
+}
+
 export default function Home() {
   const [status, setStatus] = useState<Status>(EMPTY);
   const [reachable, setReachable] = useState(false);
@@ -79,6 +89,9 @@ export default function Home() {
   const [participant, setParticipant] = useState("P01");
   const [trial, setTrial] = useState("T01");
   const [message, setMessage] = useState("Start the local sensor service, then enable MVN Network Streamer.");
+  const [rig, setRig] = useState<Rig>({});
+  const [vacuum, setVacuum] = useState(60);
+  const [rigMsg, setRigMsg] = useState("");
 
   useEffect(() => {
     let live = true;
@@ -101,6 +114,34 @@ export default function Home() {
     poll(); const timer = setInterval(poll, 250);
     return () => { live = false; clearInterval(timer); };
   }, []);
+
+  useEffect(() => {
+    let live = true;
+    const pollRig = async () => {
+      try {
+        const res = await fetch(`${apiBase()}/api/rig`, { cache: "no-store" });
+        if (!res.ok) return;
+        const next = await res.json() as Rig;
+        if (live) setRig(next);
+      } catch { /* rig offline is non-fatal */ }
+    };
+    pollRig(); const timer = setInterval(pollRig, 1500);
+    return () => { live = false; clearInterval(timer); };
+  }, []);
+
+  const rigPost = async (path: string, body: object) => {
+    setRigMsg(`sending ${JSON.stringify(body)} ...`);
+    try {
+      const res = await fetch(`${apiBase()}${path}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Control-Key": controlKey() },
+        body: JSON.stringify(body),
+      });
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.error || "Request failed");
+      setRigMsg(JSON.stringify(result).slice(0, 160));
+    } catch (err) { setRigMsg(err instanceof Error ? err.message : "Request failed"); }
+  };
 
   const post = async (path: string, body: object = {}) => {
     try {
@@ -167,6 +208,39 @@ export default function Home() {
           <div className="panelHead"><div><p className="kicker">04 · MODEL</p><h2>HMM belief</h2></div><span className="quiet">not ground truth</span></div>
           <div className="bars">{["approaching", "working", "retreating", "hazard"].map(s => { const value = status.posterior[s] || 0; return <div className="barRow" key={s}><span>{s}</span><div><i style={{ width: `${value * 100}%` }} /></div><strong>{Math.round(value * 100)}%</strong></div>; })}</div>
           <p className="modelNote"><b>Important:</b> this baseline model is fitted on synthetic loops until the real labelled dataset pipeline is completed.</p>
+        </article>
+
+        <article className="panel rig">
+          <div className="panelHead">
+            <div><p className="kicker">05 · RIG</p><h2>Robot &amp; gripper</h2></div>
+            <span className={rig.robot?.reachable ? "quiet" : "warnText"}>
+              {rig.robot?.reachable ? `${rig.robot?.robotmode ?? ""} · ${rig.robot?.safety ?? ""}` : "robot offline"}
+            </span>
+          </div>
+          <div className="actions">
+            <button className="primary" onClick={() => rigPost("/api/demo", { action: "start", vacuum })}>Suck panel + run cycle</button>
+            <button className="stop" onClick={() => rigPost("/api/demo", { action: "stop" })}>Stop cycle + release</button>
+          </div>
+          <div className="fields">
+            <label>Vacuum {vacuum}%
+              <input type="range" min={10} max={80} value={vacuum} onChange={e => setVacuum(parseInt(e.target.value))} />
+            </label>
+          </div>
+          <div className="labelButtons">
+            <button onClick={() => rigPost("/api/gripper", { action: "grip", channel: "BOTH", vacuum })}>Grip</button>
+            <button onClick={() => rigPost("/api/gripper", { action: "release", channel: "BOTH" })}>Release</button>
+            <button onClick={() => rigPost("/api/robot", { action: "power_on" })}>Power on</button>
+            <button onClick={() => rigPost("/api/robot", { action: "brake_release" })}>Brake release</button>
+            <button onClick={() => rigPost("/api/robot", { action: "play" })}>Play</button>
+            <button onClick={() => rigPost("/api/robot", { action: "pause" })}>Pause</button>
+          </div>
+          <button className="unlabel" onClick={() => rigPost("/api/robot", { action: "stop" })}>STOP PROGRAM</button>
+          <dl className="sessionFacts">
+            <div><dt>Vacuum A</dt><dd>{rig.gripper?.vacuum_A_permille ?? "—"}‰</dd></div>
+            <div><dt>Vacuum B</dt><dd>{rig.gripper?.vacuum_B_permille ?? "—"}‰</dd></div>
+            <div><dt>Pump</dt><dd>{rig.gripper?.pump_rpm ?? "—"} rpm</dd></div>
+          </dl>
+          <p className="feedback">{rigMsg || (rig.robot?.program_state ?? "")}</p>
         </article>
       </section>
       <footer><span>Data remains on this Mac</span><span>{status.recording_path || "No active recording"}</span></footer>
