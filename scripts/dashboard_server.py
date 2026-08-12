@@ -277,6 +277,27 @@ class RigControl:
                     return {"error": out.get("error", "gripper unreachable")}
             return dict(self._last_gripper)
 
+    def send_panel_cycle(self) -> dict:
+        """Inject the panel-cycle task program over the primary interface.
+
+        No .urp needed: the plain-statement script from the repo is wrapped in
+        a def/end on the fly and becomes the running program (the same ritual
+        verified on URSim and the real arm). Robot must be in Remote Control.
+        """
+        path = os.path.join(os.path.dirname(__file__), "..",
+                            "sim", "ursim", "panel_cycle.script")
+        with open(path, "r", encoding="utf-8") as fh:
+            body = fh.read()
+        prog = "def panel_cycle_t():\n"
+        prog += "".join("  " + line + "\n" for line in body.splitlines())
+        prog += "end\npanel_cycle_t()\n"
+        with socket.create_connection((self.robot_host, 30001), timeout=4) as s:
+            s.sendall(prog.encode("utf-8"))
+            time.sleep(0.8)
+        state = self._dash("programState", "running")
+        return {"sent_bytes": len(prog), "program_state": state[0],
+                "running": state[1]}
+
     def demo_start(self, vacuum: int) -> dict:
         """Suck the panel, then run the panel-cycle program on the arm."""
         steps: dict = {}
@@ -284,7 +305,11 @@ class RigControl:
         if not steps["grip"].get("ok"):
             raise ValueError("gripper grip failed: " +
                              str(steps["grip"].get("error")))
-        steps["robot"] = self._dash("load panel_cycle.urp", "play")
+        steps["robot"] = self.send_panel_cycle()
+        if "false" in steps["robot"].get("running", "").lower():
+            steps["hint"] = ("Program did not start -- is the robot in "
+                             "Remote Control mode and powered with brakes "
+                             "released?")
         return steps
 
     def demo_stop(self) -> dict:
