@@ -466,7 +466,13 @@ def main() -> int:
     stop = threading.Event()
     rig = RigControl(state.config["robot"]["host"],
                      state.config["robot"].get("dashboard_port", 29999))
-    control_key = uuid.uuid4().hex[:8]
+    key_file = Path(args.out) / ".control_key"
+    if key_file.exists():
+        control_key = key_file.read_text().strip()
+    else:
+        control_key = uuid.uuid4().hex[:8]
+        key_file.parent.mkdir(parents=True, exist_ok=True)
+        key_file.write_text(control_key)
 
     def ticker() -> None:
         dt = 1.0 / state.config["features"]["sample_rate_hz"]
