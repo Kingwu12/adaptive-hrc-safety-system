@@ -1,5 +1,16 @@
 # OptiTrack Integration — Scoping Proposal
 
+> **UPDATE 2026-08-19 — OptiTrack is BACK, and its transport now exists.**
+> The lab has BOTH. `src/hrc_safety/mocap/natnet_transport.py` is a direct
+> depacketizer (no vendored SDK: Motive ships no macOS build), unicast with a
+> pinned bitstream version, parsing only as far as the rigid-body block. It
+> ends at the same `MocapBridge.on_sample` as Xsens, and `live_run.py
+> --tracker natnet --motive-host <ip>` selects it. Validated against
+> spec-shaped synthetic packets (`tests/test_natnet_transport.py`); the first
+> REAL Motive packet still needs the one-off check before any trial data.
+> Everything below about the bridge, decimate/hold, staleness, recorder and
+> Kabsch calibration stands. The 2026-07-29 note is kept for history:
+>
 > **SUPERSEDED (transport half) — 2026-07-29.** The lab tracker is an **Xsens
 > IMU suit**, not OptiTrack. Implemented instead: MVN network-stream UDP
 > transport (`src/hrc_safety/mocap/xsens_transport.py`, MXTP02 parser +

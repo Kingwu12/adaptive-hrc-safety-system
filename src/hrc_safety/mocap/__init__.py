@@ -1,7 +1,10 @@
-"""OptiTrack (NatNet) mocap integration.
+"""Mocap integration: two transports, one bridge.
 
-See docs/design/optitrack-bridge.md. One rigid body (torso cluster) -> the
-same FeatureExtractor.push(t, position) entry point the simulator feeds.
+See docs/design/optitrack-bridge.md. Whichever tracker is feeding us, ONE
+tracked point (Xsens pelvis segment, or a Motive rigid body = torso cluster)
+reaches the same FeatureExtractor.push(t, position) entry point the simulator
+feeds. Import the listener you want from .xsens_transport or .natnet_transport;
+everything downstream is transport-blind on purpose.
 """
 from .natnet_bridge import MocapBridge, TickSample, load_extrinsics
 

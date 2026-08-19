@@ -70,6 +70,30 @@ def _make_controller(name: str, config: dict):
     return build_controller(name, config, fitted)
 
 
+def _make_listener(args, bridge):
+    """Pick the sensing transport. Both end at MocapBridge.on_sample, so
+    nothing below this line changes when the tracker changes."""
+    if args.tracker == "natnet":
+        from hrc_safety.mocap.natnet_transport import NatNetListener
+        if not args.motive_host:
+            raise SystemExit("--tracker natnet requires --motive-host (the "
+                             "machine running Motive)")
+        listener = NatNetListener(bridge, server_ip=args.motive_host,
+                                  rigid_body_id=args.rigid_body,
+                                  data_port=args.port if args.port != 9763
+                                  else 1511)
+        if not listener.connect():
+            raise SystemExit(f"Motive at {args.motive_host} did not answer "
+                             "NAT_CONNECT. Refusing to start a run blind.")
+        print(f"natnet: connected to {listener.server_info[0]} "
+              f"(NatNet {listener.server_info[2]}), rigid body "
+              f"{args.rigid_body}")
+        return listener
+    from hrc_safety.mocap.xsens_transport import PELVIS, XsensListener
+    return XsensListener(bridge, port=args.port,
+                         segment_id=args.segment or PELVIS)
+
+
 def _raw_line(s) -> str:
     """Identical schema to record_mocap.py so live runs double as traces."""
     return json.dumps({
@@ -88,9 +112,7 @@ def run_live(args) -> int:
 
     bridge = MocapBridge(sample_rate_hz=config["features"]["sample_rate_hz"],
                          extrinsics=ext)
-    from hrc_safety.mocap.xsens_transport import XsensListener, PELVIS
-    listener = XsensListener(bridge, port=args.port,
-                             segment_id=args.segment or PELVIS)
+    listener = _make_listener(args, bridge)
     listener.start()
 
     fx = _make_features(config)
@@ -259,6 +281,12 @@ def main() -> int:
     ap.add_argument("--robot", default="mock", choices=["mock", "ur"],
                     help="mock = console only (default); ur = real arm/URSim")
     ap.add_argument("--host", default=None, help="robot IP (default: config)")
+    ap.add_argument("--tracker", default="xsens", choices=["xsens", "natnet"],
+                    help="sensing transport (default: xsens)")
+    ap.add_argument("--motive-host", default=None,
+                    help="IP of the machine running Motive (--tracker natnet)")
+    ap.add_argument("--rigid-body", type=int, default=1,
+                    help="Motive rigid body ID to track (--tracker natnet)")
     ap.add_argument("--port", type=int, default=9763, help="Xsens UDP port")
     ap.add_argument("--segment", type=int, default=None,
                     help="MVN segment ID (default: pelvis)")
