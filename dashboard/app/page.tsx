@@ -75,11 +75,52 @@ function Sparkline({ values, color }: { values: number[]; color: string }) {
 type Rig = {
   gripper?: { vacuum_A_permille?: number; vacuum_B_permille?: number; pump_rpm?: number; current_mA?: number; error?: string };
   robot?: { reachable?: boolean; robotmode?: string; safety?: string; program_state?: string; error?: string };
+  pose?: { available?: boolean; tcp?: number[]; q?: number[]; error?: string };
 };
+
+/** The arm reports an all-zero joint vector when the encoders are unpowered,
+ *  which forward-kinematics turns into a confident-looking but FALSE TCP.
+ *  Treat that signature as "no pose", never as a reading. */
+function poseTrust(rig: Rig): { ok: boolean; label: string; detail: string } {
+  const p = rig.pose;
+  if (!p?.available) return { ok: false, label: "TCP UNREADABLE", detail: p?.error ?? "no receive interface" };
+  const q = p.q ?? [];
+  if (q.length && q.every((v) => Math.abs(v) < 1e-9)) {
+    return { ok: false, label: "TCP NOT TRUSTWORTHY", detail: "all joints zero — encoders unpowered" };
+  }
+  const mode = rig.robot?.robotmode ?? "";
+  if (mode && !/RUNNING/i.test(mode)) {
+    return { ok: false, label: "TCP NOT TRUSTWORTHY", detail: `robot is ${mode.replace("Robotmode: ", "")}, brakes not released` };
+  }
+  return { ok: true, label: "TCP LIVE", detail: "separation is measured to the real arm" };
+}
 
 function controlKey() {
   if (typeof window === "undefined") return "";
   return new URLSearchParams(window.location.search).get("k") || "";
+}
+
+/** A rig button that reports its own state. A control that silently does
+ *  nothing is a hazard: the operator assumes the command landed. */
+function RigButton(props: {
+  tag: string; label: string; kind?: string;
+  busy: string | null;
+  result: { tag: string; ok: boolean; text: string; at: number } | null;
+  onPress: () => void;
+}) {
+  const { tag, label, kind, busy, result, onPress } = props;
+  const isBusy = busy === tag;
+  const mine = result && result.tag === tag && Date.now() - result.at < 6000 ? result : null;
+  const cls = ["rigBtn", kind ?? "", isBusy ? "isBusy" : "", mine ? (mine.ok ? "isOk" : "isErr") : ""]
+    .filter(Boolean).join(" ");
+  return (
+    <button className={cls} onClick={onPress} disabled={!!busy}>
+      <span className="rigBtnLabel">{label}</span>
+      <span className="rigBtnState">
+        {isBusy ? "sending…" : mine ? (mine.ok ? `✓ ${mine.text}` : `✕ ${mine.text}`) : ""}
+      </span>
+    </button>
+  );
 }
 
 export default function Home() {
@@ -90,8 +131,11 @@ export default function Home() {
   const [trial, setTrial] = useState("T01");
   const [message, setMessage] = useState("Start the local sensor service, then enable MVN Network Streamer.");
   const [rig, setRig] = useState<Rig>({});
+  const [rigBusy, setRigBusy] = useState<string | null>(null);
+  const [rigResult, setRigResult] = useState<{ tag: string; ok: boolean; text: string; at: number } | null>(null);
   const [vacuum, setVacuum] = useState(60);
   const [rigMsg, setRigMsg] = useState("");
+  const [tab, setTab] = useState<"operate" | "monitor">("operate");
 
   useEffect(() => {
     let live = true;
@@ -129,8 +173,12 @@ export default function Home() {
     return () => { live = false; clearInterval(timer); };
   }, []);
 
-  const rigPost = async (path: string, body: object) => {
+  const rigPost = async (path: string, body: object, id?: string) => {
+    const tag = id ?? path;
+    setRigBusy(tag);
+    setRigResult(null);
     setRigMsg(`sending ${JSON.stringify(body)} ...`);
+    const started = Date.now();
     try {
       const res = await fetch(`${apiBase()}${path}`, {
         method: "POST",
@@ -138,9 +186,21 @@ export default function Home() {
         body: JSON.stringify(body),
       });
       const result = await res.json();
-      if (!res.ok) throw new Error(result.error || "Request failed");
-      setRigMsg(JSON.stringify(result).slice(0, 160));
-    } catch (err) { setRigMsg(err instanceof Error ? err.message : "Request failed"); }
+      if (!res.ok) {
+        throw new Error(res.status === 403
+          ? "REJECTED 403 — no valid control key. Add ?k=<key> to this page's URL."
+          : (result.error || `Request failed (${res.status})`));
+      }
+      const ms = Date.now() - started;
+      setRigResult({ tag, ok: true, text: `done in ${ms} ms`, at: Date.now() });
+      setRigMsg(JSON.stringify(result).slice(0, 220));
+    } catch (err) {
+      const text = err instanceof Error ? err.message : "Request failed";
+      setRigResult({ tag, ok: false, text, at: Date.now() });
+      setRigMsg(text);
+    } finally {
+      setRigBusy(null);
+    }
   };
 
   const post = async (path: string, body: object = {}) => {
@@ -174,7 +234,20 @@ export default function Home() {
         <div className={`stateReadout state-${dominant}`}><span>INFERRED STATE</span><strong>{dominant}</strong><small>{status.model_source}</small></div>
       </section>
 
-      <section className="grid">
+      <nav className="tabs" role="tablist" aria-label="Console view">
+        <button role="tab" aria-selected={tab === "operate"} className={tab === "operate" ? "tabBtn on" : "tabBtn"}
+          onClick={() => setTab("operate")}>
+          <span className="tabName">Operate</span>
+          <span className="tabHint">run the rig and the session</span>
+        </button>
+        <button role="tab" aria-selected={tab === "monitor"} className={tab === "monitor" ? "tabBtn on" : "tabBtn"}
+          onClick={() => setTab("monitor")}>
+          <span className="tabName">Monitor</span>
+          <span className="tabHint">signals and model belief</span>
+        </button>
+      </nav>
+
+      <section className={`grid tab-${tab}`}>
         <article className="panel capture">
           <div className="panelHead"><div><p className="kicker">01 · CAPTURE</p><h2>Session control</h2></div><span className={`recordLamp ${status.recording ? "active" : ""}`}>{status.recording ? "REC" : "IDLE"}</span></div>
           <div className="fields"><label>Participant<input value={participant} onChange={e => setParticipant(e.target.value)} disabled={status.recording} /></label><label>Trial<input value={trial} onChange={e => setTrial(e.target.value)} disabled={status.recording} /></label></div>
@@ -217,9 +290,68 @@ export default function Home() {
               {rig.robot?.reachable ? `${rig.robot?.robotmode ?? ""} · ${rig.robot?.safety ?? ""}` : "robot offline"}
             </span>
           </div>
+          <div className={poseTrust(rig).ok ? "poseBox poseOk" : "poseBox poseBad"}>
+            <div className="poseHead">
+              <strong>{poseTrust(rig).label}</strong>
+              <span>{poseTrust(rig).detail}</span>
+            </div>
+            {poseTrust(rig).ok && rig.pose?.tcp ? (
+              <dl className="readouts poseXyz">
+                <div><dt>x</dt><dd>{rig.pose.tcp[0].toFixed(3)} m</dd></div>
+                <div><dt>y</dt><dd>{rig.pose.tcp[1].toFixed(3)} m</dd></div>
+                <div><dt>z</dt><dd>{rig.pose.tcp[2].toFixed(3)} m</dd></div>
+              </dl>
+            ) : (
+              <p className="poseWarn">Separation would be measured to a stationary phantom. Do not trust any safety number logged in this state.</p>
+            )}
+          </div>
+          {!controlKey() && (
+            <p className="keyWarn">No control key in this URL. Every rig command will be rejected with 403 and the arm will not move. Reopen this page as <code>?k=&lt;your key&gt;</code>.</p>
+          )}
+
+          <p className="stepIntro">Each step is one action. Nothing moves until you press the next one.</p>
+          <ol className="stepList">
+            <li>
+              <span className="stepNum">1</span>
+              <RigButton tag="grip" label="Suction on" busy={rigBusy} result={rigResult}
+                onPress={() => rigPost("/api/gripper", { action: "grip", channel: "BOTH", vacuum }, "grip")} />
+              <span className="stepNote">Grips the panel. The arm does not move.</span>
+            </li>
+            <li>
+              <span className="stepNum">2</span>
+              <RigButton tag="go_up" label="Go up" kind="primary" busy={rigBusy} result={rigResult}
+                onPress={() => rigPost("/api/robot", { action: "go_up" }, "go_up")} />
+              <span className="stepNote">Lifts to the ceiling pose, then holds. Press when the operator is ready.</span>
+            </li>
+            <li>
+              <span className="stepNum">3</span>
+              <RigButton tag="go_down" label="Go down" kind="primary" busy={rigBusy} result={rigResult}
+                onPress={() => rigPost("/api/robot", { action: "go_down" }, "go_down")} />
+              <span className="stepNote">Lowers back to the loading pose. Press after the bolting is simulated.</span>
+            </li>
+            <li>
+              <span className="stepNum">4</span>
+              <RigButton tag="release" label="Suction off" busy={rigBusy} result={rigResult}
+                onPress={() => rigPost("/api/gripper", { action: "release", channel: "BOTH" }, "release")} />
+              <span className="stepNote">Releases the panel. The arm does not move.</span>
+            </li>
+          </ol>
+
+          <RigButton tag="stop_all" label="STOP — halt program and release" kind="stop" busy={rigBusy} result={rigResult}
+            onPress={() => rigPost("/api/demo", { action: "stop" }, "stop_all")} />
+
+          <details className="autoBlock">
+            <summary>Automatic loop (bring-up only, not for trials)</summary>
+            <p className="autoWarn">This grips and then runs the panel cycle on a continuous loop. The arm keeps moving on its own until you press STOP. Do not use it with a participant in the cell.</p>
+            <RigButton tag="demo_start" label="Grip and run continuous cycle" busy={rigBusy} result={rigResult}
+              onPress={() => rigPost("/api/demo", { action: "start", vacuum }, "demo_start")} />
+          </details>
+
           <div className="actions">
-            <button className="primary" onClick={() => rigPost("/api/demo", { action: "start", vacuum })}>Suck panel + run cycle</button>
-            <button className="stop" onClick={() => rigPost("/api/demo", { action: "stop" })}>Stop cycle + release</button>
+            <RigButton tag="fd_on" label="Freedrive on" busy={rigBusy} result={rigResult}
+              onPress={() => rigPost("/api/robot", { action: "freedrive_on" }, "fd_on")} />
+            <RigButton tag="fd_off" label="Freedrive off" busy={rigBusy} result={rigResult}
+              onPress={() => rigPost("/api/robot", { action: "freedrive_off" }, "fd_off")} />
           </div>
           <div className="fields">
             <label>Vacuum {vacuum}%

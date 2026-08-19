@@ -213,6 +213,56 @@ class RigControl:
         self.lock = threading.Lock()
         self._last_gripper: dict = {}
         self._last_gripper_t = 0.0
+        self._recv = None            # RTDEReceiveInterface, opened lazily
+        self._recv_error: str | None = None
+        self._poses = self._load_poses()
+
+    # ---------------------------------------------------------------- pose I/O
+
+    def _load_poses(self) -> dict:
+        """Poses freedriven and saved on the real arm 2026-08-12."""
+        path = os.path.join(os.path.dirname(__file__), "..",
+                            "data", "taught_poses.json")
+        try:
+            with open(path, "r", encoding="utf-8") as fh:
+                return json.load(fh)
+        except (OSError, ValueError) as exc:
+            print(f"RigControl: no taught poses ({exc}); GO UP / GO DOWN "
+                  f"will be unavailable.")
+            return {}
+
+    def _receiver(self):
+        """Lazy RTDEReceiveInterface. Returns None if unavailable, never a
+        stale pose -- a missing pose must read as missing, not as a default."""
+        if self._recv is not None:
+            return self._recv
+        try:
+            from rtde_receive import RTDEReceiveInterface
+            self._recv = RTDEReceiveInterface(self.robot_host)
+            self._recv_error = None
+        except Exception as exc:
+            self._recv = None
+            self._recv_error = f"{type(exc).__name__}: {exc}"
+        return self._recv
+
+    def pose_status(self) -> dict:
+        """Live TCP + joints, or an explicit reason why not."""
+        recv = self._receiver()
+        if recv is None:
+            return {"available": False, "error": self._recv_error or "no receiver"}
+        try:
+            pose = recv.getActualTCPPose()
+            q = recv.getActualQ()
+        except Exception as exc:
+            self._recv = None  # force a reconnect next poll
+            return {"available": False, "error": f"{type(exc).__name__}: {exc}"}
+        if not pose or len(pose) < 3:
+            return {"available": False, "error": "empty pose"}
+        return {
+            "available": True,
+            "tcp": [round(float(v), 4) for v in pose[:3]],
+            "q": [round(float(v), 4) for v in (q or [])],
+        }
 
     def _dash(self, *commands: str) -> list[str]:
         """Send Dashboard-server commands; return one reply line per command."""
@@ -247,6 +297,14 @@ class RigControl:
         }
         if action == "run_cycle":
             return {"action": action, **self.run_cycle_only()}
+        if action == "go_up":
+            return {"action": action, **self.goto_pose("pose2_top")}
+        if action == "go_down":
+            return {"action": action, **self.goto_pose("pose1_low")}
+        if action == "freedrive_on":
+            return {"action": action, **self.freedrive(True)}
+        if action == "freedrive_off":
+            return {"action": action, **self.freedrive(False)}
         if action not in cmds:
             raise ValueError(f"Unknown robot action: {action}")
         replies = self._dash(*cmds[action])
@@ -341,6 +399,59 @@ class RigControl:
         """Motion check: run the panel cycle without touching the gripper."""
         return self.send_panel_cycle()
 
+    # ------------------------------------------------------- discrete moves
+
+    def goto_pose(self, name: str, speed: float = 0.35) -> dict:
+        """Move to a taught joint pose with movej.
+
+        movej, never movel. Learned on the real arm 2026-08-12: a linear move
+        from or near full extension trips a protective stop at the singularity.
+        movej goes through joint space and cannot hit that.
+
+        Same def-only injection protocol as the panel cycle: the def block
+        auto-starts, a trailing call line is a parse error, the socket must
+        stay open or the controller kills the program, and set_payload must be
+        the first statement or the shoulder trips C157A1 on first acceleration.
+        """
+        pose = self._poses.get(name)
+        if not pose or "q" not in pose:
+            raise ValueError(f"Unknown taught pose: {name}. "
+                             f"Have: {sorted(self._poses)}")
+        q = ", ".join(f"{float(v):.5f}" for v in pose["q"])
+        spd = max(0.05, min(1.0, float(speed)))
+        self.close_program_socket()
+        prog = ("def goto_%s():\n"
+                "  set_payload(1.7, [0.0, 0.0, 0.06])\n"
+                "  movej([%s], a=0.8, v=%.3f)\n"
+                "end\n") % (name.replace("-", "_"), q, spd)
+        self._prog_sock = socket.create_connection(
+            (self.robot_host, 30001), timeout=5)
+        self._prog_sock.sendall(prog.encode("utf-8"))
+        time.sleep(0.8)
+        state = self._dash("programState", "running")
+        return {"pose": name, "q": pose["q"], "speed": spd,
+                "program_state": state[0], "running": state[1]}
+
+    def freedrive(self, on: bool) -> dict:
+        """Hand-guiding on or off, so poses can be re-taught without the pendant."""
+        self.close_program_socket()
+        if on:
+            prog = ("def fd_on():\n"
+                    "  set_payload(1.7, [0.0, 0.0, 0.06])\n"
+                    "  freedrive_mode()\n"
+                    "  while True:\n"
+                    "    sync()\n"
+                    "  end\n"
+                    "end\n")
+            self._prog_sock = socket.create_connection(
+                (self.robot_host, 30001), timeout=5)
+            self._prog_sock.sendall(prog.encode("utf-8"))
+            time.sleep(0.5)
+            return {"freedrive": True,
+                    "note": "socket held open; press FREEDRIVE OFF to end"}
+        replies = self._dash("stop")
+        return {"freedrive": False, "replies": replies}
+
 
 CONTROL_PAGE = """<!doctype html><html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -355,6 +466,13 @@ button.go{background:#1d5c33}button.warn{background:#7a5a17}button.stop{backgrou
 #st{font-size:13px;line-height:1.5;background:#191d24;border-radius:10px;padding:10px;margin-top:8px}
 input[type=range]{width:65%;vertical-align:middle}
 .v{color:#fd9}</style></head><body>
+<h2>Arm position</h2>
+<div id="posebox">reading...</div>
+<button class="go" onclick="post('/api/robot',{action:'go_up'})">GO UP</button>
+<button class="go" onclick="post('/api/robot',{action:'go_down'})">GO DOWN</button>
+<button class="warn" onclick="post('/api/robot',{action:'freedrive_on'})">Freedrive ON</button>
+<button onclick="post('/api/robot',{action:'freedrive_off'})">Freedrive OFF</button>
+
 <h2>Panel demo</h2>
 <button class="big go" onclick="post('/api/demo',{action:'start',vacuum:vac()})">SUCK PANEL + RUN CYCLE</button>
 <button class="big stop" onclick="post('/api/demo',{action:'stop'})">STOP CYCLE + RELEASE</button>
@@ -382,7 +500,16 @@ async function post(p,b){
 function log(m){const d=document.getElementById('log');d.innerText=(m+'\\n'+d.innerText).slice(0,1500)}
 async function poll(){try{
   const r=await fetch('/api/rig');const j=await r.json();
-  const g=j.gripper||{},ro=j.robot||{},x=j.xsens||{};
+  const g=j.gripper||{},ro=j.robot||{},x=j.xsens||{},p=j.pose||{};
+  const pb=document.getElementById('posebox');
+  if(p.available){
+    const t=p.tcp||[0,0,0];
+    pb.innerHTML=`<b style="color:#6d9">TCP LIVE</b> &nbsp; x <span class=v>${t[0].toFixed(3)}</span> &nbsp; y <span class=v>${t[1].toFixed(3)}</span> &nbsp; z <span class=v>${t[2].toFixed(3)}</span> m`;
+    pb.style.background='#16211a';
+  }else{
+    pb.innerHTML=`<b style="color:#e88">TCP NOT READABLE</b><br><span style="font-size:11px">${(p.error||'unknown')}</span><br><span style="font-size:11px;color:#e88">Live separation would be measured against a stationary phantom. Do not trust safety numbers.</span>`;
+    pb.style.background='#2a1616';
+  }
   document.getElementById('st').innerHTML=
    `<b>Gripper</b> vacA <span class=v>${(g.vacuum_A_permille??'?')}</span>‰ · vacB <span class=v>${(g.vacuum_B_permille??'?')}</span>‰ · pump ${(g.pump_rpm??'?')}rpm · ${(g.current_mA??'?')}mA<br>`+
    `<b>Robot</b> ${ro.robotmode??'?'} · ${ro.safety??'?'} · ${ro.program_state??'?'}<br>`+
@@ -402,7 +529,11 @@ class ApiHandler(BaseHTTPRequestHandler):
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        # X-Control-Key MUST be listed or the browser's preflight blocks every
+        # rig command from the Next console (different origin to this server).
+        # Symptom without it: GETs poll fine, every POST fails "Failed to fetch".
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, X-Control-Key")
+        self.send_header("Access-Control-Max-Age", "600")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
         self.send_header("Cache-Control", "no-store")
         self.end_headers()
@@ -440,6 +571,7 @@ class ApiHandler(BaseHTTPRequestHandler):
             self._json({
                 "gripper": self.rig.gripper_stats(),
                 "robot": self.rig.robot_status(),
+                "pose": self.rig.pose_status(),
                 "xsens": self.state.snapshot(),
             })
         elif path in ("/control", "/control/"):

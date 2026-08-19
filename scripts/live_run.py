@@ -109,6 +109,13 @@ def run_live(args) -> int:
           f"warms up. Ctrl-C to end.")
 
     last_print = None
+    tcp_misses = 0
+    # ~0.25 s of missing pose at the configured rate before we stop the cell.
+    tcp_miss_limit = max(1, int(0.25 * config["features"]["sample_rate_hz"]))
+    if args.robot == "ur" and robot.actual_tcp() is None:
+        print("WARNING: robot pose is NOT readable. Live separation would be "
+              "measured against a stationary phantom. The cell will be held "
+              "stopped until the pose becomes available.")
     t_end = time.monotonic() + args.duration if args.duration else None
     try:
         while t_end is None or time.monotonic() < t_end:
@@ -128,6 +135,24 @@ def run_live(args) -> int:
                           f" -> protective_stop")
                 time.sleep(dt)
                 continue
+            # CORRECTNESS: separation must be measured to where the arm ACTUALLY
+            # is, not to the static config TCP. A stale or missing pose is a
+            # stop condition, never a reason to fall back to the config value.
+            tcp_now = robot.actual_tcp()
+            if tcp_now is not None:
+                fx.set_tcp(tcp_now)
+                tcp_misses = 0
+            elif args.robot == "ur":
+                tcp_misses += 1
+                if tcp_misses >= tcp_miss_limit:
+                    robot.apply(Command.PROTECTIVE_STOP, 0.0)
+                    if last_print != ("NO_TCP", "protective_stop"):
+                        last_print = ("NO_TCP", "protective_stop")
+                        print(f"t={s.t:7.2f}s  ROBOT POSE UNAVAILABLE "
+                              f"({tcp_misses} ticks) -> protective_stop")
+                    time.sleep(dt)
+                    continue
+
             frame = fx.push(s.t, s.position)
             if frame is None:        # feature warm-up: stay stopped
                 time.sleep(dt)

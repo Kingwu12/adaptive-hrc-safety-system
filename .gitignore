@@ -38,3 +38,4 @@ paper/*.synctex.gz
 .vscode/
 sim/ursim/docker-compose.local.yml
 data/xsens/
+dashboard/tsconfig.tsbuildinfo

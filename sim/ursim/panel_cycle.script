@@ -1,36 +1,41 @@
-# panel_cycle.script - Panel Cycle v2 task program (UR10e)
+# panel_cycle.script - Panel Cycle v3 task program (UR10 CB3, REAL CELL)
 # Adaptive HRC Safety System FYP - Wu / Siniakov / Magila
 #
 # The ONE robot task program run identically under all three safety
-# controllers (fixed_zone / dynamic_ssm / adaptive). Controllers act
-# ONLY through the external speed slider + Dashboard stops - this
-# script never changes between conditions. That invariance is the method.
+# controllers (fixed_zone / dynamic_ssm / adaptive). Controllers act ONLY
+# through the external speed slider + Dashboard stops - this script never
+# changes between conditions. That invariance is the method.
 #
-# STRUCTURE NOTE: plain statements only - NO def wrapper, NO trailing
-# call. PolyScope inlines this file into its own generated program when
-# the .urp plays; a def+call wrapper here collides with that wrapper and
-# throws "Compile error: Duplicate label". For headless testing via raw
-# 30002 injection (no .urp), wrap on the fly:
-#   { echo "def t():"; sed 's/^/  /' panel_cycle.script; echo "end"; echo "t()"; }
+# v3 CHANGE (2026-08-19): poses now come from data/taught_poses.json, the
+# poses King freedrove on the REAL arm 2026-08-12. v2 used sim-authored
+# joint angles from the URSim workcell; on hardware those are a DIFFERENT
+# joint family (wrist1 at 90 deg vs the taught 270 deg cups-up family), so
+# running v2 on the real cell swung the arm through an unvalidated
+# configuration to reach angles that were never checked against the rig.
+# Regenerate this file from the taught poses; do not hand-edit the angles.
+#
+# REACH NOTE: pose2_top is z=1.45 m above base. The 2.50 m ceiling target is
+# NOT reachable from the current base height (measured live: cups-up max is
+# z~1.51 with the elbow dead straight). Raising the base or lowering the
+# structure is still open.
+#
+# STRUCTURE NOTE: plain statements only - NO def wrapper, NO trailing call.
+# PolyScope inlines this file into its own generated program. The dashboard
+# server wraps it on the fly for raw 30001 injection and prepends
+# set_payload(1.7, [0,0,0.06]) - without that the shoulder trips C157A1 on
+# the first acceleration.
 #
 # Five phases (matches src/hrc_safety/sim/scenario.py):
-#   P1 LOAD       - park at waist, wait for panel weight  (monitored stop, not measured)
-#   P2 TRANSIT    - lift panel to ceiling pose            (SSM, measured)
-#   P3 HAND-GUIDE - compliant hold at ceiling             (measured)
-#   P4 BOLT       - dead-still hold while human bolts     (monitored stop, NOT measured)
-#   P5 RELEASE    - lower back to waist                   (hold->SSM, measured)
+#   P1 LOAD       - park low, wait for panel weight   (monitored stop, not measured)
+#   P2 TRANSIT    - lift panel toward ceiling         (SSM, measured)
+#   P3 HAND-GUIDE - compliant hold at top             (measured)
+#   P4 BOLT       - dead-still hold while human bolts (monitored stop, NOT measured)
+#   P5 RELEASE    - lower back down                   (hold->SSM, measured)
 # ...loop forever.
-#
-# SIM LIMITATIONS (URSim has no F/T sensor and no usable force mode):
-#   - P1 weight trigger -> timed wait here; on hardware replace with a
-#     force-threshold wait on tool F/T z (zero_ftsensor + force() loop).
-#   - P3 compliant hold -> hold still here; on hardware replace with
-#     force_mode() compliant in tool-z, panel weight compensated.
 
-# Joint poses (rad). Base near -90 deg matches the sim workcell frame.
-# Big shoulder travel between waist and ceiling = clearly visible motion.
-q_waist   = [d2r(-90), d2r(-60),  d2r(-110), d2r(-100), d2r(90), d2r(0)]
-q_ceiling = [d2r(-90), d2r(-110), d2r(-40),  d2r(-120), d2r(90), d2r(0)]
+# Joint poses (rad) - TAUGHT ON THE REAL ARM, generated from data/taught_poses.json
+q_low     = [-1.516600, 0.039020, -2.880180, -1.870970, 4.714890, -0.052800]
+q_top     = [-1.498487, -1.203098, -0.634083, -2.874932, 4.710027, -0.072782]
 
 # Conservative motion params (scaled live by the external speed slider).
 acc = 0.8  # rad/s^2
@@ -38,17 +43,16 @@ vel = 0.6  # rad/s
 
 while (True):
   # ---- P1 LOAD ----
-  textmsg("P1 LOAD: at waist, waiting for panel")
-  movej(q_waist, a=acc, v=vel)
-  # SIM: timed stand-in for the panel-weight trigger (see header).
+  textmsg("P1 LOAD: at low pose, waiting for panel")
+  movej(q_low, a=acc, v=vel)
   sleep(4.0)
 
   # ---- P2 TRANSIT ----
-  textmsg("P2 TRANSIT: lifting panel to ceiling")
-  movej(q_ceiling, a=acc, v=vel)
+  textmsg("P2 TRANSIT: lifting panel to top")
+  movej(q_top, a=acc, v=vel)
 
   # ---- P3 HAND-GUIDE ----
-  textmsg("P3 HAND-GUIDE: compliant hold (sim: hold still)")
+  textmsg("P3 HAND-GUIDE: compliant hold (hold still)")
   sleep(6.0)
 
   # ---- P4 BOLT ----
@@ -56,6 +60,6 @@ while (True):
   sleep(5.0)
 
   # ---- P5 RELEASE ----
-  textmsg("P5 RELEASE: lowering to waist")
-  movej(q_waist, a=acc, v=vel)
+  textmsg("P5 RELEASE: lowering to low pose")
+  movej(q_low, a=acc, v=vel)
 end

@@ -90,6 +90,17 @@ class FeatureExtractor:
         self._vel_hist: deque[float] = deque(maxlen=self.accel_window)
         self._t0: float | None = None
 
+    def set_tcp(self, tcp_position) -> None:
+        """Update the robot TCP this extractor measures separation against.
+
+        CORRECTNESS-CRITICAL. The TCP passed to __init__ is only a sim/replay
+        default. On the real arm the tool moves through the whole panel cycle,
+        so the occupied column moves with it. Without calling this every tick
+        from the robot's actual pose, separation is measured to a stationary
+        phantom robot and every safety number the study reports is wrong.
+        """
+        self.tcp = np.asarray(tcp_position, dtype=float)
+
     @staticmethod
     def _slope(times: np.ndarray, values: np.ndarray) -> float:
         """Least-squares slope of values vs times (robust to jitter)."""

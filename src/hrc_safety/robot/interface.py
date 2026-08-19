@@ -25,14 +25,29 @@ class RobotInterface(Protocol):
 
     def apply(self, command: Command, speed_fraction: float) -> None: ...
 
+    def actual_tcp(self) -> list[float] | None:
+        """Current tool-centre point [x, y, z] in the robot base frame.
+
+        None means the pose is unavailable (no receive interface, or a read
+        failed). Callers MUST treat None as 'do not trust separation' rather
+        than falling back to a stale value.
+        """
+        ...
+
 
 class MockRobot:
     """Records the sequence of commands without touching hardware."""
 
-    def __init__(self) -> None:
+    def __init__(self, tcp: list[float] | None = None) -> None:
         self.history: list[tuple[Command, float]] = []
         self.stopped: bool = False
         self.speed_fraction: float = 1.0
+        # Tests and the simulation runner can script a moving TCP by assigning
+        # to this attribute between ticks.
+        self.tcp: list[float] | None = list(tcp) if tcp is not None else None
+
+    def actual_tcp(self) -> list[float] | None:
+        return list(self.tcp) if self.tcp is not None else None
 
     def apply(self, command: Command, speed_fraction: float) -> None:
         self.history.append((command, float(speed_fraction)))
@@ -60,6 +75,7 @@ class URRobot:
         # Lazy import so `pip install -e .` (no robot extra) still imports the pkg.
         try:
             from rtde_io import RTDEIOInterface
+            from rtde_receive import RTDEReceiveInterface
             from dashboard_client import DashboardClient
         except ImportError as exc:  # pragma: no cover - requires the robot extra
             raise ImportError(
@@ -71,6 +87,39 @@ class URRobot:
         self._dashboard = DashboardClient(host)
         self._dashboard.connect()
         self._paused = False
+        # Receive interface is what makes live separation real. Kept optional
+        # so bring-up against a controller that refuses the extra RTDE client
+        # degrades to an explicit None rather than a silent stale pose.
+        try:
+            self._recv = RTDEReceiveInterface(host)
+        except Exception as exc:  # pragma: no cover - hardware dependent
+            self._recv = None
+            print(f"URRobot: RTDEReceiveInterface unavailable ({exc}); "
+                  f"actual_tcp() will return None and live separation "
+                  f"MUST NOT be trusted.")
+
+    def actual_tcp(self) -> list[float] | None:  # pragma: no cover - hardware
+        """Live TCP [x, y, z] in metres, robot base frame, or None."""
+        if self._recv is None:
+            return None
+        try:
+            pose = self._recv.getActualTCPPose()
+        except Exception:
+            return None
+        if not pose or len(pose) < 3:
+            return None
+        return [float(pose[0]), float(pose[1]), float(pose[2])]
+
+    def actual_q(self) -> list[float] | None:  # pragma: no cover - hardware
+        """Live joint angles in radians, or None. Used to seed IK for the
+        discrete GO UP / GO DOWN moves so they take a sane path."""
+        if self._recv is None:
+            return None
+        try:
+            q = self._recv.getActualQ()
+        except Exception:
+            return None
+        return [float(x) for x in q] if q else None
 
     def apply(self, command: Command, speed_fraction: float) -> None:  # pragma: no cover
         if command == Command.PROTECTIVE_STOP:
