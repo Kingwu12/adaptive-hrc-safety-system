@@ -39,3 +39,6 @@ paper/*.synctex.gz
 sim/ursim/docker-compose.local.yml
 data/xsens/
 dashboard/tsconfig.tsbuildinfo
+
+# Dashboard runtime logs (stdout/stderr captures — regenerated on every run, never source)
+logs/
