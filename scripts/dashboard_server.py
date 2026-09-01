@@ -276,6 +276,15 @@ class RigControl:
         stale pose -- a missing pose must read as missing, not as a default."""
         if self._recv is not None:
             return self._recv
+        # The ur-rtde constructor performs a long native connect while holding
+        # the Python GIL. Probe the port with a short normal socket first so an
+        # offline/booting robot cannot freeze every dashboard request.
+        try:
+            with socket.create_connection((self.robot_host, 30004), timeout=0.25):
+                pass
+        except OSError as exc:
+            self._recv_error = f"RTDE port unavailable: {exc}"
+            return None
         try:
             from rtde_receive import RTDEReceiveInterface
             self._recv = RTDEReceiveInterface(self.robot_host)
