@@ -34,7 +34,9 @@ Run once per hardware configuration, before collecting reported data:
 - [ ] **Measure `T` end-to-end** — command → sensed → robot fully stopped (not a datasheet value).
 - [ ] **Measure `Sa`** — operator position uncertainty from the mocap + body-model chain.
 - [ ] **Recompute `S0`** from measured `T`, `Sa` and re-tape the red/yellow zones on the floor.
-- [ ] **Fit the models from ≥ 3 labelled loops** — `fit_transitions` for `A`,
+- [ ] **Fit the models from ≥ 3 complete labelled loops** — every loop must include
+      approaching, working, retreating, and the experimenter-cued hazard; use
+      `scripts/train_pilot_hmm.py` to enforce this gate, then `fit_transitions` for `A`,
       `fit_emissions` for the Gaussians. These produce the reported model; the config's
       hand-set numbers are cold-start priors only.
 - [ ] **Verify the command path in URSim first**, then on hardware — full/reduced speed via

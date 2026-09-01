@@ -19,6 +19,7 @@ venv/
 data/logs/*.jsonl
 data/logs/*.npz
 data/analysis/*.json
+data/models/*.json
 data/xsens/*.jsonl
 data/calib/
 data/mocap/*.jsonl

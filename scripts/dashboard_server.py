@@ -32,6 +32,7 @@ from hrc_safety.analysis import fit_hmm  # noqa: E402
 from hrc_safety.config import load_config  # noqa: E402
 from hrc_safety.features import FeatureExtractor  # noqa: E402
 from hrc_safety.lhmm.upper import STATES  # noqa: E402
+from hrc_safety.pilot_model import load_upper_hmm  # noqa: E402
 from hrc_safety.mocap import (MocapBridge, NatNetV4Listener,
                               RigidBodyMonitor, load_extrinsics)  # noqa: E402
 from hrc_safety.mocap.xsens_transport import PELVIS, XsensListener  # noqa: E402
@@ -45,7 +46,9 @@ def safe_id(value: object, fallback: str) -> str:
 
 
 class DashboardState:
-    def __init__(self, output_dir: Path, segment_id: int) -> None:
+    def __init__(
+        self, output_dir: Path, segment_id: int, model_path: Path | None = None
+    ) -> None:
         self.lock = threading.RLock()
         self.output_dir = output_dir
         self.segment_id = segment_id
@@ -61,7 +64,12 @@ class DashboardState:
             velocity_window=features["velocity_window"],
             accel_window=features["accel_window"],
         )
-        self.hmm = fit_hmm(self.config)
+        if model_path is not None and model_path.exists():
+            self.hmm = load_upper_hmm(model_path)
+            self.model_source = f"pilot model · {model_path.name}"
+        else:
+            self.hmm = fit_hmm(self.config)
+            self.model_source = "synthetic baseline"
         self.packet_times: deque[float] = deque(maxlen=240)
         self.packets = 0
         self.last_packet_wall: float | None = None
@@ -134,7 +142,7 @@ class DashboardState:
                     "ground_truth": self.label,
                     "hmm_state": state,
                     "hmm_posterior": posterior,
-                    "model_source": "synthetic baseline",
+                    "model_source": self.model_source,
                 }
                 self.file.write(json.dumps(record, separators=(",", ":")) + "\n")
                 self.file.flush()
@@ -213,7 +221,7 @@ class DashboardState:
                 "feature": self.feature,
                 "posterior": self.posterior,
                 "hmm_state": self.hmm_state,
-                "model_source": "synthetic baseline",
+                "model_source": self.model_source,
                 "recording": self.recording,
                 "session_id": self.session_id,
                 "participant_id": self.participant_id,
@@ -685,9 +693,14 @@ def main() -> int:
     parser.add_argument("--udp-port", type=int, default=9763)
     parser.add_argument("--segment", type=int, default=PELVIS)
     parser.add_argument("--out", default="data/xsens")
+    parser.add_argument(
+        "--model",
+        default="data/models/pilot_hmm.json",
+        help="pilot-fitted HMM JSON (synthetic cold start when absent)",
+    )
     args = parser.parse_args()
 
-    state = DashboardState(Path(args.out), args.segment)
+    state = DashboardState(Path(args.out), args.segment, Path(args.model))
     listener = XsensListener(state, port=args.udp_port, segment_id=args.segment)
     listener.start()
     optitrack_monitor = RigidBodyMonitor()
@@ -728,6 +741,7 @@ def main() -> int:
     print(f"RIG CONTROL PAGE: http://<this-mac-ip>:{args.http_port}/control?k={control_key}")
     print(f"Xsens MVN target: UDP {args.udp_port} · Position + Quaternion · segment {args.segment}")
     print(f"Recordings: {Path(args.out).resolve()}")
+    print(f"Model: {state.model_source}")
     try:
         server.serve_forever()
     except KeyboardInterrupt:
