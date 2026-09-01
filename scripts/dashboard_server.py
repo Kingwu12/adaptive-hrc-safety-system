@@ -32,7 +32,8 @@ from hrc_safety.analysis import fit_hmm  # noqa: E402
 from hrc_safety.config import load_config  # noqa: E402
 from hrc_safety.features import FeatureExtractor  # noqa: E402
 from hrc_safety.lhmm.upper import STATES  # noqa: E402
-from hrc_safety.mocap import MocapBridge  # noqa: E402
+from hrc_safety.mocap import (MocapBridge, NatNetV4Listener,
+                              RigidBodyMonitor, load_extrinsics)  # noqa: E402
 from hrc_safety.mocap.xsens_transport import PELVIS, XsensListener  # noqa: E402
 
 ALLOWED_LABELS = {"unlabelled", "approaching", "working", "retreating", "hazard"}
@@ -51,6 +52,9 @@ class DashboardState:
         self.config = load_config()
         features = self.config["features"]
         self.bridge = MocapBridge(sample_rate_hz=features["sample_rate_hz"])
+        extrinsics = load_extrinsics("configs/mocap_extrinsics.yaml")
+        self.optitrack_bridge = MocapBridge(
+            sample_rate_hz=features["sample_rate_hz"], extrinsics=extrinsics)
         self.extractor = FeatureExtractor(
             tcp_position=self.config["scenario"]["tcp_position"],
             sample_rate_hz=features["sample_rate_hz"],
@@ -62,6 +66,9 @@ class DashboardState:
         self.packets = 0
         self.last_packet_wall: float | None = None
         self.position: list[float] | None = None
+        self.xsens_position: list[float] | None = None
+        self.optitrack_stale = True
+        self.optitrack_age_s: float | None = None
         self.feature: dict | None = None
         self.posterior: dict[str, float] = {}
         self.hmm_state: str | None = None
@@ -84,10 +91,15 @@ class DashboardState:
 
     def tick(self) -> None:
         now = time.monotonic()
-        sample = self.bridge.tick(now)
-        if sample is None:
+        xsens_sample = self.bridge.tick(now)
+        optitrack_sample = self.optitrack_bridge.tick(now)
+        if xsens_sample is None:
             return
-        frame = self.extractor.push(sample.t, sample.position)
+        # Absolute operator position comes from the tracked head rigid body in
+        # robot-base coordinates. Xsens remains the articulated-motion source.
+        sample = optitrack_sample
+        frame = None if sample is None or sample.stale else self.extractor.push(
+            sample.t, sample.position)
         posterior: dict[str, float] = {}
         state = None
         feature = None
@@ -97,7 +109,11 @@ class DashboardState:
             posterior = {name: float(beliefs[i]) for i, name in enumerate(STATES)}
             state = max(posterior, key=posterior.get)
         with self.lock:
-            self.position = [float(v) for v in sample.position]
+            self.xsens_position = [float(v) for v in xsens_sample.position]
+            self.position = (None if sample is None else
+                             [float(v) for v in sample.position])
+            self.optitrack_stale = sample is None or sample.stale
+            self.optitrack_age_s = None if sample is None else sample.age_s
             self.feature = feature
             self.posterior = posterior
             self.hmm_state = state
@@ -107,11 +123,13 @@ class DashboardState:
                     "session_id": self.session_id,
                     "participant_id": self.participant_id,
                     "trial_id": self.trial_id,
-                    "t": round(sample.t, 6),
-                    "source_time_s": sample.motive_timestamp,
+                    "t": round(xsens_sample.t, 6),
+                    "source_time_s": xsens_sample.motive_timestamp,
                     "position": self.position,
-                    "stale": sample.stale,
-                    "age_s": round(sample.age_s, 5),
+                    "xsens_position": self.xsens_position,
+                    "stale": self.optitrack_stale,
+                    "age_s": (None if self.optitrack_age_s is None else
+                              round(self.optitrack_age_s, 5)),
                     "features": feature,
                     "ground_truth": self.label,
                     "hmm_state": state,
@@ -188,6 +206,10 @@ class DashboardState:
                 "stale": age is None or age > 0.150,
                 "age_s": None if age is None else round(age, 4),
                 "position": self.position,
+                "xsens_position": self.xsens_position,
+                "optitrack_connected": not self.optitrack_stale,
+                "optitrack_age_s": (None if self.optitrack_age_s is None else
+                                    round(self.optitrack_age_s, 4)),
                 "feature": self.feature,
                 "posterior": self.posterior,
                 "hmm_state": self.hmm_state,
@@ -216,6 +238,8 @@ class RigControl:
         self._recv = None            # RTDEReceiveInterface, opened lazily
         self._recv_error: str | None = None
         self._poses = self._load_poses()
+        self.fastening_complete = threading.Event()
+        self.cycle_active = False
 
     # ---------------------------------------------------------------- pose I/O
 
@@ -376,6 +400,8 @@ class RigControl:
 
     def demo_start(self, vacuum: int) -> dict:
         """Suck the panel, then run the panel-cycle program on the arm."""
+        self.fastening_complete.clear()
+        self.cycle_active = True
         steps: dict = {}
         steps["grip"] = self.gripper_action("grip", "BOTH", vacuum)
         if not steps["grip"].get("ok"):
@@ -390,10 +416,27 @@ class RigControl:
 
     def demo_stop(self) -> dict:
         steps: dict = {}
+        self.cycle_active = False
+        self.fastening_complete.clear()
         steps["robot"] = self._dash("stop")
         self.close_program_socket()
         steps["release"] = self.gripper_action("release", "BOTH", 0)
         return steps
+
+    def cycle_event(self, action: str) -> dict:
+        """Record task confirmation; never vents the gripper directly."""
+        if action == "reset":
+            self.fastening_complete.clear()
+            return {"ok": True, "fastening_complete": False}
+        if action != "fastening_complete":
+            raise ValueError(f"Unknown cycle event: {action}")
+        stats = self.gripper_stats(max_age_s=0.0)
+        if min(stats.get("vacuum_A_permille", 0),
+               stats.get("vacuum_B_permille", 0)) < 350:
+            raise ValueError("fastening confirmation rejected: panel grip not verified")
+        self.fastening_complete.set()
+        return {"ok": True, "fastening_complete": True,
+                "message": "Fastening confirmed; awaiting automated attachment checks"}
 
     def run_cycle_only(self) -> dict:
         """Motion check: run the panel cycle without touching the gripper."""
@@ -476,6 +519,7 @@ input[type=range]{width:65%;vertical-align:middle}
 <h2>Panel demo</h2>
 <button class="big go" onclick="post('/api/demo',{action:'start',vacuum:vac()})">SUCK PANEL + RUN CYCLE</button>
 <button class="big stop" onclick="post('/api/demo',{action:'stop'})">STOP CYCLE + RELEASE</button>
+<button class="big warn" onclick="post('/api/cycle',{action:'fastening_complete'})">FASTENING COMPLETE</button>
 <h2>Gripper &nbsp;<span class="v" id="vacv">60</span>% <input type="range" id="vac" min="10" max="80" value="60" oninput="vacv.innerText=this.value"></h2>
 <button class="go" onclick="post('/api/gripper',{action:'grip',channel:'BOTH',vacuum:vac()})">Grip</button>
 <button onclick="post('/api/gripper',{action:'release',channel:'BOTH'})">Release</button>
@@ -573,6 +617,8 @@ class ApiHandler(BaseHTTPRequestHandler):
                 "robot": self.rig.robot_status(),
                 "pose": self.rig.pose_status(),
                 "xsens": self.state.snapshot(),
+                "cycle": {"active": self.rig.cycle_active,
+                          "fastening_complete": self.rig.fastening_complete.is_set()},
             })
         elif path in ("/control", "/control/"):
             self.send_response(200)
@@ -588,7 +634,7 @@ class ApiHandler(BaseHTTPRequestHandler):
             remote = self.client_address[0] not in {"127.0.0.1", "::1"}
             length = int(self.headers.get("Content-Length", "0"))
             body = json.loads(self.rfile.read(length) or b"{}")
-            rig_paths = {"/api/gripper", "/api/robot", "/api/demo", "/api/xsens/reset"}
+            rig_paths = {"/api/gripper", "/api/robot", "/api/demo", "/api/cycle", "/api/xsens/reset"}
             if self.path in rig_paths:
                 # rig control needs the key from any remote browser
                 if remote and self.headers.get("X-Control-Key", "") != self.control_key:
@@ -601,6 +647,8 @@ class ApiHandler(BaseHTTPRequestHandler):
                     result = self.rig.robot_action(str(body.get("action")))
                 elif self.path == "/api/xsens/reset":
                     result = self._xsens_reset(str(body.get("type", "grid")))
+                elif self.path == "/api/cycle":
+                    result = self.rig.cycle_event(str(body.get("action")))
                 else:
                     if body.get("action") == "start":
                         result = self.rig.demo_start(int(body.get("vacuum", 60)))
@@ -642,6 +690,15 @@ def main() -> int:
     state = DashboardState(Path(args.out), args.segment)
     listener = XsensListener(state, port=args.udp_port, segment_id=args.segment)
     listener.start()
+    optitrack_monitor = RigidBodyMonitor()
+    optitrack_listener = NatNetV4Listener(
+        state.optitrack_bridge,
+        head_rigid_body_id=1,
+        local_address="127.0.0.1",
+        monitor=optitrack_monitor,
+        nominal_rate_hz=120.0,
+    )
+    optitrack_listener.start()
     stop = threading.Event()
     rig = RigControl(state.config["robot"]["host"],
                      state.config["robot"].get("dashboard_port", 29999))
@@ -678,6 +735,7 @@ def main() -> int:
     finally:
         stop.set()
         listener.stop()
+        optitrack_listener.stop()
         server.server_close()
         if state.file is not None:
             state.file.close()

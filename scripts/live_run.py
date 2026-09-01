@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
-"""LIVE supervision loop: Xsens stream -> controller -> robot, in real time.
+"""LIVE supervision loop: OptiTrack/Xsens -> controller -> robot, in real time.
 
-The wire between the existing pieces: XsensListener (UDP :9763 from the MVN
-Windows machine) -> MocapBridge -> FeatureExtractor -> ONE controller rung ->
-robot.apply().  MockRobot by default; --robot ur drives the real UR10.
+OptiTrack's head rigid body supplies absolute position; in ``fused`` mode,
+Xsens runs concurrently and is recorded for body-motion/activity analysis.
+MocapBridge -> FeatureExtractor -> one controller rung -> robot.apply().
+MockRobot is the default; ``--robot ur`` drives the configured real UR arm.
 
 Safety posture:
   - robot held at PROTECTIVE_STOP until the first tracked mocap sample AND the
     feature extractor have both warmed up (never move blind)
   - tracking staleness (> bridge window) -> PROTECTIVE_STOP (never optimistic)
-  - Ctrl-C restores full speed unless --exit-stop (repo convention: never
-    leave the cell silently paused; the pendant is the recovery surface)
+  - Ctrl-C leaves the robot stopped; restoring speed requires an explicit flag
 
 --record writes the SAME raw JSONL schema as record_mocap.py, so every live
 run is also a trace that replays offline through ALL rungs (scripts/replay.py
@@ -21,8 +21,8 @@ is the scoring path; one live trial, three scored controllers).
 with zero hardware attached.
 
   python scripts/live_run.py --selftest
-  python scripts/live_run.py --controller fixed_zone            # mock robot
-  python scripts/live_run.py --controller adaptive --robot ur \
+  python scripts/live_run.py --source optitrack --controller fixed_zone
+  python scripts/live_run.py --source fused --controller adaptive --robot ur \
       --extrinsics configs/mocap_extrinsics.yaml --record data/mocap/t01.jsonl
 """
 from __future__ import annotations
@@ -70,50 +70,67 @@ def _make_controller(name: str, config: dict):
     return build_controller(name, config, fitted)
 
 
-def _make_listener(args, bridge):
-    """Pick the sensing transport. Both end at MocapBridge.on_sample, so
-    nothing below this line changes when the tracker changes."""
-    if args.tracker == "natnet":
-        from hrc_safety.mocap.natnet_transport import NatNetListener
-        if not args.motive_host:
-            raise SystemExit("--tracker natnet requires --motive-host (the "
-                             "machine running Motive)")
-        listener = NatNetListener(bridge, server_ip=args.motive_host,
-                                  rigid_body_id=args.rigid_body,
-                                  data_port=args.port if args.port != 9763
-                                  else 1511)
-        if not listener.connect():
-            raise SystemExit(f"Motive at {args.motive_host} did not answer "
-                             "NAT_CONNECT. Refusing to start a run blind.")
-        print(f"natnet: connected to {listener.server_info[0]} "
-              f"(NatNet {listener.server_info[2]}), rigid body "
-              f"{args.rigid_body}")
-        return listener
-    from hrc_safety.mocap.xsens_transport import PELVIS, XsensListener
-    return XsensListener(bridge, port=args.port,
-                         segment_id=args.segment or PELVIS)
-
-
-def _raw_line(s) -> str:
+def _raw_line(s, robot_bodies=None, xsens_sample=None) -> str:
     """Identical schema to record_mocap.py so live runs double as traces."""
-    return json.dumps({
+    record = {
         "t": round(s.t, 6), "pos": list(map(float, s.position)),
         "stale": s.stale, "age_s": round(s.age_s, 4),
-        "motive_timestamp": s.motive_timestamp})
+        "motive_timestamp": s.motive_timestamp}
+    if robot_bodies is not None:
+        record["optitrack_rigid_bodies"] = {
+            str(rb_id): {"position": list(body.position),
+                         "rotation_xyzw": list(body.rotation_xyzw),
+                         "age_s": round(body.age_s, 4)}
+            for rb_id, body in robot_bodies.items()
+        }
+    if xsens_sample is not None:
+        record["xsens"] = {"position": list(map(float, xsens_sample.position)),
+                            "age_s": round(xsens_sample.age_s, 4),
+                            "stale": xsens_sample.stale}
+    return json.dumps(record)
 
 
 def run_live(args) -> int:
     config = load_config()
     ext = load_extrinsics(args.extrinsics) if args.extrinsics else None
     if ext is None and args.robot == "ur":
-        print("WARNING: no --extrinsics; distances are in the MOCAP frame, "
-              "not the robot frame. Calibrate first (calibrate_mocap.py) "
-              "before trusting any live decision on the real arm.")
+        raise SystemExit("REFUSING real-arm run without --extrinsics. Calibrate "
+                         "OptiTrack into the robot-base frame first.")
 
     bridge = MocapBridge(sample_rate_hz=config["features"]["sample_rate_hz"],
                          extrinsics=ext)
-    listener = _make_listener(args, bridge)
-    listener.start()
+    listeners = []
+    monitor = None
+    xsens_bridge = None
+    if args.source in ("optitrack", "fused"):
+        from hrc_safety.mocap import (NatNetV4Listener, OptiTrackListener,
+                                      RigidBodyMonitor)
+        monitor = RigidBodyMonitor()
+        if args.natnet_client:
+            listener = OptiTrackListener(
+                bridge, head_rigid_body_id=args.head_rigid_body,
+                server_address=args.motive_host, client_address=args.local_ip,
+                use_multicast=not args.unicast,
+                natnet_client_path=args.natnet_client, monitor=monitor)
+        else:
+            listener = NatNetV4Listener(
+                bridge, head_rigid_body_id=args.head_rigid_body,
+                local_address=args.local_ip, monitor=monitor)
+        listener.start()
+        listeners.append(listener)
+    if args.source == "xsens":
+        from hrc_safety.mocap.xsens_transport import XsensListener, PELVIS
+        listener = XsensListener(bridge, port=args.xsens_port,
+                                 segment_id=args.segment or PELVIS)
+        listener.start()
+        listeners.append(listener)
+    elif args.source == "fused":
+        from hrc_safety.mocap.xsens_transport import XsensListener, PELVIS
+        xsens_bridge = MocapBridge(sample_rate_hz=config["features"]["sample_rate_hz"])
+        xsens_listener = XsensListener(xsens_bridge, port=args.xsens_port,
+                                       segment_id=args.segment or PELVIS)
+        xsens_listener.start()
+        listeners.append(xsens_listener)
 
     fx = _make_features(config)
     controller = _make_controller(args.controller, config)
@@ -127,7 +144,7 @@ def run_live(args) -> int:
     dt = 1.0 / config["features"]["sample_rate_hz"]
     robot.apply(Command.PROTECTIVE_STOP, 0.0)  # held until tracking is live
     print(f"live_run: {args.controller} -> {args.robot} robot; "
-          f"listening udp:{args.port}; robot HELD STOPPED until tracking "
+          f"source={args.source}; robot HELD STOPPED until tracking "
           f"warms up. Ctrl-C to end.")
 
     last_print = None
@@ -147,7 +164,13 @@ def run_live(args) -> int:
                 time.sleep(dt)
                 continue
             if rec_fh:
-                rec_fh.write(_raw_line(s) + "\n")
+                bodies = monitor.snapshot(now) if monitor else None
+                if bodies is not None and args.robot_rigid_bodies:
+                    bodies = {i: b for i, b in bodies.items()
+                              if i in args.robot_rigid_bodies}
+                xs = xsens_bridge.tick(now) if xsens_bridge else None
+                rec_fh.write(_raw_line(s, bodies, xs) + "\n")
+                rec_fh.flush()
             if s.stale:
                 robot.apply(Command.PROTECTIVE_STOP, 0.0)
                 key = ("STALE", "protective_stop")
@@ -191,15 +214,16 @@ def run_live(args) -> int:
     except KeyboardInterrupt:
         print("\nstopping.")
     finally:
-        listener.stop()
+        for listener in reversed(listeners):
+            listener.stop()
         if rec_fh:
             rec_fh.close()
-        if args.exit_stop:
+        if not args.restore_speed_on_exit:
             robot.apply(Command.PROTECTIVE_STOP, 0.0)
-            print("exit: robot left STOPPED (--exit-stop).")
+            print("exit: robot left STOPPED (default fail-safe).")
         else:
             robot.apply(Command.FULL_SPEED, 1.0)
-            print("exit: robot restored to full speed.")
+            print("exit: robot restored to full speed (explicit override).")
     return 0
 
 
@@ -281,23 +305,31 @@ def main() -> int:
     ap.add_argument("--robot", default="mock", choices=["mock", "ur"],
                     help="mock = console only (default); ur = real arm/URSim")
     ap.add_argument("--host", default=None, help="robot IP (default: config)")
-    ap.add_argument("--tracker", default="xsens", choices=["xsens", "natnet"],
-                    help="sensing transport (default: xsens)")
-    ap.add_argument("--motive-host", default=None,
-                    help="IP of the machine running Motive (--tracker natnet)")
-    ap.add_argument("--rigid-body", type=int, default=1,
-                    help="Motive rigid body ID to track (--tracker natnet)")
-    ap.add_argument("--port", type=int, default=9763, help="Xsens UDP port")
+    ap.add_argument("--source", choices=["optitrack", "xsens", "fused"],
+                    default="optitrack", help="fused = OptiTrack head position plus Xsens logging")
+    ap.add_argument("--xsens-port", type=int, default=9763, help="Xsens UDP port")
     ap.add_argument("--segment", type=int, default=None,
                     help="MVN segment ID (default: pelvis)")
+    ap.add_argument("--head-rigid-body", type=int, default=1,
+                    help="Motive rigid-body ID on the participant's head")
+    ap.add_argument("--robot-rigid-bodies", type=lambda s: {int(v) for v in s.split(',') if v},
+                    default=set(), help="comma-separated robot rigid-body IDs to log")
+    ap.add_argument("--motive-host", default="127.0.0.1",
+                    help="IP of the Motive/NatNet server")
+    ap.add_argument("--local-ip", default="127.0.0.1",
+                    help="this computer's interface IP on the camera network")
+    ap.add_argument("--unicast", action="store_true",
+                    help="use NatNet unicast (default: multicast)")
+    ap.add_argument("--natnet-client", default=None,
+                    help="optional official client; default uses built-in NatNet 4 receiver")
     ap.add_argument("--extrinsics", default=None,
                     help="configs/mocap_extrinsics.yaml from calibrate_mocap")
     ap.add_argument("--record", default=None,
                     help="also record the raw stream (record_mocap schema)")
     ap.add_argument("--duration", type=float, default=None,
                     help="stop after N seconds (default: run until Ctrl-C)")
-    ap.add_argument("--exit-stop", action="store_true",
-                    help="leave the robot STOPPED on exit instead of full")
+    ap.add_argument("--restore-speed-on-exit", action="store_true",
+                    help="explicitly restore full speed on exit (default leaves stopped)")
     ap.add_argument("--selftest", action="store_true",
                     help="scripted fake stream + MockRobot; no hardware")
     args = ap.parse_args()

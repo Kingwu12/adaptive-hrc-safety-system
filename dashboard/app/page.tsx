@@ -40,8 +40,9 @@ const EMPTY: Status = {
 const STATES = ["approaching", "working", "retreating", "hazard"];
 
 function apiBase() {
-  if (typeof window === "undefined") return "http://127.0.0.1:8765";
-  return `${window.location.protocol}//${window.location.hostname}:8765`;
+  // Keep browser requests same-origin. Next proxies /api/* to the local
+  // hardware service, avoiding browser private-network/CORS restrictions.
+  return "";
 }
 
 function n(value: number | null | undefined, digits = 2) {
@@ -352,6 +353,7 @@ export default function Home() {
               onPress={() => rigPost("/api/robot", { action: "freedrive_on" }, "fd_on")} />
             <RigButton tag="fd_off" label="Freedrive off" busy={rigBusy} result={rigResult}
               onPress={() => rigPost("/api/robot", { action: "freedrive_off" }, "fd_off")} />
+            <button className="calibrate" onClick={() => rigPost("/api/cycle", { action: "fastening_complete" })}>FASTENING COMPLETE</button>
           </div>
           <div className="fields">
             <label>Vacuum {vacuum}%

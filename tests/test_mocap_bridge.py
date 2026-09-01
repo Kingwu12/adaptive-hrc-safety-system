@@ -124,3 +124,51 @@ def test_udp_listener_feeds_bridge_end_to_end():
     lst.stop(); tx.close()
     assert s is not None and np.allclose(s.position, [1.0, 2.0, 3.0])
     assert s.motive_timestamp == 1.0
+
+
+# ---------- OptiTrack official-SDK adapter + multi rigid bodies ----------
+
+from hrc_safety.mocap import OptiTrackListener, RigidBodyMonitor  # noqa: E402
+
+
+class _FakeNatNetClient:
+    def __init__(self):
+        self.new_frame_listener = None
+        self.rigid_body_listener = None
+        self.running = False
+
+    def set_server_address(self, value): self.server = value
+    def set_client_address(self, value): self.local = value
+    def set_use_multicast(self, value): self.multicast = value
+    def run(self): self.running = True; return True
+    def shutdown(self): self.running = False
+
+
+def test_optitrack_routes_only_head_to_safety_and_monitors_robot_bodies():
+    bridge = MocapBridge()
+    monitor = RigidBodyMonitor()
+    listener = OptiTrackListener(
+        bridge, head_rigid_body_id=10, server_address="192.168.10.2",
+        client_address="192.168.10.3", monitor=monitor,
+        client_factory=_FakeNatNetClient)
+    listener.start()
+    assert listener.client.running
+    listener.client.new_frame_listener({"timestamp": 12.5})
+    listener.client.rigid_body_listener(20, (9, 8, 7), (0, 0, 0, 1))
+    assert bridge.tick(1.0) is None  # robot marker must not drive human safety
+    listener.client.rigid_body_listener(10, (1, 2, 3), (0, 0, 0, 1))
+    sample = bridge.tick(1.0)
+    assert np.allclose(sample.position, (1, 2, 3))
+    assert sample.motive_timestamp == 12.5
+    assert set(monitor.snapshot()) == {10, 20}
+    listener.stop()
+    assert not listener.client.running
+
+
+def test_optitrack_rejects_invalid_and_explicitly_untracked_head_pose():
+    bridge = MocapBridge()
+    listener = OptiTrackListener(bridge, 1, "127.0.0.1",
+                                 client_factory=_FakeNatNetClient)
+    listener.client.rigid_body_listener(1, (float("nan"), 0, 0), (0, 0, 0, 1))
+    listener.client.rigid_body_listener(1, (1, 2, 3), (0, 0, 0, 1), False)
+    assert bridge.tick(0.0) is None

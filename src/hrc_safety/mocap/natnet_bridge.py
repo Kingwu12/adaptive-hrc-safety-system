@@ -14,6 +14,7 @@ Motive NatNetClient in vendor/, or a fake feed in tests).
 from __future__ import annotations
 
 from dataclasses import dataclass
+import threading
 
 import numpy as np
 import yaml
@@ -60,6 +61,8 @@ class MocapBridge:
         self._last_rx_wall: float | None = None
         self._last_motive_ts: float = float("nan")
         self._t0: float | None = None
+        self._last_tick_t: float | None = None
+        self._lock = threading.Lock()
 
     def on_sample(
         self, motive_ts: float, pos_xyz, tracked: bool, wall_time: float
@@ -71,9 +74,13 @@ class MocapBridge:
         """
         if not tracked:
             return
-        self._last_pos = np.asarray(pos_xyz, dtype=float).reshape(3)
-        self._last_motive_ts = float(motive_ts)
-        self._last_rx_wall = float(wall_time)
+        pos = np.asarray(pos_xyz, dtype=float).reshape(3)
+        if not np.all(np.isfinite(pos)):
+            return
+        with self._lock:
+            self._last_pos = pos.copy()
+            self._last_motive_ts = float(motive_ts)
+            self._last_rx_wall = float(wall_time)
 
     def tick(self, now_s: float) -> TickSample | None:
         """Emit the pipeline-facing sample for the tick at wall time now_s.
@@ -82,18 +89,28 @@ class MocapBridge:
         Afterwards always returns a sample: held position + stale flag, so the
         caller can apply the worst-case fallback rather than silently pausing.
         """
-        if self._last_pos is None or self._last_rx_wall is None:
-            return None
+        with self._lock:
+            if self._last_pos is None or self._last_rx_wall is None:
+                return None
+            pos = self._last_pos.copy()
+            last_rx_wall = self._last_rx_wall
+            motive_ts = self._last_motive_ts
         if self._t0 is None:
             self._t0 = now_s
-        age = now_s - self._last_rx_wall
-        pos = self._last_pos
+        elapsed = now_s - self._t0
+        # The bridge contract is one call per configured pipeline tick. Keep
+        # feature timestamps well-conditioned when scheduler timestamps are
+        # equal/quantised (common on Windows and in deterministic bench tests).
+        tick_t = (elapsed if self._last_tick_t is None else
+                  max(elapsed, self._last_tick_t + self.dt))
+        self._last_tick_t = tick_t
+        age = max(0.0, now_s - last_rx_wall)
         if self._R is not None:
             pos = self._R @ pos + self._t
         return TickSample(
-            t=now_s - self._t0,
+            t=tick_t,
             position=pos,
             stale=age > self.staleness_s,
             age_s=age,
-            motive_timestamp=self._last_motive_ts,
+            motive_timestamp=motive_ts,
         )

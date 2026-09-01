@@ -7,5 +7,10 @@ feeds. Import the listener you want from .xsens_transport or .natnet_transport;
 everything downstream is transport-blind on purpose.
 """
 from .natnet_bridge import MocapBridge, TickSample, load_extrinsics
+from .optitrack_transport import (NatNetV4Listener, OptiTrackListener,
+                                  RigidBodyMonitor, RigidBodySample,
+                                  parse_natnet4_frame)
 
-__all__ = ["MocapBridge", "TickSample", "load_extrinsics"]
+__all__ = ["MocapBridge", "TickSample", "load_extrinsics",
+           "OptiTrackListener", "RigidBodyMonitor", "RigidBodySample"]
+__all__ += ["NatNetV4Listener", "parse_natnet4_frame"]
