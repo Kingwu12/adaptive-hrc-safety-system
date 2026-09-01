@@ -4,11 +4,12 @@ from __future__ import annotations
 import json
 import os
 import sys
+import threading
 import time
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from scripts.dashboard_server import DashboardState, safe_id
+from scripts.dashboard_server import DashboardState, RigControl, safe_id
 
 
 def test_safe_id_removes_path_characters():
@@ -45,3 +46,39 @@ def test_dashboard_state_records_enriched_labelled_frames(tmp_path):
     assert row["ground_truth"] == "approaching"
     assert row["features"]["v_proj"] > 0
     assert set(row["hmm_posterior"]) == {"approaching", "working", "retreating", "hazard"}
+
+
+def test_rig_status_poll_returns_cached_value_while_probe_is_slow():
+    rig = RigControl.__new__(RigControl)
+    rig._status_lock = threading.Lock()
+    rig._status_refreshing = False
+    rig._status_updated = 0.0
+    rig._status_cache = {
+        "gripper": {"error": "checking rig"},
+        "robot": {"reachable": False, "error": "checking rig"},
+        "pose": {"available": False, "error": "checking rig"},
+    }
+    rig.fastening_complete = threading.Event()
+    rig.cycle_active = False
+
+    def slow_robot_status():
+        time.sleep(0.2)
+        return {"reachable": False, "error": "offline"}
+
+    rig.gripper_stats = lambda: {"error": "offline"}
+    rig.robot_status = slow_robot_status
+    rig.pose_status = lambda: {"available": False, "error": "offline"}
+
+    started = time.monotonic()
+    first = rig.status_snapshot({"connected": False})
+    assert time.monotonic() - started < 0.1
+    assert first["robot"]["error"] == "checking rig"
+
+    deadline = time.monotonic() + 1.0
+    while time.monotonic() < deadline:
+        with rig._status_lock:
+            if not rig._status_refreshing:
+                break
+        time.sleep(0.01)
+    second = rig.status_snapshot({"connected": False}, max_age_s=60.0)
+    assert second["robot"]["error"] == "offline"

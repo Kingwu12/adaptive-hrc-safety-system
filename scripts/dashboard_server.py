@@ -248,6 +248,14 @@ class RigControl:
         self._poses = self._load_poses()
         self.fastening_complete = threading.Event()
         self.cycle_active = False
+        self._status_lock = threading.Lock()
+        self._status_refreshing = False
+        self._status_updated = 0.0
+        self._status_cache = {
+            "gripper": {"error": "checking rig"},
+            "robot": {"reachable": False, "error": "checking rig"},
+            "pose": {"available": False, "error": "checking rig"},
+        }
 
     # ---------------------------------------------------------------- pose I/O
 
@@ -317,6 +325,45 @@ class RigControl:
                     "program_state": r[2], "loaded": r[3], "running": r[4]}
         except OSError as exc:
             return {"reachable": False, "error": str(exc)}
+
+    def _refresh_status(self) -> None:
+        """Refresh slow hardware health probes outside the HTTP request thread."""
+        try:
+            fresh = {
+                "gripper": self.gripper_stats(),
+                "robot": self.robot_status(),
+                "pose": self.pose_status(),
+            }
+            with self._status_lock:
+                self._status_cache = fresh
+                self._status_updated = time.monotonic()
+        finally:
+            with self._status_lock:
+                self._status_refreshing = False
+
+    def status_snapshot(self, xsens: dict, max_age_s: float = 1.0) -> dict:
+        """Return immediately from cache and refresh slow probes in the background.
+
+        RTDE and Dashboard connections can each take several seconds to fail while
+        the UR controller is booting. HTTP polling must never inherit that delay.
+        """
+        now = time.monotonic()
+        with self._status_lock:
+            if (
+                not self._status_refreshing
+                and now - self._status_updated > max_age_s
+            ):
+                self._status_refreshing = True
+                threading.Thread(target=self._refresh_status, daemon=True).start()
+            cached = dict(self._status_cache)
+        return {
+            **cached,
+            "xsens": xsens,
+            "cycle": {
+                "active": self.cycle_active,
+                "fastening_complete": self.fastening_complete.is_set(),
+            },
+        }
 
     def robot_action(self, action: str) -> dict:
         cmds = {
@@ -620,14 +667,7 @@ class ApiHandler(BaseHTTPRequestHandler):
         if path == "/api/status":
             self._json(self.state.snapshot())
         elif path == "/api/rig":
-            self._json({
-                "gripper": self.rig.gripper_stats(),
-                "robot": self.rig.robot_status(),
-                "pose": self.rig.pose_status(),
-                "xsens": self.state.snapshot(),
-                "cycle": {"active": self.rig.cycle_active,
-                          "fastening_complete": self.rig.fastening_complete.is_set()},
-            })
+            self._json(self.rig.status_snapshot(self.state.snapshot()))
         elif path in ("/control", "/control/"):
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
@@ -737,6 +777,8 @@ def main() -> int:
     ApiHandler.allow_remote_control = args.allow_remote_control
     host = "0.0.0.0" if args.share else "127.0.0.1"
     server = ThreadingHTTPServer((host, args.http_port), ApiHandler)
+    # A slow hardware socket probe must not keep the process alive on shutdown.
+    server.daemon_threads = True
     print(f"Dashboard sensor service: http://{host}:{args.http_port}")
     print(f"RIG CONTROL PAGE: http://<this-mac-ip>:{args.http_port}/control?k={control_key}")
     print(f"Xsens MVN target: UDP {args.udp_port} · Position + Quaternion · segment {args.segment}")
