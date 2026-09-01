@@ -20,7 +20,11 @@ def test_dashboard_state_records_enriched_labelled_frames(tmp_path):
     base = time.monotonic()
     for i in range(12):
         wall = base + i / 60.0
-        state.on_sample(i / 60.0, (1.5 - i * 0.01, 0.2, 1.0), True, wall)
+        position = (1.5 - i * 0.01, 0.2, 1.0)
+        state.on_sample(i / 60.0, position, True, wall)
+        # OptiTrack supplies the safety-critical absolute position; Xsens is
+        # retained as the articulated-motion/logging source.
+        state.optitrack_bridge.on_sample(i / 60.0, position, True, wall)
         state.tick()
 
     snap = state.snapshot()
