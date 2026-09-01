@@ -23,7 +23,7 @@ The "operator" here is a fixed virtual point. Nothing needs to be worn and no
 Xsens machine needs to be running.
 
   python scripts/verify_live_tcp.py
-  python scripts/verify_live_tcp.py --host 192.168.1.101 --duration 90
+  python scripts/verify_live_tcp.py --host 192.168.2.101 --duration 90
 """
 from __future__ import annotations
 

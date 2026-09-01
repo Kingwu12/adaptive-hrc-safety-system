@@ -5,7 +5,7 @@ sys.path.insert(0, "scripts")
 import ur10_shape
 import rtde_receive
 
-r = rtde_receive.RTDEReceiveInterface("192.168.1.101")
+r = rtde_receive.RTDEReceiveInterface("192.168.2.101")
 q = r.getActualQ()
 tcp = r.getActualTCPPose()
 pts = ur10_shape.link_points(q)

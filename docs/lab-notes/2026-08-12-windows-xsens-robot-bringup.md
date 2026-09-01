@@ -11,8 +11,9 @@ absolute position source while retaining Xsens for wearable kinematics.
 
 ## Windows and robot network
 
-- Windows USB Ethernet adapter: `192.168.1.102/24`, no gateway or DNS.
-- UR10 controller: `192.168.1.101/24`.
+- Windows robot USB Ethernet adapter: `192.168.2.102/24`, no gateway or DNS.
+- UR10 controller: `192.168.2.101/24`.
+- OptiTrack remains on its separate `192.168.1.0/24` camera link.
 - Cable connected directly to the control-box bottom Ethernet port.
 - Robot replied at approximately 1 ms.
 - TCP ports verified open: Dashboard `29999`, URScript `30001`, RTDE `30004`.

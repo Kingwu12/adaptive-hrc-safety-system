@@ -7,7 +7,7 @@ import json
 
 from vg10 import VG10
 
-HOST = "192.168.1.101"
+HOST = "192.168.2.101"
 
 
 def main() -> None:

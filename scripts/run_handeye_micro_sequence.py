@@ -12,7 +12,7 @@ from capture_handeye_pose import capture  # noqa: E402
 from vg10 import VG10  # noqa: E402
 
 
-HOST = "192.168.1.101"
+HOST = "192.168.2.101"
 OUT = "data/calib/handeye_samples.jsonl"
 
 

@@ -7,7 +7,7 @@ import json
 from capture_handeye_pose import capture
 from vg10 import VG10
 
-HOST = "192.168.1.101"
+HOST = "192.168.2.101"
 
 
 def vacuum() -> tuple[int, int]:

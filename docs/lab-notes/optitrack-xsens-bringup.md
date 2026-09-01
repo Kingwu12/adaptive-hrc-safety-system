@@ -55,7 +55,7 @@ Only after the mock test, extrinsic validation, network latency/stopping-time
 measurement, and physical safety review:
 
 ```powershell
-python scripts/live_run.py --source fused --robot ur --host 192.168.1.101 `
+python scripts/live_run.py --source fused --robot ur --host 192.168.2.101 `
   --motive-host 192.168.10.2 --local-ip 192.168.10.3 `
   --head-rigid-body 10 --robot-rigid-bodies 20,21,22,23,24,25 `
   --extrinsics configs/mocap_extrinsics.yaml --record data/mocap/trial01.jsonl

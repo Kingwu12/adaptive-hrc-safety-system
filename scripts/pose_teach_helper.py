@@ -18,7 +18,7 @@ import time
 
 import rtde_receive
 
-ROBOT = "192.168.1.101"
+ROBOT = "192.168.2.101"
 MAC = "192.168.1.100"
 READBACK_PORT = 30999
 PAYLOAD = "set_payload(1.7,[0,0,0.06])"

@@ -6,7 +6,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 from capture_handeye_pose import capture
 from vg10 import VG10
 
-HOST = "192.168.1.101"
+HOST = "192.168.2.101"
 
 def main():
     import rtde_control, rtde_receive

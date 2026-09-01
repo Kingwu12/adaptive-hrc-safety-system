@@ -77,7 +77,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--label", required=True)
     ap.add_argument("--out", default="data/calib/handeye_samples.jsonl")
-    ap.add_argument("--host", default="192.168.1.101")
+    ap.add_argument("--host", default="192.168.2.101")
     ap.add_argument("--local-ip", default="127.0.0.1")
     ap.add_argument("--panel-id", type=int, default=2)
     ap.add_argument("--base-id", type=int, default=3)

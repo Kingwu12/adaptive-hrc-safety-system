@@ -28,7 +28,7 @@ import argparse
 import json
 import subprocess
 
-ROBOT = "root@192.168.1.101"
+ROBOT = "root@192.168.2.101"
 CHANNELS = {"A": [0], "B": [1], "BOTH": [0, 1]}
 
 # python2 agent executed on the robot controller; one JSON line out.

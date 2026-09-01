@@ -5,7 +5,7 @@ Everything below was verified live this session (not recalled).
 ## Robot + network runbook
 
 - Robot: UR10 e-Series, serial 20185000750, PolyScope 5.9.3.1031212.
-- Arm static IP **192.168.1.101/24**, mask 255.255.255.0, gw 192.168.1.1
+- Arm static IP **192.168.2.101/24**, mask 255.255.255.0, no gateway (dedicated robot link)
   (set on pendant: Settings -> System -> Network; the DHCP radio toggle
   WIPES staged values — re-enter and press Apply).
 - Laptop: USB ethernet adapter, macOS service "USB 10/100/1000 LAN" (en10):
