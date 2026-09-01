@@ -14,6 +14,8 @@ type Status = {
   stale: boolean;
   age_s: number | null;
   position: number[] | null;
+  optitrack_connected: boolean;
+  optitrack_age_s: number | null;
   feature: Feature | null;
   posterior: Record<string, number>;
   hmm_state: string | null;
@@ -31,13 +33,25 @@ type Status = {
 
 const EMPTY: Status = {
   connected: false, packets: 0, packet_rate_hz: 0, stale: true, age_s: null,
-  position: null, feature: null, posterior: {}, hmm_state: null,
+  position: null, optitrack_connected: false, optitrack_age_s: null,
+  feature: null, posterior: {}, hmm_state: null,
   model_source: "synthetic baseline", recording: false, session_id: null,
   participant_id: null, trial_id: null, label: "unlabelled",
   recording_path: null, samples_written: 0, calibration_elapsed_s: null,
 };
 
 const STATES = ["approaching", "working", "retreating", "hazard"];
+
+const GUIDED_PROTOCOL = [
+  { label: "approaching", cue: "Cue the participant to approach the work position" },
+  { label: "working", cue: "Begin alignment / fastening at the work position" },
+  { label: "retreating", cue: "Cue a controlled step back from the work position" },
+  { label: "approaching", cue: "Begin the second approach" },
+  { label: "working", cue: "Resume the task at the work position" },
+  { label: "hazard", cue: "Give the planned hazard / slip cue now" },
+  { label: "retreating", cue: "Cue controlled recovery and retreat" },
+  { label: "unlabelled", cue: "Sequence complete — end the labelled interval" },
+] as const;
 
 function apiBase() {
   // Keep browser requests same-origin. Next proxies /api/* to the local
@@ -137,6 +151,8 @@ export default function Home() {
   const [vacuum, setVacuum] = useState(60);
   const [rigMsg, setRigMsg] = useState("");
   const [tab, setTab] = useState<"operate" | "monitor">("operate");
+  const [protocolIndex, setProtocolIndex] = useState(0);
+  const protocolBusy = useRef(false);
 
   useEffect(() => {
     let live = true;
@@ -212,8 +228,52 @@ export default function Home() {
       const result = await res.json();
       if (!res.ok) throw new Error(result.error || "Request failed");
       setMessage(result.message || "Updated");
-    } catch (err) { setMessage(err instanceof Error ? err.message : "Request failed"); }
+      return true;
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "Request failed");
+      return false;
+    }
   };
+
+  const startRecording = async () => {
+    if (await post("/api/session/start", { participant_id: participant, trial_id: trial })) {
+      setProtocolIndex(0);
+    }
+  };
+
+  const advanceProtocol = async () => {
+    if (!status.recording || protocolIndex >= GUIDED_PROTOCOL.length || protocolBusy.current) return;
+    protocolBusy.current = true;
+    const step = GUIDED_PROTOCOL[protocolIndex];
+    try {
+      if (await post("/api/label", { label: step.label })) {
+        setProtocolIndex(index => index + 1);
+      }
+    } finally {
+      protocolBusy.current = false;
+    }
+  };
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (event.repeat || ["INPUT", "TEXTAREA", "BUTTON", "SELECT"].includes(target?.tagName ?? "")) return;
+      if (!status.recording) return;
+      const direct: Record<string, string> = {
+        "0": "unlabelled", "1": "approaching", "2": "working",
+        "3": "retreating", "4": "hazard",
+      };
+      if (event.key === "Enter") {
+        event.preventDefault();
+        void advanceProtocol();
+      } else if (direct[event.key]) {
+        event.preventDefault();
+        void post("/api/label", { label: direct[event.key] });
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  });
 
   const calibration = status.calibration_elapsed_s;
   const calibrationClass = calibration != null && calibration >= 270 ? "warning" : "ok";
@@ -226,6 +286,7 @@ export default function Home() {
         <div className="statusCluster">
           <span className={`pill ${reachable ? "ok" : "offline"}`}><i />Service {reachable ? "online" : "offline"}</span>
           <span className={`pill ${status.connected ? "ok" : "offline"}`}><i />Xsens {status.connected ? "streaming" : "waiting"}</span>
+          <span className={`pill ${status.optitrack_connected ? "ok" : "offline"}`}><i />OptiTrack {status.optitrack_connected ? "tracking" : "waiting"}</span>
           <span className="clock">{status.packet_rate_hz.toFixed(1)} Hz</span>
         </div>
       </header>
@@ -253,7 +314,7 @@ export default function Home() {
           <div className="panelHead"><div><p className="kicker">01 · CAPTURE</p><h2>Session control</h2></div><span className={`recordLamp ${status.recording ? "active" : ""}`}>{status.recording ? "REC" : "IDLE"}</span></div>
           <div className="fields"><label>Participant<input value={participant} onChange={e => setParticipant(e.target.value)} disabled={status.recording} /></label><label>Trial<input value={trial} onChange={e => setTrial(e.target.value)} disabled={status.recording} /></label></div>
           <div className="actions">
-            {!status.recording ? <button className="primary" disabled={!status.connected} onClick={() => post("/api/session/start", { participant_id: participant, trial_id: trial })}>Start recording</button> : <button className="stop" onClick={() => post("/api/session/stop")}>Stop & save</button>}
+            {!status.recording ? <button className="primary" disabled={!status.connected || !status.optitrack_connected} onClick={startRecording}>Start guided recording</button> : <button className="stop" onClick={() => post("/api/session/stop")}>Stop & save</button>}
           </div>
           <p className="feedback">{message}</p>
           <dl className="sessionFacts"><div><dt>Samples</dt><dd>{status.samples_written.toLocaleString()}</dd></div><div><dt>Packet age</dt><dd>{n(status.age_s, 3)} s</dd></div><div><dt>Calibration</dt><dd className={calibrationClass}>{calibration == null ? "Not marked" : `${Math.floor(calibration / 60)}:${String(Math.floor(calibration % 60)).padStart(2, "0")}`}</dd></div></dl>
@@ -273,9 +334,18 @@ export default function Home() {
 
         <article className="panel labels">
           <div className="panelHead"><div><p className="kicker">03 · GROUND TRUTH</p><h2>What is actually happening?</h2></div><span className="currentLabel">{status.label}</span></div>
-          <p className="help">Choose the state the participant is deliberately performing. This label is saved beside every sensor frame.</p>
+          <p className="help">The experimenter advances the protocol at each real phase onset. The active label then persists on every frame until the next cue; the participant never touches this console.</p>
+          <div className="guidedRun">
+            <span>GUIDED RUN · STEP {Math.min(protocolIndex + 1, GUIDED_PROTOCOL.length)}/{GUIDED_PROTOCOL.length}</span>
+            <strong>{protocolIndex < GUIDED_PROTOCOL.length ? GUIDED_PROTOCOL[protocolIndex].cue : "All phases labelled — stop and save this run"}</strong>
+            <small>Hold each labelled state for at least 2 seconds. Press Enter or use the button.</small>
+            <button className="protocolNext" disabled={!status.recording || protocolIndex >= GUIDED_PROTOCOL.length} onClick={advanceProtocol}>
+              {protocolIndex < GUIDED_PROTOCOL.length ? `Advance & label ${GUIDED_PROTOCOL[protocolIndex].label}` : "Sequence complete"}
+            </button>
+          </div>
           <div className="labelButtons">{STATES.map(s => <button key={s} className={status.label === s ? "selected" : ""} disabled={!status.recording} onClick={() => post("/api/label", { label: s })}>{s}</button>)}</div>
           <button className="unlabel" disabled={!status.recording} onClick={() => post("/api/label", { label: "unlabelled" })}>Mark transition / unlabelled</button>
+          <p className="shortcutHelp"><kbd>Enter</kbd> next guided phase · <kbd>1</kbd> approach · <kbd>2</kbd> work · <kbd>3</kbd> retreat · <kbd>4</kbd> hazard · <kbd>0</kbd> unlabelled</p>
         </article>
 
         <article className="panel probabilities">

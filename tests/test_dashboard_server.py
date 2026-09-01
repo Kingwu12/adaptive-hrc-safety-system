@@ -7,6 +7,8 @@ import sys
 import threading
 import time
 
+import pytest
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from scripts.dashboard_server import DashboardState, RigControl, safe_id
@@ -46,6 +48,14 @@ def test_dashboard_state_records_enriched_labelled_frames(tmp_path):
     assert row["ground_truth"] == "approaching"
     assert row["features"]["v_proj"] > 0
     assert set(row["hmm_posterior"]) == {"approaching", "working", "retreating", "hazard"}
+
+
+def test_dashboard_rejects_recording_without_optitrack(tmp_path):
+    state = DashboardState(tmp_path, segment_id=1)
+    now = time.monotonic()
+    state.on_sample(0.0, (1.0, 0.0, 1.0), True, now)
+    with pytest.raises(ValueError, match="OptiTrack"):
+        state.start_session("P01", "T07")
 
 
 def test_rig_status_poll_returns_cached_value_while_probe_is_slow():
