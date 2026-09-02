@@ -13,11 +13,60 @@ import pytest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from scripts.dashboard_server import (DashboardState, GuidedRunController,
-                                      RigControl, safe_id)
+                                      RigControl, RunCatalog, safe_id)
 
 
 def test_safe_id_removes_path_characters():
     assert safe_id("../P 01/", "fallback") == "P-01"
+
+
+def _write_catalog_run(path, participant, trial, labels, stale_at=()):
+    session = f"{participant}-{trial}-20260902-120000-abcdef"
+    with path.open("w", encoding="utf-8") as handle:
+        sample = 0
+        for label in labels:
+            for _ in range(300):
+                handle.write(json.dumps({
+                    "session_id": session,
+                    "participant_id": participant,
+                    "trial_id": trial,
+                    "t": sample / 60.0,
+                    "stale": sample in stale_at,
+                    "ground_truth": label,
+                }) + "\n")
+                sample += 1
+
+
+def test_run_catalog_lists_quality_names_and_next_trial(tmp_path):
+    labels = [
+        "approaching", "working", "retreating", "approaching",
+        "working", "hazard", "retreating",
+    ]
+    _write_catalog_run(tmp_path / "run.jsonl", "P01", "T06", labels, stale_at=(4,))
+    catalog = RunCatalog(tmp_path)
+
+    result = catalog.catalog()
+    assert result["participants"][0]["id"] == "P01"
+    assert result["participants"][0]["next_trial"] == "T07"
+    assert result["runs"][0]["quality"]["grade"] == "good"
+    assert result["runs"][0]["quality"]["score"] == 100
+
+    saved = catalog.save_participant("Alex Example", "P01")
+    assert saved["participant"]["name"] == "Alex Example"
+    created = catalog.save_participant("Second Person")
+    assert created["participant"]["id"] == "P02"
+    assert created["participant"]["next_trial"] == "T01"
+    assert (tmp_path / "participants.json").exists()
+
+
+def test_run_catalog_marks_incomplete_short_attempt_for_repeat(tmp_path):
+    _write_catalog_run(tmp_path / "short.jsonl", "P01", "T01", ["unlabelled"])
+    catalog = RunCatalog(tmp_path)
+
+    run = catalog.catalog()["runs"][0]
+    assert run["quality"]["grade"] == "repeat"
+    assert "missing" in " ".join(run["quality"]["reasons"])
+    assert RunCatalog._next_trial([{"trial_id": "T01"}, {"trial_id": "T01"}]) == "T03"
 
 
 def test_dashboard_state_records_enriched_labelled_frames(tmp_path):

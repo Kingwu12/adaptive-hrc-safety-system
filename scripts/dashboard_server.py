@@ -64,6 +64,257 @@ def safe_id(value: object, fallback: str) -> str:
     return clean[:48] or fallback
 
 
+class RunCatalog:
+    """Index saved recordings and keep the local participant-name registry."""
+
+    REQUIRED_LABELS = ("approaching", "working", "retreating", "hazard")
+    EXPECTED_SEQUENCE = (
+        "approaching", "working", "retreating",
+        "approaching", "working", "hazard", "retreating",
+    )
+
+    def __init__(self, output_dir: Path) -> None:
+        self.output_dir = output_dir
+        self.registry_path = output_dir / "participants.json"
+        self.lock = threading.RLock()
+        self._cache: dict[str, tuple[int, int, dict]] = {}
+
+    @staticmethod
+    def _clean_name(value: object) -> str:
+        name = re.sub(r"[\x00-\x1f]+", " ", str(value or "")).strip()
+        if not name:
+            raise ValueError("Enter a participant name")
+        return name[:80]
+
+    def _load_registry(self) -> dict[str, dict]:
+        if not self.registry_path.exists():
+            return {}
+        try:
+            payload = json.loads(self.registry_path.read_text(encoding="utf-8"))
+            rows = payload.get("participants", [])
+            return {
+                safe_id(row.get("id"), ""): {
+                    "id": safe_id(row.get("id"), ""),
+                    "name": str(row.get("name", "")).strip()[:80],
+                    "created_at": row.get("created_at"),
+                }
+                for row in rows if safe_id(row.get("id"), "")
+            }
+        except (OSError, ValueError, TypeError):
+            return {}
+
+    def _save_registry(self, participants: dict[str, dict]) -> None:
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+        payload = {"participants": sorted(participants.values(), key=lambda row: row["id"])}
+        temporary = self.registry_path.with_suffix(".json.tmp")
+        temporary.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        temporary.replace(self.registry_path)
+
+    @staticmethod
+    def _started_at(session_id: str, fallback_timestamp: float) -> str:
+        match = re.search(r"-(\d{8}-\d{6})-[0-9a-fA-F]+$", session_id)
+        if match:
+            try:
+                return datetime.strptime(match.group(1), "%Y%m%d-%H%M%S").isoformat()
+            except ValueError:
+                pass
+        return datetime.fromtimestamp(fallback_timestamp).isoformat(timespec="seconds")
+
+    @classmethod
+    def _quality(cls, samples: int, duration_s: float, rate_hz: float,
+                 stale_ratio: float, label_counts: dict[str, int],
+                 sequence: list[str], invalid_rows: int) -> dict:
+        score = 100
+        issues: list[str] = []
+        missing = [label for label in cls.REQUIRED_LABELS
+                   if label_counts.get(label, 0) == 0]
+        if missing:
+            score -= 15 * len(missing)
+            issues.append("missing " + ", ".join(missing))
+        if tuple(sequence) != cls.EXPECTED_SEQUENCE:
+            score -= 15
+            issues.append("phase order or completion differs from the guided run")
+        if duration_s < 30:
+            score -= 20
+            issues.append("run is under 30 seconds")
+        if rate_hz < 40 or rate_hz > 80:
+            score -= 15
+            issues.append(f"capture rate is {rate_hz:.1f} Hz")
+        if stale_ratio > 0.05:
+            score -= 30
+            issues.append(f"{stale_ratio * 100:.1f}% stale tracking")
+        elif stale_ratio > 0.01:
+            score -= 15
+            issues.append(f"{stale_ratio * 100:.1f}% stale tracking")
+        if rate_hz > 0:
+            short = [label for label in cls.REQUIRED_LABELS
+                     if 0 < label_counts.get(label, 0) / rate_hz < 2.0]
+            if short:
+                score -= 10
+                issues.append("too little " + ", ".join(short) + " data")
+        if invalid_rows:
+            score -= 10
+            issues.append(f"{invalid_rows} unreadable samples")
+        score = max(0, score)
+        if score >= 85 and not missing:
+            grade, label = "good", "GOOD"
+        elif score >= 60:
+            grade, label = "review", "REVIEW"
+        else:
+            grade, label = "repeat", "REPEAT"
+        if not issues:
+            issues.append("all phases captured in order with stable tracking")
+        return {"grade": grade, "label": label, "score": score, "reasons": issues}
+
+    def _summarize(self, path: Path, stat) -> dict:
+        samples = stale = invalid = 0
+        first_t = last_t = None
+        session_id = path.stem
+        participant_id = "P00"
+        trial_id = "T00"
+        label_counts: dict[str, int] = {}
+        sequence: list[str] = []
+        previous_label = None
+        with path.open("r", encoding="utf-8") as handle:
+            for line in handle:
+                try:
+                    row = json.loads(line)
+                except (json.JSONDecodeError, TypeError):
+                    invalid += 1
+                    continue
+                samples += 1
+                if samples == 1:
+                    session_id = str(row.get("session_id") or path.stem)
+                    participant_id = safe_id(row.get("participant_id"), "P00")
+                    trial_id = safe_id(row.get("trial_id"), "T00")
+                value = row.get("t")
+                if isinstance(value, (int, float)):
+                    if first_t is None:
+                        first_t = float(value)
+                    last_t = float(value)
+                if row.get("stale"):
+                    stale += 1
+                label = str(row.get("ground_truth") or "unlabelled")
+                label_counts[label] = label_counts.get(label, 0) + 1
+                if label != "unlabelled" and label != previous_label:
+                    sequence.append(label)
+                previous_label = label
+        duration_s = max(0.0, (last_t - first_t)) if first_t is not None and last_t is not None else 0.0
+        rate_hz = samples / duration_s if duration_s > 0 else 0.0
+        stale_ratio = stale / samples if samples else 1.0
+        quality = self._quality(samples, duration_s, rate_hz, stale_ratio,
+                                label_counts, sequence, invalid)
+        label_seconds = {
+            label: round(count / rate_hz, 1) if rate_hz > 0 else 0.0
+            for label, count in label_counts.items()
+        }
+        return {
+            "session_id": session_id,
+            "participant_id": participant_id,
+            "trial_id": trial_id,
+            "started_at": self._started_at(session_id, stat.st_mtime),
+            "file_name": path.name,
+            "samples": samples,
+            "duration_s": round(duration_s, 1),
+            "rate_hz": round(rate_hz, 1),
+            "stale_percent": round(stale_ratio * 100, 2),
+            "labels": label_seconds,
+            "sequence": sequence,
+            "quality": quality,
+        }
+
+    @staticmethod
+    def _next_trial(runs: list[dict]) -> str:
+        numbers = []
+        for run in runs:
+            match = re.fullmatch(r"T(\d+)", str(run.get("trial_id", "")), re.I)
+            if match:
+                numbers.append(int(match.group(1)))
+        # Old dashboard versions allowed repeated T01 IDs. Count every saved
+        # attempt as well as respecting the highest explicit trial number so
+        # the next run can never reuse an occupied slot.
+        number = max(max(numbers, default=0), len(runs)) + 1
+        width = max(2, max((len(str(value)) for value in numbers), default=2))
+        return f"T{number:0{width}d}"
+
+    def catalog(self) -> dict:
+        with self.lock:
+            self.output_dir.mkdir(parents=True, exist_ok=True)
+            paths = list(self.output_dir.glob("*.jsonl"))
+            live_keys = {str(path.resolve()) for path in paths}
+            for key in list(self._cache):
+                if key not in live_keys:
+                    del self._cache[key]
+            runs = []
+            for path in paths:
+                stat = path.stat()
+                key = str(path.resolve())
+                cached = self._cache.get(key)
+                if cached is None or cached[0] != stat.st_size or cached[1] != stat.st_mtime_ns:
+                    summary = self._summarize(path, stat)
+                    self._cache[key] = (stat.st_size, stat.st_mtime_ns, summary)
+                runs.append(dict(self._cache[key][2]))
+            runs.sort(key=lambda row: row["started_at"], reverse=True)
+
+            registered = self._load_registry()
+            participant_ids = set(registered) | {run["participant_id"] for run in runs}
+            participants = []
+            for participant_id in sorted(participant_ids):
+                participant_runs = [run for run in runs
+                                    if run["participant_id"] == participant_id]
+                profile = registered.get(participant_id, {})
+                name = profile.get("name", "")
+                for run in participant_runs:
+                    run["participant_name"] = name
+                participants.append({
+                    "id": participant_id,
+                    "name": name,
+                    "created_at": profile.get("created_at"),
+                    "run_count": len(participant_runs),
+                    "good_run_count": sum(
+                        run["quality"]["grade"] == "good" for run in participant_runs),
+                    "next_trial": self._next_trial(participant_runs),
+                })
+            return {"participants": participants, "runs": runs}
+
+    def next_trial(self, participant_id: object) -> str:
+        value = safe_id(participant_id, "P00")
+        data = self.catalog()
+        for participant in data["participants"]:
+            if participant["id"] == value:
+                return participant["next_trial"]
+        return "T01"
+
+    def save_participant(self, name: object, participant_id: object = None) -> dict:
+        with self.lock:
+            clean_name = self._clean_name(name)
+            catalog = self.catalog()
+            known_ids = {row["id"] for row in catalog["participants"]}
+            if participant_id:
+                value = safe_id(participant_id, "")
+                if not value:
+                    raise ValueError("Invalid participant ID")
+            else:
+                numbers = []
+                for value in known_ids:
+                    match = re.fullmatch(r"P(\d+)", value, re.I)
+                    if match:
+                        numbers.append(int(match.group(1)))
+                value = f"P{max(numbers, default=0) + 1:02d}"
+            registry = self._load_registry()
+            registry[value] = {
+                "id": value,
+                "name": clean_name,
+                "created_at": registry.get(value, {}).get("created_at")
+                or datetime.now().isoformat(timespec="seconds"),
+            }
+            self._save_registry(registry)
+            participant = next(row for row in self.catalog()["participants"]
+                               if row["id"] == value)
+            return {"message": f"Saved {value} — {clean_name}",
+                    "participant": participant}
+
+
 class DashboardState:
     def __init__(
         self, output_dir: Path, segment_id: int, model_path: Path | None = None
@@ -188,7 +439,13 @@ class DashboardState:
             self.label = "unlabelled"
             self.guided_step = 0
             self.recording = True
-            return {"message": f"Recording {self.session_id}", "path": self.recording_path}
+            return {
+                "message": f"Recording {self.session_id}",
+                "path": self.recording_path,
+                "session_id": self.session_id,
+                "participant_id": self.participant_id,
+                "trial_id": self.trial_id,
+            }
 
     def stop_session(self) -> dict:
         with self.lock:
@@ -893,6 +1150,7 @@ class ApiHandler(BaseHTTPRequestHandler):
     state: DashboardState
     rig: RigControl
     guided: GuidedRunController
+    catalog: RunCatalog
     allow_remote_control = False
     control_key = ""
 
@@ -940,6 +1198,8 @@ class ApiHandler(BaseHTTPRequestHandler):
             self._json(self.state.snapshot())
         elif path == "/api/rig":
             self._json(self.rig.status_snapshot(self.state.snapshot()))
+        elif path == "/api/catalog":
+            self._json(self.catalog.catalog())
         elif path in ("/control", "/control/"):
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
@@ -974,8 +1234,9 @@ class ApiHandler(BaseHTTPRequestHandler):
                 elif self.path == "/api/cycle":
                     result = self.rig.cycle_event(str(body.get("action")))
                 elif self.path == "/api/protocol/start":
+                    participant_id = body.get("participant_id")
                     result = self.guided.start(
-                        body.get("participant_id"), body.get("trial_id"))
+                        participant_id, self.catalog.next_trial(participant_id))
                 elif self.path == "/api/protocol/arm":
                     result = self.guided.arm_step()
                 elif self.path == "/api/protocol/complete":
@@ -998,6 +1259,9 @@ class ApiHandler(BaseHTTPRequestHandler):
                 result = self.state.advance_guided_protocol()
             elif self.path == "/api/calibration/mark":
                 result = self.state.mark_calibrated()
+            elif self.path == "/api/participants":
+                result = self.catalog.save_participant(
+                    body.get("name"), body.get("participant_id"))
             else:
                 return self._json({"error": "Not found"}, 404)
             self._json(result)
@@ -1026,6 +1290,7 @@ def main() -> int:
     args = parser.parse_args()
 
     state = DashboardState(Path(args.out), args.segment, Path(args.model))
+    catalog = RunCatalog(Path(args.out))
     listener = XsensListener(state, port=args.udp_port, segment_id=args.segment)
     listener.start()
     optitrack_monitor = RigidBodyMonitor()
@@ -1060,6 +1325,7 @@ def main() -> int:
     ApiHandler.state = state
     ApiHandler.rig = rig
     ApiHandler.guided = guided
+    ApiHandler.catalog = catalog
     ApiHandler.control_key = control_key
     ApiHandler.allow_remote_control = args.allow_remote_control
     host = "0.0.0.0" if args.share else "127.0.0.1"

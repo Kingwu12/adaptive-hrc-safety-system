@@ -33,6 +33,33 @@ type Status = {
   error?: string;
 };
 
+type ParticipantSummary = {
+  id: string;
+  name: string;
+  created_at: string | null;
+  run_count: number;
+  good_run_count: number;
+  next_trial: string;
+};
+
+type RunSummary = {
+  session_id: string;
+  participant_id: string;
+  participant_name: string;
+  trial_id: string;
+  started_at: string;
+  file_name: string;
+  samples: number;
+  duration_s: number;
+  rate_hz: number;
+  stale_percent: number;
+  labels: Record<string, number>;
+  sequence: string[];
+  quality: { grade: "good" | "review" | "repeat"; label: string; score: number; reasons: string[] };
+};
+
+type Catalog = { participants: ParticipantSummary[]; runs: RunSummary[] };
+
 const EMPTY: Status = {
   connected: false, packets: 0, packet_rate_hz: 0, stale: true, age_s: null,
   position: null, optitrack_connected: false, optitrack_age_s: null,
@@ -108,13 +135,6 @@ function apiBase() {
 
 function n(value: number | null | undefined, digits = 2) {
   return value == null || !Number.isFinite(value) ? "—" : value.toFixed(digits);
-}
-
-function nextTrialId(value: string) {
-  const match = value.match(/^(.*?)(\d+)$/);
-  if (!match) return `${value || "T"}-2`;
-  const next = String(Number(match[2]) + 1).padStart(match[2].length, "0");
-  return `${match[1]}${next}`;
 }
 
 function Sparkline({ values, color }: { values: number[]; color: string }) {
@@ -198,7 +218,10 @@ export default function Home() {
   const [reachable, setReachable] = useState(false);
   const [history, setHistory] = useState<Record<string, number[]>>({ distance: [], speed: [], acceleration: [] });
   const [participant, setParticipant] = useState("P01");
-  const [trial, setTrial] = useState("T01");
+  const [catalog, setCatalog] = useState<Catalog>({ participants: [], runs: [] });
+  const [catalogRefresh, setCatalogRefresh] = useState(0);
+  const [participantEditor, setParticipantEditor] = useState<"new" | "rename" | null>(null);
+  const [participantName, setParticipantName] = useState("");
   const [message, setMessage] = useState("Start the local sensor service, then enable MVN Network Streamer.");
   const [rig, setRig] = useState<Rig>({});
   const [rigBusy, setRigBusy] = useState<string | null>(null);
@@ -250,6 +273,22 @@ export default function Home() {
     return () => { live = false; clearInterval(timer); };
   }, []);
 
+  useEffect(() => {
+    if (status.recording) return;
+    let live = true;
+    const pollCatalog = async () => {
+      try {
+        const res = await fetch(`${apiBase()}/api/catalog`, { cache: "no-store" });
+        if (!res.ok) return;
+        const next = await res.json() as Catalog;
+        if (live) setCatalog(next);
+      } catch { /* run history is non-critical to live safety control */ }
+    };
+    void pollCatalog();
+    const timer = setInterval(pollCatalog, 10000);
+    return () => { live = false; clearInterval(timer); };
+  }, [status.recording, catalogRefresh]);
+
   const rigPost = async (path: string, body: object, id?: string) => {
     const tag = id ?? path;
     setRigBusy(tag);
@@ -290,7 +329,12 @@ export default function Home() {
       const result = await res.json();
       if (!res.ok) throw new Error(result.error || "Request failed");
       setMessage(result.message || "Updated");
-      return result as { message?: string; completed?: boolean };
+      return result as {
+        message?: string;
+        completed?: boolean;
+        trial_id?: string;
+        participant?: ParticipantSummary;
+      };
     } catch (err) {
       setMessage(err instanceof Error ? err.message : "Request failed");
       return null;
@@ -298,7 +342,30 @@ export default function Home() {
   };
 
   const startRecording = async () => {
-    await post("/api/protocol/start", { participant_id: participant, trial_id: trial });
+    await post("/api/protocol/start", { participant_id: participant });
+  };
+
+  const abortRecording = async () => {
+    const result = await post("/api/session/stop");
+    if (result) setCatalogRefresh(value => value + 1);
+  };
+
+  const saveParticipant = async () => {
+    const result = await post("/api/participants", {
+      name: participantName,
+      participant_id: participantEditor === "rename" ? participant : undefined,
+    });
+    if (!result?.participant) return;
+    const saved = result.participant;
+    setCatalog(old => ({
+      ...old,
+      participants: [...old.participants.filter(row => row.id !== saved.id), saved]
+        .sort((a, b) => a.id.localeCompare(b.id)),
+    }));
+    setParticipant(saved.id);
+    setParticipantEditor(null);
+    setParticipantName("");
+    setCatalogRefresh(value => value + 1);
   };
 
   const advanceProtocol = async () => {
@@ -308,9 +375,8 @@ export default function Home() {
     try {
       const result = await post("/api/protocol/complete", { vacuum });
       if (result?.completed) {
-        const next = nextTrialId(trial);
-        setTrial(next);
-        setMessage(`${result.message || "Run saved."} Next run is ready as ${next}.`);
+        setMessage(`${result.message || "Run saved."} Checking quality and preparing the next trial…`);
+        setCatalogRefresh(value => value + 1);
       }
     } finally {
       protocolBusy.current = false;
@@ -397,6 +463,9 @@ export default function Home() {
   const dominant = useMemo(() => status.hmm_state || "waiting", [status.hmm_state]);
   const guidedIndex = Math.min(status.guided_step ?? 0, GUIDED_PROTOCOL.length - 1);
   const guided = GUIDED_PROTOCOL[guidedIndex];
+  const selectedParticipant = catalog.participants.find(row => row.id === participant);
+  const participantRuns = catalog.runs.filter(run => run.participant_id === participant);
+  const nextTrial = selectedParticipant?.next_trial ?? "T01";
 
   return (
     <main>
@@ -445,14 +514,54 @@ export default function Home() {
       <section className={`grid tab-${tab}`}>
         <article className="panel capture">
           <div className="panelHead"><div><p className="kicker">01 · CAPTURE</p><h2>Session control</h2></div><span className={`recordLamp ${status.recording ? "active" : ""}`}>{status.recording ? "REC" : "IDLE"}</span></div>
-          <div className="fields"><label>Participant<input value={participant} onChange={e => setParticipant(e.target.value)} disabled={status.recording} /></label><label>Trial<input value={trial} onChange={e => setTrial(e.target.value)} disabled={status.recording} /></label></div>
-          <div className="actions">
-            {!status.recording ? <button className="primary" disabled={!status.connected || !status.optitrack_connected} onClick={startRecording}>Start guided scenario run</button> : <button className="stop" onClick={() => post("/api/session/stop")}>Abort / stop & save</button>}
+          <div className="fields">
+            <label>Participant
+              <select value={participant} disabled={status.recording} onChange={e => { setParticipant(e.target.value); setParticipantEditor(null); }}>
+                {catalog.participants.length ? catalog.participants.map(row => <option key={row.id} value={row.id}>{row.id} — {row.name || "unnamed"}</option>) : <option value="P01">P01 — loading…</option>}
+              </select>
+            </label>
+            <label>{status.recording ? "Current trial" : "Next trial"}
+              <input value={status.recording ? status.trial_id || nextTrial : nextTrial} readOnly />
+            </label>
           </div>
-          {!status.recording && <p className="startHint">Starts at GET READY, then tells the operator exactly when each real phase begins. After a completed run, the trial ID increments automatically.</p>}
+          <div className="participantActions">
+            <button disabled={status.recording} onClick={() => { setParticipantEditor("new"); setParticipantName(""); }}>+ New participant</button>
+            <button disabled={status.recording || !selectedParticipant} onClick={() => { setParticipantEditor("rename"); setParticipantName(selectedParticipant?.name || ""); }}>Name / rename selected</button>
+          </div>
+          {participantEditor && <div className="participantEditor">
+            <input autoFocus value={participantName} maxLength={80} placeholder={participantEditor === "new" ? "New participant name" : `Name for ${participant}`} onChange={e => setParticipantName(e.target.value)} onKeyDown={e => { if (e.key === "Enter") void saveParticipant(); }} />
+            <button className="primary" disabled={!participantName.trim()} onClick={() => void saveParticipant()}>{participantEditor === "new" ? "Create participant" : "Save name"}</button>
+            <button onClick={() => { setParticipantEditor(null); setParticipantName(""); }}>Cancel</button>
+          </div>}
+          <div className="actions">
+            {!status.recording ? <button className="primary" disabled={!status.connected || !status.optitrack_connected || !participant} onClick={startRecording}>Start {nextTrial} guided run</button> : <button className="stop" onClick={() => void abortRecording()}>Abort / stop & save</button>}
+          </div>
+          {!status.recording && <p className="startHint">The next trial number comes from the files already saved for this participant. Every attempt is preserved and counted automatically.</p>}
           <p className="feedback">{message}</p>
           <dl className="sessionFacts"><div><dt>Samples</dt><dd>{status.samples_written.toLocaleString()}</dd></div><div><dt>Packet age</dt><dd>{n(status.age_s, 3)} s</dd></div><div><dt>Calibration</dt><dd className={calibrationClass}>{calibration == null ? "Not marked" : `${Math.floor(calibration / 60)}:${String(Math.floor(calibration % 60)).padStart(2, "0")}`}</dd></div></dl>
           <button className="calibrate" disabled={!status.connected || status.recording} onClick={() => post("/api/calibration/mark")}>Mark Xsens calibration complete</button>
+        </article>
+
+        <article className="panel runHistory">
+          <div className="panelHead">
+            <div><p className="kicker">02 · SAVED RUNS</p><h2>{participant} {selectedParticipant?.name ? `— ${selectedParticipant.name}` : "— unnamed"}</h2></div>
+            <span className="quiet">{selectedParticipant?.good_run_count ?? 0}/{selectedParticipant?.run_count ?? 0} good</span>
+          </div>
+          <p className="qualityNote">Capture-quality checks confirm phase coverage, order, duration, tracking freshness, and sample rate. They do not measure model accuracy.</p>
+          <div className="runList">
+            {participantRuns.length === 0 && <p className="emptyRuns">No saved runs yet. The first completed or aborted attempt will appear here.</p>}
+            {participantRuns.map(run => <div className="runCard" key={run.session_id}>
+              <div className="runCardHead">
+                <div><strong>{run.trial_id}</strong><span>{run.started_at.replace("T", " ")}</span></div>
+                <span className={`qualityBadge quality-${run.quality.grade}`}>{run.quality.label} · {run.quality.score}</span>
+              </div>
+              <div className="runMetrics">
+                <span>{run.samples.toLocaleString()} samples</span><span>{run.duration_s.toFixed(1)} s</span><span>{run.rate_hz.toFixed(1)} Hz</span><span>{run.stale_percent.toFixed(2)}% stale</span>
+              </div>
+              <div className="labelCoverage">{STATES.map(label => <span key={label}>{label} {run.labels[label] == null ? "—" : `${n(run.labels[label], 1)}s`}</span>)}</div>
+              <p>{run.quality.reasons.join(" · ")}</p>
+            </div>)}
+          </div>
         </article>
 
         <article className="panel signals">
