@@ -92,16 +92,33 @@ def test_bridge_feeds_feature_extractor_seam():
 # ---------- Xsens transport (parser + live UDP loopback) ----------
 
 from hrc_safety.mocap.xsens_transport import (  # noqa: E402
-    XsensListener, build_mxtp02, parse_mxtp02)
+    XsensListener, build_mxtp02, parse_mxtp02, parse_mxtp02_frame)
 
 
 def test_mxtp02_roundtrip_and_segment_select():
-    pkt = build_mxtp02({1: (0.1, 0.2, 0.3), 5: (9, 9, 9)}, time_code_ms=2500)
+    pkt = build_mxtp02(
+        {1: (0.1, 0.2, 0.3), 5: (9, 9, 9)}, time_code_ms=2500,
+        sample_counter=42, datagram_counter=3, avatar_id=2,
+        quaternions={1: (0.5, 0.5, 0.5, 0.5),
+                     5: (0.707, 0.0, 0.707, 0.0)})
+    frame = parse_mxtp02_frame(pkt)
+    assert frame is not None
+    assert frame["sample_counter"] == 42
+    assert frame["datagram_counter"] == 3
+    assert frame["avatar_id"] == 2
+    assert frame["item_count"] == frame["body_segment_count"] == 2
+    assert set(frame["segments"]) == {"1", "5"}
+    assert np.allclose(frame["segments"]["1"]["position_m"], [0.1, 0.2, 0.3])
+    assert np.allclose(
+        frame["segments"]["1"]["quaternion_wxyz"], [0.5, 0.5, 0.5, 0.5])
+    assert np.allclose(
+        frame["segments"]["5"]["quaternion_wxyz"], [0.707, 0.0, 0.707, 0.0])
     ts, pos = parse_mxtp02(pkt, segment_id=1)
     assert ts == 2.5 and np.allclose(pos, [0.1, 0.2, 0.3])
     assert parse_mxtp02(pkt, segment_id=7) is None      # absent segment
     assert parse_mxtp02(b"garbage", 1) is None          # malformed: no raise
     assert parse_mxtp02(pkt[:20], 1) is None            # truncated: no raise
+    assert parse_mxtp02_frame(pkt[:-1]) is None         # payload truncated
     assert parse_mxtp02(b"MXTP01" + pkt[6:], 1) is None  # wrong message type
 
 
@@ -109,11 +126,17 @@ def test_udp_listener_feeds_bridge_end_to_end():
     import socket as sk
     import time as tm
     b = MocapBridge()
-    lst = XsensListener(b, host="127.0.0.1", port=0)     # ephemeral port
+    seen = []
+    lst = XsensListener(b, host="127.0.0.1", port=0,
+                        on_frame=seen.append)             # ephemeral port
     port = lst._sock.getsockname()[1]
     lst.start()
     tx = sk.socket(sk.AF_INET, sk.SOCK_DGRAM)
-    tx.sendto(build_mxtp02({1: (1.0, 2.0, 3.0)}, 1000), ("127.0.0.1", port))
+    tx.sendto(build_mxtp02(
+        {1: (1.0, 2.0, 3.0), 2: (4.0, 5.0, 6.0)}, 1000,
+        sample_counter=99,
+        quaternions={2: (0.0, 1.0, 0.0, 0.0)}),
+        ("127.0.0.1", port))
     deadline = tm.monotonic() + 2.0
     s = None
     while tm.monotonic() < deadline:
@@ -124,6 +147,11 @@ def test_udp_listener_feeds_bridge_end_to_end():
     lst.stop(); tx.close()
     assert s is not None and np.allclose(s.position, [1.0, 2.0, 3.0])
     assert s.motive_timestamp == 1.0
+    assert len(seen) == 1
+    assert set(seen[0]["segments"]) == {"1", "2"}
+    assert seen[0]["sample_counter"] == 99
+    assert "received_monotonic_s" in seen[0]
+    assert lst.latest_frame() == seen[0]
 
 
 # ---------- OptiTrack official-SDK adapter + multi rigid bodies ----------

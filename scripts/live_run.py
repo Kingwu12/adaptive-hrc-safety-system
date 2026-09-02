@@ -40,6 +40,8 @@ from hrc_safety.config import load_config  # noqa: E402
 from hrc_safety.features import FeatureExtractor  # noqa: E402
 from hrc_safety.logging_schema import Command  # noqa: E402
 from hrc_safety.mocap import MocapBridge, load_extrinsics  # noqa: E402
+from hrc_safety.mocap.xsens_transport import (  # noqa: E402
+    MVN_FULL_BODY_SEGMENTS)
 from hrc_safety.pilot_model import load_upper_hmm  # noqa: E402
 
 REPO = os.path.join(os.path.dirname(__file__), "..")
@@ -80,9 +82,11 @@ def _make_controller(name: str, config: dict, model_path: str | None = None):
     return build_controller(name, config, fitted)
 
 
-def _raw_line(s, robot_bodies=None, xsens_sample=None) -> str:
+def _raw_line(s, robot_bodies=None, xsens_sample=None,
+              xsens_frame=None) -> str:
     """Identical schema to record_mocap.py so live runs double as traces."""
     record = {
+        "schema_version": 2,
         "t": round(s.t, 6), "pos": list(map(float, s.position)),
         "stale": s.stale, "age_s": round(s.age_s, 4),
         "motive_timestamp": s.motive_timestamp}
@@ -97,6 +101,8 @@ def _raw_line(s, robot_bodies=None, xsens_sample=None) -> str:
         record["xsens"] = {"position": list(map(float, xsens_sample.position)),
                             "age_s": round(xsens_sample.age_s, 4),
                             "stale": xsens_sample.stale}
+    if xsens_frame is not None:
+        record["xsens_frame"] = xsens_frame
     return json.dumps(record)
 
 
@@ -117,6 +123,7 @@ def run_live(args) -> int:
     listeners = []
     monitor = None
     xsens_bridge = None
+    xsens_listener = None
     if args.source in ("optitrack", "fused"):
         from hrc_safety.mocap import (NatNetV4Listener, OptiTrackListener,
                                       RigidBodyMonitor)
@@ -135,10 +142,11 @@ def run_live(args) -> int:
         listeners.append(listener)
     if args.source == "xsens":
         from hrc_safety.mocap.xsens_transport import XsensListener, PELVIS
-        listener = XsensListener(bridge, port=args.xsens_port,
-                                 segment_id=args.segment or PELVIS)
-        listener.start()
-        listeners.append(listener)
+        xsens_listener = XsensListener(
+            bridge, port=args.xsens_port,
+            segment_id=args.segment or PELVIS)
+        xsens_listener.start()
+        listeners.append(xsens_listener)
     elif args.source == "fused":
         from hrc_safety.mocap.xsens_transport import XsensListener, PELVIS
         xsens_bridge = MocapBridge(sample_rate_hz=config["features"]["sample_rate_hz"])
@@ -184,7 +192,18 @@ def run_live(args) -> int:
                     bodies = {i: b for i, b in bodies.items()
                               if i in args.robot_rigid_bodies}
                 xs = xsens_bridge.tick(now) if xsens_bridge else None
-                rec_fh.write(_raw_line(s, bodies, xs) + "\n")
+                frame = (xsens_listener.latest_frame()
+                         if xsens_listener is not None else None)
+                if xsens_listener is not None:
+                    segment_count = (0 if frame is None else
+                                     len(frame["segments"]))
+                    if segment_count < MVN_FULL_BODY_SEGMENTS:
+                        raise RuntimeError(
+                            "REFUSING recorded run with incomplete Xsens "
+                            f"stream ({segment_count}/"
+                            f"{MVN_FULL_BODY_SEGMENTS} body segments)."
+                        )
+                rec_fh.write(_raw_line(s, bodies, xs, frame) + "\n")
                 rec_fh.flush()
             if s.stale:
                 robot.apply(Command.PROTECTIVE_STOP, 0.0)

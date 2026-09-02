@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Record the raw Xsens mocap stream to append-only JSONL (pre-filtering).
 
-One line per 60 Hz tick: {"t":..., "pos":[x,y,z], "stale":..., "age_s":...,
-"motive_timestamp":...}  (field name kept for replay compatibility; carries
-the MVN time code in seconds). Sessions replay offline through ALL rungs and
-feed fit_transitions labelling.
+One line per 60 Hz tick contains the selected segment's compatibility fields
+plus ``xsens_frame``: every segment position, every quaternion, packet
+counters and timestamps. ``motive_timestamp`` is kept for replay compatibility
+and carries the MVN time code in seconds. Sessions replay offline through ALL
+rungs and feed fit_transitions labelling.
 
 MVN Analyze setup: Options -> Network Streamer -> UDP, "Position +
 Quaternion" datagram, target = this machine : 9763.
@@ -24,7 +25,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from hrc_safety.config import load_config  # noqa: E402
 from hrc_safety.mocap import MocapBridge, load_extrinsics  # noqa: E402
-from hrc_safety.mocap.xsens_transport import XsensListener, PELVIS  # noqa: E402
+from hrc_safety.mocap.xsens_transport import (  # noqa: E402
+    MVN_FULL_BODY_SEGMENTS, PELVIS, XsensListener)
 
 
 def main() -> int:
@@ -48,15 +50,32 @@ def main() -> int:
     os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)
     dt = 1.0 / cfg.features.sample_rate_hz
     print(f"listening on udp:{args.port} -> {args.out}  (Ctrl-C to stop)")
+    last_incomplete_count = None
     with open(args.out, "a") as fh:
         try:
             while True:
                 s = bridge.tick(time.monotonic())
                 if s is not None:
+                    frame = listener.latest_frame()
+                    segment_count = (0 if frame is None else
+                                     len(frame["segments"]))
+                    if segment_count < MVN_FULL_BODY_SEGMENTS:
+                        if segment_count != last_incomplete_count:
+                            print(
+                                "NOT RECORDING: incomplete Xsens stream "
+                                f"({segment_count}/{MVN_FULL_BODY_SEGMENTS} "
+                                "body segments). Check MVN Position + "
+                                "Quaternion output."
+                            )
+                            last_incomplete_count = segment_count
+                        time.sleep(dt)
+                        continue
                     fh.write(json.dumps({
+                        "schema_version": 2,
                         "t": round(s.t, 6), "pos": list(map(float, s.position)),
                         "stale": s.stale, "age_s": round(s.age_s, 4),
-                        "motive_timestamp": s.motive_timestamp}) + "\n")
+                        "motive_timestamp": s.motive_timestamp,
+                        "xsens_frame": frame}) + "\n")
                 time.sleep(dt)
         except KeyboardInterrupt:
             print("stopped.")

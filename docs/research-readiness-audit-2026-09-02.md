@@ -31,7 +31,7 @@ state and not the safety truth.
 | Layer | Current input | Defensible role | It cannot establish |
 |---|---|---|---|
 | OptiTrack geometry | One tracked head rigid body and live TCP | Head-proxy distance and closing kinematics | Full body or reaching-limb clearance |
-| Xsens path | Selected pelvis position/liveness; quaternion and other segments are not model inputs | Concurrent wearable trace and liveness in the current path | Fall recognition or articulated-body fusion |
+| Xsens path | Historical pilot files: pelvis XYZ only. Schema v2 onward: all received segment positions/quaternions, while the current model still excludes them | Concurrent wearable trace; future posture/event-feature research after validation | Existing-pilot full-body evidence, validated fall recognition or safety-rated fusion |
 | GMM-HMM | `d`, `v_proj`, speed, `a_proj` | Development activity classifier and optional conservative slowdown context | General hazard detection or safety certification |
 | Kinematic horizon | Head-proxy distance, closing speed and acceleration | Anticipation of a defined rapid boundary intrusion | Intent, loss of balance, or arbitrary hazards |
 | Zone/envelope code | Simplified `K*T+C+Sa` geometry | Reproducible deterministic command bound for comparison | A complete validated protective-separation calculation |

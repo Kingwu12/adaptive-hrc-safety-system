@@ -27,6 +27,11 @@ system into the existing pipeline. Nothing here is speculative hardware — the
 lab owns the tracker; the needed code is deliberately thin. Three components,
 in build order.
 
+> **CORRECTION 2026-09-02:** the original Xsens receiver retained only pelvis
+> XYZ even though MXTP02 Position + Quaternion packets carry multiple segment
+> items. Schema v2 now preserves every received position and quaternion plus
+> packet counters. See `docs/lab-notes/2026-09-02-xsens-capture-gap.md`.
+
 ## 1. NatNet bridge client (`src/hrc_safety/mocap/natnet_bridge.py`)
 
 Motive streams rigid-body poses over NatNet (UDP multicast). The bridge's whole
@@ -49,12 +54,13 @@ Decisions proposed:
 
 ## 2. Raw-stream recorder (`scripts/record_mocap.py`)
 
-Append-only JSONL: `{t, pos, rb_tracked, motive_timestamp}` per tick, before
-any filtering. Every pilot session becomes replayable offline through ALL
-rungs via the existing `scripts/replay.py` path — one human session, three
-controller results, zero extra lab time. This is also the labelled-data source
-for `fit_transitions` / `fit_emissions` (teammates label the video; timestamps
-join on `t`).
+Append-only JSONL. Schema v2 keeps the selected-point compatibility fields and
+the complete Xsens MXTP02 packet under `xsens_frame`, including every received
+segment position/quaternion and alignment counters. Every pilot session becomes
+replayable offline through ALL rungs via the existing `scripts/replay.py` path
+— one human session, three controller results, zero extra lab time. This is
+also the labelled-data source for `fit_transitions` / `fit_emissions`
+(teammates label the video; timestamps join on `t`).
 
 ## 3. Calibration glue (`scripts/calibrate_mocap.py` + lab-day checklist)
 

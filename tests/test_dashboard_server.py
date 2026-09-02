@@ -17,6 +17,24 @@ from scripts.dashboard_server import (DashboardState, GuidedRunController,
                                       RigControl, RunCatalog, safe_id)
 
 
+def _full_xsens_frame() -> dict:
+    segments = {
+        str(segment_id): {
+            "position_m": [float(segment_id), 0.0, 1.0],
+            "quaternion_wxyz": [1.0, 0.0, 0.0, 0.0],
+        }
+        for segment_id in range(1, 24)
+    }
+    segments["2"]["quaternion_wxyz"] = [0.5, 0.5, 0.5, 0.5]
+    return {
+        "message_id": "MXTP02", "sample_counter": 17,
+        "datagram_counter": 0, "time_code_s": 1.25,
+        "avatar_id": 0, "item_count": 23, "body_segment_count": 23,
+        "prop_count": 0, "finger_segment_count": 0, "payload_size": 736,
+        "received_monotonic_s": time.monotonic(), "segments": segments,
+    }
+
+
 def test_safe_id_removes_path_characters():
     assert safe_id("../P 01/", "fallback") == "P-01"
 
@@ -72,6 +90,7 @@ def test_run_catalog_marks_incomplete_short_attempt_for_repeat(tmp_path):
 
 def test_dashboard_state_records_enriched_labelled_frames(tmp_path):
     state = DashboardState(tmp_path, segment_id=1)
+    state.on_xsens_frame(_full_xsens_frame())
     base = time.monotonic()
     for i in range(12):
         wall = base + i / 60.0
@@ -84,11 +103,12 @@ def test_dashboard_state_records_enriched_labelled_frames(tmp_path):
 
     snap = state.snapshot()
     assert snap["connected"] is True
+    assert snap["xsens_segment_count"] == 23
     assert snap["hmm_state"] in {"approaching", "working", "retreating", "hazard"}
     assert snap["feature"]["speed"] > 0
 
     state.mark_calibrated()
-    state.start_session("P/01", "T 01")
+    state.start_session("P/01", "T 01", mvn_recording_confirmed=True)
     state.set_label("approaching")
     for i in range(12, 15):
         wall = base + i / 60.0
@@ -102,6 +122,10 @@ def test_dashboard_state_records_enriched_labelled_frames(tmp_path):
     rows = [json.loads(line) for line in path.read_text().splitlines()]
     row = next(item for item in rows if item["features"] is not None)
     assert row["participant_id"] == "P-01"
+    assert row["schema_version"] == 2
+    assert len(row["xsens_frame"]["segments"]) == 23
+    assert row["xsens_frame"]["segments"]["2"]["quaternion_wxyz"] == [
+        0.5, 0.5, 0.5, 0.5]
     assert row["trial_id"] == "T-01"
     assert row["ground_truth"] == "approaching"
     assert row["features"]["v_proj"] > 0
@@ -110,6 +134,7 @@ def test_dashboard_state_records_enriched_labelled_frames(tmp_path):
 
 def test_start_session_resets_temporal_model_state(tmp_path):
     state = DashboardState(tmp_path, segment_id=1)
+    state.on_xsens_frame(_full_xsens_frame())
     base = time.monotonic()
     for i in range(8):
         wall = base + i / 60.0
@@ -120,7 +145,7 @@ def test_start_session_resets_temporal_model_state(tmp_path):
 
     assert state.feature is not None
     assert state.posterior
-    state.start_session("P01", "T01")
+    state.start_session("P01", "T01", mvn_recording_confirmed=True)
 
     assert state.feature is None
     assert state.posterior == {}
@@ -137,13 +162,28 @@ def test_dashboard_rejects_recording_without_optitrack(tmp_path):
         state.start_session("P01", "T07")
 
 
+def test_dashboard_rejects_incomplete_xsens_body_stream(tmp_path):
+    state = DashboardState(tmp_path, segment_id=1)
+    now = time.monotonic()
+    state.on_sample(0.0, (1.0, 0.0, 1.0), True, now)
+    state.optitrack_bridge.on_sample(0.0, (1.0, 0.0, 1.0), True, now)
+    frame = _full_xsens_frame()
+    frame["segments"] = {"1": frame["segments"]["1"]}
+    frame["item_count"] = frame["body_segment_count"] = 1
+    state.on_xsens_frame(frame)
+    state.tick()
+    with pytest.raises(ValueError, match="received 1/23"):
+        state.start_session("P01", "T08")
+
+
 def test_guided_protocol_persists_and_applies_labels(tmp_path):
     state = DashboardState(tmp_path, segment_id=1)
+    state.on_xsens_frame(_full_xsens_frame())
     now = time.monotonic()
     state.on_sample(0.0, (2.0, 0.0, 1.0), True, now)
     state.optitrack_bridge.on_sample(0.0, (2.0, 0.0, 1.0), True, now)
     state.tick()
-    state.start_session("P01", "T-guided")
+    state.start_session("P01", "T-guided", mvn_recording_confirmed=True)
 
     first = state.snapshot()
     assert first["guided_step"] == 0
@@ -301,7 +341,10 @@ class FakeGuidedState:
             "feature": {"d": self.distance},
         }
 
-    def start_session(self, participant, trial):
+    def start_session(self, participant, trial,
+                      mvn_recording_confirmed=False):
+        if not mvn_recording_confirmed:
+            raise ValueError("Confirm that native recording is active")
         self.recording = True
         self.step = 0
         return {"message": "recording", "path": "fake.jsonl"}
@@ -460,7 +503,9 @@ def test_integrated_guided_start_requires_released_low_rig():
     assert state.recording is False
 
     rig.vacuum = (0, 0)
-    result = guided.start("P01", "T01")
+    with pytest.raises(ValueError, match="native recording"):
+        guided.start("P01", "T01")
+    result = guided.start("P01", "T01", mvn_recording_confirmed=True)
     assert result["message"] == "recording"
     assert state.recording is True
 

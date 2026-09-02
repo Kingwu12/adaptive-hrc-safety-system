@@ -22,6 +22,9 @@ npm run dev
 Open <http://localhost:3000>. Xsens Analyze/Animate and the Awinda USB driver
 run on Windows 10/11, not macOS: attach the Awinda dongle to the Windows host,
 then stream `Position + Quaternion` over UDP to this Mac on port `9763`.
+The header must show `Xsens 23/23 segments` before recording. Also start a
+native MVN recording on Windows; the Mac JSONL stores synchronized segment
+poses, while the native file preserves the broader MVN data product.
 
 ## Trusted lab-network viewing
 

@@ -13,6 +13,12 @@ excluded_claims:
   - safety certification
 
 gates:
+  xsens_capture_integrity:
+    complete: false
+    evidence: null
+    requirement: >-
+      Pass verify_xsens_capture.py on a schema-v2 preflight with all 23 body
+      segment poses, and document the corresponding native MVN recording file.
   end_to_end_stop_time:
     complete: false
     evidence: null

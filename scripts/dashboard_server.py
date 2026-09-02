@@ -35,7 +35,8 @@ from hrc_safety.lhmm.upper import (STATES, GaussianMixtureEmissions)  # noqa: E4
 from hrc_safety.pilot_model import load_upper_hmm  # noqa: E402
 from hrc_safety.mocap import (MocapBridge, NatNetV4Listener,
                               RigidBodyMonitor, load_extrinsics)  # noqa: E402
-from hrc_safety.mocap.xsens_transport import PELVIS, XsensListener  # noqa: E402
+from hrc_safety.mocap.xsens_transport import (  # noqa: E402
+    MVN_FULL_BODY_SEGMENTS, PELVIS, XsensListener)
 
 ALLOWED_LABELS = {"unlabelled", "approaching", "working", "retreating", "hazard"}
 GUIDED_PROTOCOL_LABELS = (
@@ -348,6 +349,7 @@ class DashboardState:
         self.last_packet_wall: float | None = None
         self.position: list[float] | None = None
         self.xsens_position: list[float] | None = None
+        self.xsens_frame: dict | None = None
         self.optitrack_stale = True
         self.optitrack_age_s: float | None = None
         self.feature: dict | None = None
@@ -361,6 +363,7 @@ class DashboardState:
         self.guided_step: int | None = None
         self.recording_path: str | None = None
         self.samples_written = 0
+        self.mvn_recording_confirmed = False
         self.calibration_started: float | None = None
         self.file = None
 
@@ -370,6 +373,11 @@ class DashboardState:
             self.packets += 1
             self.last_packet_wall = wall_time
             self.packet_times.append(wall_time)
+
+    def on_xsens_frame(self, frame: dict) -> None:
+        """Retain the complete MXTP02 packet for the recording tick."""
+        with self.lock:
+            self.xsens_frame = frame
 
     def tick(self) -> None:
         now = time.monotonic()
@@ -401,7 +409,7 @@ class DashboardState:
             self.hmm_state = state
             if self.recording and self.file is not None:
                 record = {
-                    "schema_version": 1,
+                    "schema_version": 2,
                     "session_id": self.session_id,
                     "participant_id": self.participant_id,
                     "trial_id": self.trial_id,
@@ -409,6 +417,7 @@ class DashboardState:
                     "source_time_s": xsens_sample.motive_timestamp,
                     "position": self.position,
                     "xsens_position": self.xsens_position,
+                    "xsens_frame": self.xsens_frame,
                     "stale": self.optitrack_stale,
                     "age_s": (None if self.optitrack_age_s is None else
                               round(self.optitrack_age_s, 5)),
@@ -417,12 +426,14 @@ class DashboardState:
                     "hmm_state": state,
                     "hmm_posterior": posterior,
                     "model_source": self.model_source,
+                    "mvn_native_recording_confirmed": self.mvn_recording_confirmed,
                 }
                 self.file.write(json.dumps(record, separators=(",", ":")) + "\n")
                 self.file.flush()
                 self.samples_written += 1
 
-    def start_session(self, participant: object, trial: object) -> dict:
+    def start_session(self, participant: object, trial: object,
+                      mvn_recording_confirmed: bool = False) -> dict:
         with self.lock:
             if self.recording:
                 raise ValueError("A recording is already active")
@@ -430,6 +441,19 @@ class DashboardState:
                 raise ValueError("Xsens is not streaming yet")
             if self.optitrack_stale:
                 raise ValueError("OptiTrack is not streaming a fresh head pose yet")
+            segment_count = (0 if self.xsens_frame is None else
+                             len(self.xsens_frame["segments"]))
+            if segment_count < MVN_FULL_BODY_SEGMENTS:
+                raise ValueError(
+                    "Xsens full-body capture is incomplete: "
+                    f"received {segment_count}/{MVN_FULL_BODY_SEGMENTS} "
+                    "segments. Check MVN Position + Quaternion streaming."
+                )
+            if mvn_recording_confirmed is not True:
+                raise ValueError(
+                    "Confirm that native recording is active in MVN Analyze "
+                    "before starting the participant run."
+                )
             # Every recorded trial is an independent sequence. Do not let the
             # previous trial's HMM belief or derivative windows leak across it.
             self.hmm.reset()
@@ -446,6 +470,7 @@ class DashboardState:
             self.file = path.open("x", encoding="utf-8")
             self.recording_path = str(path.resolve())
             self.samples_written = 0
+            self.mvn_recording_confirmed = True
             self.label = "unlabelled"
             self.guided_step = 0
             self.recording = True
@@ -467,6 +492,7 @@ class DashboardState:
                 self.file = None
             self.label = "unlabelled"
             self.guided_step = None
+            self.mvn_recording_confirmed = False
             return {"message": f"Saved {self.samples_written} samples", "path": self.recording_path}
 
     def set_label(self, label: object) -> dict:
@@ -528,6 +554,8 @@ class DashboardState:
                 "age_s": None if age is None else round(age, 4),
                 "position": self.position,
                 "xsens_position": self.xsens_position,
+                "xsens_segment_count": (0 if self.xsens_frame is None else
+                                         len(self.xsens_frame["segments"])),
                 "optitrack_connected": not self.optitrack_stale,
                 "optitrack_age_s": (None if self.optitrack_age_s is None else
                                     round(self.optitrack_age_s, 4)),
@@ -1006,7 +1034,8 @@ class GuidedRunController:
             )
         return pose
 
-    def start(self, participant: object, trial: object) -> dict:
+    def start(self, participant: object, trial: object,
+              mvn_recording_confirmed: bool = False) -> dict:
         """Preflight the low, released rig before opening a guided recording."""
         with self.lock:
             self._clear_arm()
@@ -1022,7 +1051,8 @@ class GuidedRunController:
                     "Guided run requires the arm low with suction off; "
                     "use the manual recovery controls to release the current panel first"
                 )
-            result = self.state.start_session(participant, trial)
+            result = self.state.start_session(
+                participant, trial, mvn_recording_confirmed)
             return {**result, "preflight": {
                 "pose": "pose1_low", "vacuum": vacuum,
                 "operator_clearance_m": self.motion_clearance_m,
@@ -1246,7 +1276,8 @@ class ApiHandler(BaseHTTPRequestHandler):
                 elif self.path == "/api/protocol/start":
                     participant_id = body.get("participant_id")
                     result = self.guided.start(
-                        participant_id, self.catalog.next_trial(participant_id))
+                        participant_id, self.catalog.next_trial(participant_id),
+                        body.get("mvn_recording_confirmed") is True)
                 elif self.path == "/api/protocol/arm":
                     result = self.guided.arm_step()
                 elif self.path == "/api/protocol/complete":
@@ -1260,7 +1291,9 @@ class ApiHandler(BaseHTTPRequestHandler):
             if remote and not self.allow_remote_control:
                 return self._json({"error": "Remote browsers are view-only"}, 403)
             if self.path == "/api/session/start":
-                result = self.state.start_session(body.get("participant_id"), body.get("trial_id"))
+                result = self.state.start_session(
+                    body.get("participant_id"), body.get("trial_id"),
+                    body.get("mvn_recording_confirmed") is True)
             elif self.path == "/api/session/stop":
                 result = self.state.stop_session()
             elif self.path == "/api/label":
@@ -1301,7 +1334,9 @@ def main() -> int:
 
     state = DashboardState(Path(args.out), args.segment, Path(args.model))
     catalog = RunCatalog(Path(args.out))
-    listener = XsensListener(state, port=args.udp_port, segment_id=args.segment)
+    listener = XsensListener(
+        state, port=args.udp_port, segment_id=args.segment,
+        on_frame=state.on_xsens_frame)
     listener.start()
     optitrack_monitor = RigidBodyMonitor()
     optitrack_listener = NatNetV4Listener(

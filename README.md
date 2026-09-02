@@ -56,6 +56,8 @@ python scripts/train_pilot_hmm.py --participants P03,P04,P05 --validation partic
 
 # On a Windows 10/11 machine, run Xsens Analyze/Animate with the Awinda
 # dongle attached. Stream Position + Quaternion over UDP to this Mac:9763.
+# Before a real run, the console must show Xsens 23/23 segments. Schema v2
+# persists every segment XYZ + quaternion and refuses pelvis-only recording.
 
 # Optional group viewing on trusted lab Wi-Fi (remote browsers are view-only)
 python scripts/dashboard_server.py --share
@@ -109,6 +111,7 @@ Layered GMM-HMM (observation: d, v_proj, speed, a_proj)
 | `src/hrc_safety/metrics.py` | Head-to-head metrics (interruption burden, sensitivity/specificity, lead time) |
 | `src/hrc_safety/analysis.py` | One harness that builds a named controller + scores it (shared SSOT) |
 | `src/hrc_safety/logging_schema.py` | Shared `DecisionRecord` + JSONL logger |
+| `src/hrc_safety/mocap/xsens_transport.py` | Full MXTP02 packet capture plus pelvis compatibility view |
 | `src/hrc_safety/sim/` | Synthetic scenario generator (with distractors) + trace runner |
 | `src/hrc_safety/robot/` | `MockRobot` + `URRobot` (ur-rtde) |
 | `scripts/run_simulation.py` | End-to-end fit → run 3 rungs + ablation → compare → emit metrics JSON |

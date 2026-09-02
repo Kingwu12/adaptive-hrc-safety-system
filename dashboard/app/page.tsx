@@ -14,6 +14,7 @@ type Status = {
   stale: boolean;
   age_s: number | null;
   position: number[] | null;
+  xsens_segment_count: number;
   optitrack_connected: boolean;
   optitrack_age_s: number | null;
   feature: Feature | null;
@@ -62,7 +63,8 @@ type Catalog = { participants: ParticipantSummary[]; runs: RunSummary[] };
 
 const EMPTY: Status = {
   connected: false, packets: 0, packet_rate_hz: 0, stale: true, age_s: null,
-  position: null, optitrack_connected: false, optitrack_age_s: null,
+  position: null, xsens_segment_count: 0,
+  optitrack_connected: false, optitrack_age_s: null,
   feature: null, posterior: {}, hmm_state: null,
   model_source: "synthetic baseline", recording: false, session_id: null,
   participant_id: null, trial_id: null, label: "unlabelled",
@@ -222,6 +224,7 @@ export default function Home() {
   const [catalogRefresh, setCatalogRefresh] = useState(0);
   const [participantEditor, setParticipantEditor] = useState<"new" | "rename" | null>(null);
   const [participantName, setParticipantName] = useState("");
+  const [mvnRecordingConfirmed, setMvnRecordingConfirmed] = useState(false);
   const [message, setMessage] = useState("Start the local sensor service, then enable MVN Network Streamer.");
   const [rig, setRig] = useState<Rig>({});
   const [rigBusy, setRigBusy] = useState<string | null>(null);
@@ -342,7 +345,11 @@ export default function Home() {
   };
 
   const startRecording = async () => {
-    await post("/api/protocol/start", { participant_id: participant });
+    const result = await post("/api/protocol/start", {
+      participant_id: participant,
+      mvn_recording_confirmed: mvnRecordingConfirmed,
+    });
+    if (result) setMvnRecordingConfirmed(false);
   };
 
   const abortRecording = async () => {
@@ -459,6 +466,7 @@ export default function Home() {
   });
 
   const calibration = status.calibration_elapsed_s;
+  const xsensComplete = status.connected && status.xsens_segment_count >= 23;
   const calibrationClass = calibration != null && calibration >= 270 ? "warning" : "ok";
   const dominant = useMemo(() => status.hmm_state || "waiting", [status.hmm_state]);
   const guidedIndex = Math.min(status.guided_step ?? 0, GUIDED_PROTOCOL.length - 1);
@@ -473,7 +481,7 @@ export default function Home() {
         <div className="brand"><span className="brandMark">HRC</span><div><strong>Operator Motion Console</strong><small>Adaptive safety · Xsens MVN</small></div></div>
         <div className="statusCluster">
           <span className={`pill ${reachable ? "ok" : "offline"}`}><i />Service {reachable ? "online" : "offline"}</span>
-          <span className={`pill ${status.connected ? "ok" : "offline"}`}><i />Xsens {status.connected ? "streaming" : "waiting"}</span>
+          <span className={`pill ${xsensComplete ? "ok" : "offline"}`}><i />Xsens {status.connected ? `${status.xsens_segment_count}/23 segments` : "waiting"}</span>
           <span className={`pill ${status.optitrack_connected ? "ok" : "offline"}`}><i />OptiTrack {status.optitrack_connected ? "tracking" : "waiting"}</span>
           <span className="clock">{status.packet_rate_hz.toFixed(1)} Hz</span>
         </div>
@@ -534,8 +542,9 @@ export default function Home() {
             <button onClick={() => { setParticipantEditor(null); setParticipantName(""); }}>Cancel</button>
           </div>}
           <div className="actions">
-            {!status.recording ? <button className="primary" disabled={!status.connected || !status.optitrack_connected || !participant} onClick={startRecording}>Start {nextTrial} guided run</button> : <button className="stop" onClick={() => void abortRecording()}>Abort / stop & save</button>}
+            {!status.recording ? <button className="primary" disabled={!xsensComplete || !status.optitrack_connected || !participant || !mvnRecordingConfirmed} onClick={startRecording}>Start {nextTrial} guided run</button> : <button className="stop" onClick={() => void abortRecording()}>Abort / stop & save</button>}
           </div>
+          {!status.recording && <label className="preflightCheck"><input type="checkbox" checked={mvnRecordingConfirmed} onChange={event => setMvnRecordingConfirmed(event.target.checked)} /><span>Native recording is active in MVN Analyze and its file path is visible.</span></label>}
           {!status.recording && <p className="startHint">The next trial number comes from the files already saved for this participant. Every attempt is preserved and counted automatically.</p>}
           <p className="feedback">{message}</p>
           <dl className="sessionFacts"><div><dt>Samples</dt><dd>{status.samples_written.toLocaleString()}</dd></div><div><dt>Packet age</dt><dd>{n(status.age_s, 3)} s</dd></div><div><dt>Calibration</dt><dd className={calibrationClass}>{calibration == null ? "Not marked" : `${Math.floor(calibration / 60)}:${String(Math.floor(calibration % 60)).padStart(2, "0")}`}</dd></div></dl>

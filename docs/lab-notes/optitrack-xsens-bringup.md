@@ -46,8 +46,10 @@ python scripts/live_run.py --source fused --robot mock `
 
 Cover the head cluster for longer than 150 ms and confirm `TRACKING LOST ->
 protective_stop`. Move each robot cluster and inspect its matching ID in the
-JSONL. Xsens data appears under `xsens`; OptiTrack head position remains the
-absolute safety input.
+JSONL. The selected Xsens pelvis sample appears under `xsens`; the complete
+MXTP02 packet appears under `xsens_frame`. Confirm all 23 body segments and
+their quaternions are present before continuing. OptiTrack head position
+remains the absolute safety input.
 
 ## Real-arm gate
 
