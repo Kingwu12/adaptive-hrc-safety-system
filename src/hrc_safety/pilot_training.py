@@ -152,3 +152,48 @@ def leave_one_trial_out(trials: list[TrialData]) -> dict:
         "confusion": report.confusion.tolist(),
         "folds": folds,
     }
+
+
+def leave_one_participant_out(trials: list[TrialData]) -> dict:
+    """Validate on people absent from fitting, not merely unseen adjacent runs."""
+    participant_ids = sorted({trial.participant_id for trial in trials})
+    if len(participant_ids) < 2:
+        raise ValueError("Participant-level validation requires at least two participants")
+
+    predictions: list[str] = []
+    ground_truth: list[str] = []
+    folds: list[dict] = []
+    for held_out_id in participant_ids:
+        training = [trial for trial in trials
+                    if trial.participant_id != held_out_id]
+        held_out = [trial for trial in trials
+                    if trial.participant_id == held_out_id]
+        model = fit_trials(training)
+        fold_predictions: list[str] = []
+        fold_truth: list[str] = []
+        for trial in held_out:
+            predicted = model.viterbi(trial.X)
+            fold_predictions.extend(predicted)
+            fold_truth.extend(trial.labels)
+        report = recognition_report(fold_predictions, fold_truth)
+        predictions.extend(fold_predictions)
+        ground_truth.extend(fold_truth)
+        folds.append({
+            "participant_id": held_out_id,
+            "held_out_trials": len(held_out),
+            "training_trials": len(training),
+            "accuracy": report.accuracy,
+            "hazard_precision": report.hazard_precision,
+            "hazard_recall": report.hazard_recall,
+            "confusion": report.confusion.tolist(),
+        })
+    report = recognition_report(predictions, ground_truth)
+    return {
+        "method": "leave-one-participant-out",
+        "participants": participant_ids,
+        "accuracy": report.accuracy,
+        "hazard_precision": report.hazard_precision,
+        "hazard_recall": report.hazard_recall,
+        "confusion": report.confusion.tolist(),
+        "folds": folds,
+    }

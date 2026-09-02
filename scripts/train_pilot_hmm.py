@@ -16,6 +16,7 @@ from hrc_safety.pilot_model import save_upper_hmm  # noqa: E402
 from hrc_safety.pilot_training import (  # noqa: E402
     complete_trials,
     fit_trials,
+    leave_one_participant_out,
     leave_one_trial_out,
     load_trials,
 )
@@ -30,25 +31,49 @@ def main() -> int:
     parser.add_argument("--min-complete-trials", type=int, default=3)
     parser.add_argument("--min-samples-per-state", type=int, default=30)
     parser.add_argument(
+        "--participants",
+        help="comma-separated participant IDs to include (for example P03,P04,P05)",
+    )
+    parser.add_argument(
+        "--validation",
+        choices=("auto", "participant", "trial"),
+        default="auto",
+        help="validation split; auto uses participant-level when possible",
+    )
+    parser.add_argument(
         "--check-only", action="store_true", help="report readiness without fitting"
     )
     args = parser.parse_args()
 
-    trials = load_trials(args.input)
-    if not trials:
+    scanned = load_trials(args.input)
+    if not scanned:
         print(f"No JSONL recordings found in {Path(args.input).resolve()}")
+        return 2
+    selected_ids = None
+    if args.participants:
+        selected_ids = {value.strip() for value in args.participants.split(",")
+                        if value.strip()}
+        if not selected_ids:
+            print("No valid participant IDs were supplied")
+            return 2
+    trials = [trial for trial in scanned
+              if selected_ids is None or trial.participant_id in selected_ids]
+    if not trials:
+        print("No recordings matched the participant filter")
         return 2
 
     print("Pilot-data quality gate")
     print(f"  required states: {', '.join(STATES)}")
     print(f"  minimum labelled samples/state/trial: {args.min_samples_per_state}")
+    if selected_ids is not None:
+        print(f"  participant filter: {', '.join(sorted(selected_ids))}")
     print()
     for trial in trials:
         counts = trial.counts
         count_text = " ".join(f"{state[:4]}={counts[state]:5d}" for state in STATES)
         ready = "COMPLETE" if trial.is_complete(args.min_samples_per_state) else "incomplete"
         print(
-            f"  {trial.trial_id:>6}  {ready:<10} {count_text} "
+            f"  {trial.participant_id:>5}/{trial.trial_id:<5} {ready:<10} {count_text} "
             f"skipped={trial.skipped_rows}"
         )
 
@@ -56,7 +81,7 @@ def main() -> int:
     print()
     print(
         f"Complete loops: {len(usable)}/{args.min_complete_trials} required "
-        f"({len(trials)} recordings scanned)"
+        f"({len(trials)} selected; {len(scanned)} recordings scanned)"
     )
     if len(usable) < args.min_complete_trials:
         remaining = args.min_complete_trials - len(usable)
@@ -69,12 +94,29 @@ def main() -> int:
         print("READY: quality gate passed; run again without --check-only to fit.")
         return 0
 
+    participant_ids = sorted({trial.participant_id for trial in usable})
+    validation_method = args.validation
+    if validation_method == "auto":
+        validation_method = "participant" if len(participant_ids) >= 2 else "trial"
+    if validation_method == "participant" and len(participant_ids) < 2:
+        print("NOT READY: participant-level validation requires at least two participants")
+        return 2
+
     model = fit_trials(usable)
-    validation = leave_one_trial_out(usable)
+    validation = (leave_one_participant_out(usable)
+                  if validation_method == "participant"
+                  else leave_one_trial_out(usable))
     summary = {
-        "recordings_scanned": len(trials),
+        "recordings_scanned": len(scanned),
+        "recordings_selected": len(trials),
         "complete_trials": len(usable),
-        "training_trial_ids": [trial.trial_id for trial in usable],
+        "participants": participant_ids,
+        "training_runs": [
+            {"participant_id": trial.participant_id,
+             "trial_id": trial.trial_id,
+             "file_name": trial.path.name}
+            for trial in usable
+        ],
         "label_counts": {
             state: sum(trial.counts[state] for trial in usable) for state in STATES
         },
@@ -90,7 +132,7 @@ def main() -> int:
     )
     print(f"FITTED: {target.resolve()}")
     print(
-        "LOTO validation: "
+        f"{validation['method']} validation: "
         f"accuracy={validation['accuracy']:.3f} "
         f"hazard_precision={validation['hazard_precision']:.3f} "
         f"hazard_recall={validation['hazard_recall']:.3f}"

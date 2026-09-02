@@ -42,9 +42,10 @@ python scripts/replay.py --controller all   # offline replay/ablation over a log
 python scripts/dashboard_server.py          # localhost-only sensor service
 cd dashboard && npm run dev                 # open http://localhost:3000
 
-# After collecting labelled pilot loops (requires >=3 complete four-state loops)
-python scripts/train_pilot_hmm.py --check-only
-python scripts/train_pilot_hmm.py
+# After collecting labelled pilot loops (requires >=3 complete four-state loops).
+# Filter out bring-up files and validate on people absent from model fitting.
+python scripts/train_pilot_hmm.py --participants P03,P04,P05 --validation participant --check-only
+python scripts/train_pilot_hmm.py --participants P03,P04,P05 --validation participant
 # Restart dashboard_server.py; it loads data/models/pilot_hmm.json automatically.
 
 # On a Windows 10/11 machine, run Xsens Analyze/Animate with the Awinda

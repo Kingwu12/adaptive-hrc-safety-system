@@ -4,10 +4,11 @@ import numpy as np
 
 from hrc_safety.lhmm.upper import STATES
 from hrc_safety.pilot_model import load_upper_hmm, save_upper_hmm
-from hrc_safety.pilot_training import fit_trials, leave_one_trial_out, load_trial
+from hrc_safety.pilot_training import (fit_trials, leave_one_participant_out,
+                                       leave_one_trial_out, load_trial)
 
 
-def _write_trial(path, trial_id, offset=0.0):
+def _write_trial(path, trial_id, offset=0.0, participant_id="P-test"):
     with path.open("w", encoding="utf-8") as fh:
         for state_index, state in enumerate(STATES):
             for sample_index in range(35):
@@ -18,7 +19,7 @@ def _write_trial(path, trial_id, offset=0.0):
                     "a_proj": [0.2, 0.0, -0.2, 1.2][state_index],
                 }
                 fh.write(json.dumps({
-                    "participant_id": "P-test",
+                    "participant_id": participant_id,
                     "trial_id": trial_id,
                     "ground_truth": state,
                     "features": feature,
@@ -56,3 +57,23 @@ def test_unlabelled_gap_does_not_create_transition(tmp_path):
             fh.write(json.dumps({"ground_truth": label, "features": feature}) + "\n")
     trial = load_trial(path)
     assert trial.sequences == [["approaching"], ["working"]]
+
+
+def test_leave_one_participant_out_never_trains_on_held_out_person(tmp_path):
+    paths = []
+    for participant_index, participant_id in enumerate(("P01", "P02", "P03")):
+        for trial_index in range(2):
+            path = tmp_path / f"{participant_id}-T{trial_index + 1:02d}.jsonl"
+            _write_trial(path, f"T{trial_index + 1:02d}",
+                         offset=participant_index * 0.01,
+                         participant_id=participant_id)
+            paths.append(path)
+    trials = [load_trial(path) for path in paths]
+
+    validation = leave_one_participant_out(trials)
+
+    assert validation["method"] == "leave-one-participant-out"
+    assert validation["participants"] == ["P01", "P02", "P03"]
+    assert len(validation["folds"]) == 3
+    assert all(fold["held_out_trials"] == 2 for fold in validation["folds"])
+    assert validation["accuracy"] > 0.95
