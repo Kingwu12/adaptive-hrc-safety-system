@@ -21,8 +21,11 @@ import pytest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from hrc_safety.features import FeatureExtractor, nearest_column_point  # noqa: E402
+from hrc_safety.config import load_config  # noqa: E402
+from hrc_safety.lhmm.upper import GaussianMixtureEmissions  # noqa: E402
 from hrc_safety.logging_schema import Command  # noqa: E402
 from hrc_safety.robot import MockRobot  # noqa: E402
+from scripts.live_run import _make_controller  # noqa: E402
 
 
 def _extractor(tcp):
@@ -88,6 +91,18 @@ def test_none_pose_is_not_silently_defaulted():
     r = MockRobot(tcp=[0.0, 0.0, 2.2])
     r.tcp = None
     assert r.actual_tcp() is None
+
+
+def test_live_adaptive_controller_loads_pilot_artifact():
+    controller = _make_controller(
+        "adaptive", load_config(), "data/models/pilot_hmm.json"
+    )
+    assert isinstance(controller.hmm.emissions, GaussianMixtureEmissions)
+
+
+def test_live_adaptive_controller_refuses_missing_model(tmp_path):
+    with pytest.raises(SystemExit, match="REFUSING adaptive live run"):
+        _make_controller("adaptive", load_config(), str(tmp_path / "missing.json"))
 
 
 def test_full_cycle_sweep_moves_separation_monotonically():

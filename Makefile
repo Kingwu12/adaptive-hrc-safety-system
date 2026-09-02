@@ -10,7 +10,7 @@ PYTHON ?= python3
 METRICS := data/analysis/metrics.json
 TABLES  := paper/tables/three_rung.tex paper/tables/ablation.tex
 
-.PHONY: all sim tables paper test clean
+.PHONY: all sim tables paper test readiness clean
 
 all: paper
 
@@ -38,6 +38,10 @@ paper: tables
 # Convenience: run the test suite (safety invariants live here).
 test:
 	$(PYTHON) -m pytest -q
+
+# Fail-closed audit for a REPORTED moving-participant controller run.
+readiness:
+	$(PYTHON) scripts/research_readiness.py
 
 # Remove derived artifacts (everything here regenerates from source).
 clean:

@@ -18,9 +18,9 @@ bolter. Five phases repeat every cycle:
 Two orthogonal facts travel per tick and must never be conflated:
 
   * the CYCLE PHASE (`Phase`) -- which task step we are in; drives per-phase reporting.
-  * the robot's certified COLLABORATIVE MODE (`CollaborativeMode`) -- an ISO/TS 15066
-    operating mode reported BY THE ROBOT CONTROLLER (a certified FACT, never a learned
-    inference). The certified safety floor is mode-aware; the learned layer is not.
+  * the configured/controller-reported COLLABORATIVE MODE (`CollaborativeMode`) --
+    never a learned inference. The deterministic command bound is mode-aware; the
+    learned layer is not. A mode name alone is not evidence of a safety-rated function.
 
 This module is domain-level (imported by controllers, metrics, and the scenario) so the
 phase/mode names have exactly ONE definition. Adapting the scenario or a controller to a
@@ -33,15 +33,15 @@ from enum import Enum
 
 
 class CollaborativeMode(str, Enum):
-    """ISO/TS 15066 collaborative operating mode -- a CERTIFIED robot-reported fact.
+    """Configured collaborative operating mode used by the prototype.
 
-    The certified safety floor keys its behaviour off this signal:
+    The prototype command bound keys its behaviour off this signal:
       SSM            -- speed-and-separation monitoring: the dynamic envelope + the
                         fixed-RED hard stop govern (P2 transit, P5 retract).
-      HAND_GUIDE     -- hand-guiding: the robot holds the panel compliantly and the human
-                        guides it by hand; contact is permitted by design, at a certified
-                        compliant-hold speed (P3). This is why the fixed-RED breach does
-                        NOT force a stop here -- the contact is expected, not a violation.
+      HAND_GUIDE     -- intended hand-guiding: the robot holds the panel compliantly and
+                        the human guides it. Contact may be permitted only after the real
+                        robot mode, force limits, tooling and task are risk-assessed and
+                        validated; a software enum does not establish that permission.
       MONITORED_STOP -- safety-rated monitored stop: the robot is commanded dead still
                         while the human works at close range (P1 load, P4 bolt).
     """

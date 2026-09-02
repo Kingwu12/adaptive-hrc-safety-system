@@ -33,7 +33,7 @@ Monash University, Melbourne, Australia}
 
 \begin{abstract}
 % STUB. State: the problem (fixed protective-separation zones stall collaborative
-% work), the contribution (a certified speed-and-separation ENVELOPE that permits a
+% work), the contribution (a deterministic speed-and-separation command bound that permits a
 % learned Recognise--Predict--Adapt layer to add caution but never remove it), and
 % the headline result (interruption burden reduced at equal or better hazard
 % response, with the envelope guaranteeing the safety floor). Numbers reported here
@@ -50,7 +50,7 @@ assurance, safety shielding, layered hidden Markov model, construction robotics.
 % ergonomically punishing task. Fixed-zone speed-and-separation monitoring is safe
 % but blunt: it slows or stops the robot for a stationary worker who poses no
 % closing hazard, taxing throughput. Contribution list:
-% (1) a dynamic SSM ENVELOPE using measured approach speed as a certified floor;
+% (1) a dynamic SSM ENVELOPE using measured approach speed as a prototype bound;
 % (2) a learned state + horizon-prediction layer shielded by that floor;
 % (3) a three-rung evaluation (fixed-zone / dynamic-SSM / full) with a replay-based
 %     ablation and a distractor protocol that reports specificity, not just
@@ -70,7 +70,7 @@ assurance, safety shielding, layered hidden Markov model, construction robotics.
 \label{sec:arch}
 % STUB. The Recognise -> Predict -> Adapt pipeline, then the sem-2 additions.
 
-\subsection{Safety Envelope (Certified Floor)}
+\subsection{Safety Envelope (Deterministic Prototype Bound)}
 % STUB. The dynamic SSM stop distance with MEASURED approach speed:
 The protective stop distance uses the measured closing speed $v_{\text{proj}}$
 rather than a fixed worst-case human speed:
@@ -80,15 +80,19 @@ S(t) = \max(0,\, v_{\text{proj}}(t))\,T + C + S_a,
 \end{equation}
 and maps the gap $d - S$ to a maximum permissible speed fraction (0 at/inside $S$,
 ramping to 1 across a band). The learned layer may only reduce the command below
-this floor; a recognition error can therefore only add caution, never speed.
+this bound; a recognition error can therefore only add caution, never speed. This
+software invariant is not a certification claim: the installed geometry, uncertainty,
+reaction/stopping time, collaborative mode and output chain require physical validation.
 
 \subsection{Horizon Prediction}
 % STUB. Constant-acceleration time-to-breach fused with the state posterior.
 The anticipation signal is kinematic, not label-based: a constant-acceleration
 extrapolation gives the time until the operator crosses the red radius, clamped to a
 human-plausible acceleration to reject sensor noise, and gated on genuine closing
-motion. It is fused with the recognised hazard posterior by
-$\text{risk} = \max(p_{\text{hazard}}, \text{imminence})$.
+motion. Because the operational event is a rapid closing trajectory, both the legacy
+``hazard'' activity posterior and geometric imminence are gated on measured closing
+speed before fusion. The activity label alone cannot trigger a stop request for a
+stationary or retreating operator.
 
 \section{Experimental Method}
 \label{sec:method}
@@ -112,8 +116,12 @@ $\text{risk} = \max(p_{\text{hazard}}, \text{imminence})$.
 % the versions committed here are SYNTHETIC pipeline-validation values and are
 % replaced by pilot data for submission.
 
-\input{tables/three_rung.tex}
-\input{tables/ablation.tex}
+\begin{quote}
+\textbf{Reported controller-comparison results pending.} The committed analysis JSON
+and generated tables are synthetic pipeline checks and are deliberately not included
+in this manuscript. They must be replaced only by data from the frozen, physically
+validated protocol.
+\end{quote}
 
 \section{Discussion}
 % STUB. What each ingredient buys (from the ablation): speed-awareness (rung 1->2)

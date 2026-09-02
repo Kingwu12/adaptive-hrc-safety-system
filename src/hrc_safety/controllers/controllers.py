@@ -1,12 +1,12 @@
 """The controllers under comparison -- now a THREE-RUNG ladder.
 
-    FixedZoneController      -- rung 1: deployed practice. A fixed distance threshold
+    FixedZoneController      -- rung 1: fixed-zone reference. A fixed distance threshold
                                 (K worst-case). Zone alone -> command. No speed
                                 awareness, no state, no prediction. (== StaticController.)
-    DynamicSSMController      -- rung 2: the STANDARDS rung. The ISO/TS 15066 dynamic
-                                speed-and-separation ENVELOPE using the MEASURED
+    DynamicSSMController      -- rung 2: simplified, standards-informed dynamic
+                                envelope using the measured
                                 approach speed, and nothing else. No learned model.
-    EnvelopeAdaptiveController -- rung 3: the FULL system. The envelope as a certified
+    EnvelopeAdaptiveController -- rung 3: the FULL system. The envelope as an independent
                                 floor, with the learned LHMM state layer and kinematic
                                 horizon prediction layered ON TOP -- able only to ADD
                                 caution below the envelope, never raise the command
@@ -15,29 +15,30 @@
 ARCHITECTURAL INVARIANT (locked by test_adaptive_never_exceeds_envelope):
     commanded speed <= envelope-permitted speed, EVERY tick. The learned layers are
     shielded by the envelope: a recognition or prediction error can only make the
-    robot MORE cautious, never faster. This is the runtime-assurance pattern and it
-    is what lets us layer a non-certified learned model onto a safety-critical loop.
+    robot MORE cautious, never faster. This is a runtime-assurance pattern, but the
+    prototype guard is not a certified safety function.
 
 SAFETY INVARIANT (locked by test_red_zone_always_stops_adaptive_even_if_model_says_working):
-    A fixed-RED-zone breach forces a protective stop, checked FIRST, regardless of any
+    A fixed-RED-zone breach forces a stop request, checked FIRST, regardless of any
     model belief OR the (speed-aware, possibly-permissive) envelope. The fixed red
-    radius remains the absolute certified floor beneath the dynamic envelope.
+    radius remains an absolute configured software threshold beneath the envelope.
 
-COLLABORATIVE MODE (v2 -- the certified floor is mode-aware, the learned layer is not):
-    Each tick carries the robot's certified collaborative mode (a robot-reported FACT,
-    never a learned inference): SSM / hand-guiding / monitored-stop. The certified floor
+COLLABORATIVE MODE (v2 -- the deterministic bound is mode-aware, the learned layer is not):
+    Each tick carries the configured/controller-reported collaborative mode (a fact,
+    never a learned inference): SSM / hand-guiding / monitored-stop. The command bound
     keys off it:
       * MONITORED_STOP  -- robot commanded dead still (P1 load, P4 bolt).
-      * HAND_GUIDE      -- compliant hold: contact is permitted by design at the certified
-                           compliant-hold speed, so the fixed-RED breach does NOT stop
+      * HAND_GUIDE      -- intended compliant hold: contact is permitted only after the
+                           real installation and mode are validated. At the configured
+                           compliant-hold speed the fixed-RED breach does NOT stop
                            (P3). The learned layer may still ADD caution on top -- a
                            sustained genuine hazard still stops -- but never removes it.
       * SSM             -- the dynamic envelope + fixed-RED hard stop govern, exactly as
                            before (P2 transit, P5 retract).
-    `FixedZoneController` is MODE-BLIND (deployed practice predates mode integration): it
+    `FixedZoneController` is MODE-BLIND by definition: it
     only sees distance, so at contact range (P3) it protective-stops -- hand-guiding is
     infeasible under it. That mode-blindness is the P3 static-vs-adaptive divergence, and
-    it is why the certified compliant-hold recognition lives in the FLOOR (shared by the
+    it is why compliant-hold selection lives in the deterministic bound (shared by the
     envelope rungs), never in the learned layer.
 """
 
@@ -93,8 +94,8 @@ class FixedZoneController:
         self.condition = condition
 
     def decide(self, frame: FeatureFrame, robot_mode: str = _SSM) -> DecisionRecord:
-        # MODE-BLIND by design: the deployed fixed-zone baseline sees only distance. The
-        # certified mode is recorded for traceability but never changes the decision --
+        # MODE-BLIND by design: the fixed-zone baseline sees only distance. The
+        # configured mode is recorded for traceability but never changes the decision --
         # which is exactly why hand-guiding (contact range) is infeasible under it.
         zone = self.zones.update(frame.d)
         if zone == Zone.RED:
@@ -141,7 +142,7 @@ StaticController = FixedZoneController
 class EnvelopeAdaptiveController:
     """Rung 3 -- full Recognise -> Predict -> Adapt, SHIELDED by the SSM envelope.
 
-    The envelope is the certified FLOOR (max permissible speed from geometry + measured
+    The envelope is the deterministic prototype bound (maximum command from geometry + measured
     approach speed). The learned LHMM state layer and the kinematic horizon predictor
     sit on top and may only REDUCE the command below the envelope:
 
@@ -204,7 +205,7 @@ class EnvelopeAdaptiveController:
     def decide(self, frame: FeatureFrame, robot_mode: str = _SSM) -> DecisionRecord:
         zone = self.zones.update(frame.d)
 
-        # ---- certified floor: envelope from geometry + measured approach speed ----
+        # ---- deterministic prototype bound: geometry + measured approach speed ----
         env = self.envelope.evaluate(frame.d, frame.v_proj)
 
         # ---- Recognise: streaming state posterior (state layer) ------------------
@@ -249,7 +250,7 @@ class EnvelopeAdaptiveController:
         else:
             self._working_streak = 0
 
-        # A genuine hazard is a FAST CLOSING motion. During certified hand-guiding this is
+        # The protocol's actionable event is a FAST CLOSING motion. During hand-guiding this is
         # the only thing that should still stop the robot: slow, deliberate contact (the
         # normal case) must not, or hand-guiding is not feasible. The sticky state
         # posterior naturally lights up near the robot, so it alone cannot gate the stop.
@@ -282,20 +283,21 @@ class EnvelopeAdaptiveController:
         self, zone: Zone, envelope_max: float, inferred: str, risk: float,
         robot_mode: str, closing_fast: bool,
     ) -> tuple[Command, float, str]:
-        # ---- CERTIFIED COLLABORATIVE MODE governs the floor first (certified fact) ----
-        # The robot-reported mode is not a learned belief; it selects which certified
-        # floor applies. The learned layer below may only ADD caution, never remove it.
+        # ---- CONFIGURED COLLABORATIVE MODE selects the command bound first ----------
+        # The mode is not a learned belief. It selects a deterministic bound, but the
+        # real installation still requires safety validation of mode and output chain.
         if robot_mode == _MONITORED_STOP:
-            # Safety-rated monitored stop (P1 load, P4 bolt): robot commanded dead still.
+            # Intended monitored stop (P1 load, P4 bolt): issue a stop request.
             return (
                 Command.PROTECTIVE_STOP,
                 0.0,
-                "certified MONITORED-STOP mode -> robot held dead still (SMS)",
+                "configured MONITORED-STOP mode -> stop request (SMS intent)",
             )
         if robot_mode == _HAND_GUIDE:
             # Hand-guiding (P3): the robot holds the panel compliantly and the human
-            # nudges it -- contact is permitted BY DESIGN, so the fixed-RED breach does
-            # NOT stop. The learned layer may still ADD caution: a sustained AND genuinely
+            # nudges it. Once the real mode has been independently validated, intended
+            # contact means the fixed-RED threshold is not applicable in the same way.
+            # The learned layer may still ADD caution: a sustained and genuinely
             # fast-closing hazard (a real lunge, not a slow deliberate touch) still forces a
             # pre-emptive stop. The closing-speed gate is what keeps ordinary hand-guiding
             # feasible while preserving the "learned layer only adds caution" guarantee.
@@ -309,7 +311,7 @@ class EnvelopeAdaptiveController:
             return (
                 Command.REDUCED_SPEED,
                 float(self.compliant_hold_speed),
-                "certified HAND-GUIDING mode -> compliant contact permitted at "
+                "configured HAND-GUIDING mode -> compliant-hold command at "
                 f"compliant-hold speed {self.compliant_hold_speed:.2f}",
             )
 
@@ -317,7 +319,7 @@ class EnvelopeAdaptiveController:
         # ---- SAFETY INVARIANT, FIRST AND ABSOLUTE ------------------------
         # A fixed-RED breach stops the robot no matter what the model believes and
         # no matter how permissive the speed-aware envelope is. The fixed red radius
-        # is the certified floor beneath the dynamic envelope.
+        # is the configured threshold beneath the dynamic envelope.
         if zone == Zone.RED:
             return (
                 Command.PROTECTIVE_STOP,
@@ -326,13 +328,16 @@ class EnvelopeAdaptiveController:
                 "(overrides envelope and all model belief)",
             )
 
-        # ---- Pre-emptive stop on sustained risk (horizon breach OR hazard) -------
+        # ---- Pre-emptive stop on sustained RAPID-CLOSING risk --------------------
+        # `fused_risk` gates both the legacy activity posterior and the kinematic
+        # signal on measured closing speed. A sticky 'hazard' label alone cannot
+        # stop a stationary or retreating operator.
         if self._hazard_streak >= self.hazard_dwell_ticks:
             return (
                 Command.PROTECTIVE_STOP,
                 0.0,
-                f"Fused risk={risk:.2f} sustained >= {self.hazard_dwell_ticks} ticks "
-                "-> pre-emptive protective stop (horizon + state)",
+                f"Rapid-closing risk={risk:.2f} sustained >= {self.hazard_dwell_ticks} ticks "
+                "-> pre-emptive stop request (horizon + activity evidence)",
             )
 
         # ---- Learned caution cap: the state layer may only REDUCE below envelope --
@@ -360,11 +365,10 @@ AdaptiveController = EnvelopeAdaptiveController
 
 
 class DynamicSSMController(EnvelopeAdaptiveController):
-    """Rung 2 -- the STANDARDS rung. The dynamic SSM envelope alone (no learned model).
+    """Rung 2 -- simplified standards-informed envelope alone (no learned model).
 
-    This is ISO/TS 15066 done properly with the measured approach speed: it is what a
-    conscientious integrator could deploy WITHOUT any machine learning. Isolating it as
-    its own rung lets the ablation attribute gains to speed-awareness (rung1 -> rung2)
+    This is a research comparator, not a deployable or certified SSM implementation.
+    Isolating it as its own rung lets the ablation attribute gains to speed-awareness (rung1 -> rung2)
     separately from state/prediction reasoning (rung2 -> rung3).
     """
 

@@ -4,7 +4,8 @@ import numpy as np
 
 from hrc_safety.lhmm.upper import STATES
 from hrc_safety.pilot_model import load_upper_hmm, save_upper_hmm
-from hrc_safety.pilot_training import (fit_trials, leave_one_participant_out,
+from hrc_safety.pilot_training import (_decode_trial, fit_trials,
+                                       leave_one_participant_out,
                                        leave_one_trial_out, load_trial)
 
 
@@ -59,6 +60,34 @@ def test_unlabelled_gap_does_not_create_transition(tmp_path):
             fh.write(json.dumps({"ground_truth": label, "features": feature}) + "\n")
     trial = load_trial(path)
     assert trial.sequences == [["approaching"], ["working"]]
+    assert [len(segment) for segment in trial.feature_sequences] == [1, 1]
+
+
+def test_validation_resets_decoder_at_unlabelled_gaps(tmp_path):
+    path = tmp_path / "gap.jsonl"
+    rows = [
+        ("approaching", {"d": 1.5, "v_proj": 0.5, "speed": 0.6, "a_proj": 0.1}),
+        ("approaching", {"d": 1.4, "v_proj": 0.5, "speed": 0.6, "a_proj": 0.1}),
+        ("unlabelled", None),
+        ("working", {"d": 1.1, "v_proj": 0.0, "speed": 0.1, "a_proj": 0.0}),
+    ]
+    with path.open("w", encoding="utf-8") as fh:
+        for label, feature in rows:
+            fh.write(json.dumps({"ground_truth": label, "features": feature}) + "\n")
+    trial = load_trial(path)
+
+    class RecordingDecoder:
+        def __init__(self):
+            self.lengths = []
+
+        def viterbi(self, X):
+            self.lengths.append(len(X))
+            return ["approaching"] * len(X)
+
+    decoder = RecordingDecoder()
+    predicted, truth = _decode_trial(decoder, trial)
+    assert decoder.lengths == [2, 1]
+    assert len(predicted) == len(truth) == 3
 
 
 def test_leave_one_participant_out_never_trains_on_held_out_person(tmp_path):

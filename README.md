@@ -4,20 +4,24 @@ Reference implementation for the Monash FYP (2026) paper
 **"Comparing Static and Adaptive Safety Logic in Human-Robot Ceiling Panel Installation"**
 (Wu, Siniakov, Magila).
 
-A UR10e holds a ceiling panel overhead while a human aligns and fastens it. We compare
+A UR10 CB3 holds a lightweight surrogate panel while a human performs the approved task.
+This repository is a research prototype, not a certified safety system. We compare
 **three rungs** of safety logic over the **identical** trace:
 
 1. **Fixed-zone** (`FixedZoneController`) — deployed practice: a fixed worst-case
    distance threshold, zone → command, nothing else.
-2. **Dynamic SSM** (`DynamicSSMController`) — the *standards* rung: the ISO/TS 15066
-   speed-and-separation **envelope** using the **measured** approach speed, and no
+2. **Dynamic envelope** (`DynamicSSMController`) — a simplified, standards-informed
+   speed-and-separation comparator using the **measured** approach speed, and no
    learned model.
 3. **Adaptive** (`EnvelopeAdaptiveController`) — the full system: the envelope as a
-   certified **floor**, with a *Recognise → Predict → Adapt* layer (Layered HMM state
+   deterministic **command bound**, with a *Recognise → Predict → Adapt* layer (Layered HMM state
    recognition + kinematic horizon prediction) **shielded** on top — it may only ADD
    caution, never exceed the envelope.
 
-The sem-2 redesign is documented in full in [`docs/design/sem2-redesign.md`](docs/design/sem2-redesign.md).
+The current scope and real-run gates are in
+[`docs/research-readiness-audit-2026-09-02.md`](docs/research-readiness-audit-2026-09-02.md).
+Older design notes use “certified floor” as architecture shorthand; that wording is not
+a certification claim and has been superseded by the readiness audit.
 
 ## Quickstart
 
@@ -72,17 +76,17 @@ Layered GMM-HMM (observation: d, v_proj, speed, a_proj)
         │          (upper: approaching/working/retreating/hazard  ·  lower: stationary/walking)
         │  step(x) → posterior p_t
         ▼
- Horizon prediction   time_to_breach(d, v_proj, a_proj)  ⊕  p_hazard   → risk
+ Horizon prediction   time_to_breach(d, v_proj, a_proj)  ⊕  legacy p_hazard → rapid-closing risk
         │              (constant-accel; one-step p@A kept as superseded component)
         ▼
- DynamicSSMEnvelope   S(t)=max(0,v_proj)·T+C+Sa  →  max permissible speed  (CERTIFIED FLOOR)
+ DynamicSSMEnvelope   S(t)=max(0,v_proj)·T+C+Sa  →  prototype command bound
         │
         ▼
  ZoneModel (fixed red = S0, yellow = margin·S0, exit hysteresis; RED hard stop on top)
         │
         ▼
  Controller ── FixedZoneController        (zone → command; deployed practice)
-            ├─ DynamicSSMController        (envelope alone; the standards rung)
+            ├─ DynamicSSMController        (simplified envelope comparator)
             └─ EnvelopeAdaptiveController  (min(envelope, model); SAFETY INVARIANT first)
         │
         ▼
@@ -97,7 +101,7 @@ Layered GMM-HMM (observation: d, v_proj, speed, a_proj)
 | `configs/default.yaml` | Every tunable (zones, envelope, horizon, features, LHMM, controller, scenario, robot) |
 | `src/hrc_safety/features.py` | Feature extraction; distance to the occupied column |
 | `src/hrc_safety/zones.py` | Fixed ISO/TS 15066 zone model + exit hysteresis (the RED hard floor) |
-| `src/hrc_safety/envelope.py` | **Dynamic SSM envelope** — speed-aware certified speed floor |
+| `src/hrc_safety/envelope.py` | **Dynamic envelope** — speed-aware prototype command bound |
 | `src/hrc_safety/horizon.py` | **Horizon prediction** — time-to-breach + risk fusion |
 | `src/hrc_safety/lhmm/` | Hand-rolled Layered HMM (upper + lower); fit/step/viterbi |
 | `src/hrc_safety/prediction.py` | One-step prediction (Eq.1) — **superseded** anticipation; kept for the ablation |
@@ -119,7 +123,7 @@ Layered GMM-HMM (observation: d, v_proj, speed, a_proj)
 
 ## FOUR NON-NEGOTIABLES
 
-1. **RED zone ⇒ protective stop in BOTH conditions, ALWAYS.** The safety invariant is
+1. **RED zone ⇒ stop request in BOTH conditions, ALWAYS.** The software invariant is
    checked first in the adaptive decision function, before any model belief or the
    (speed-aware) envelope, and is locked by
    `test_red_zone_always_stops_adaptive_even_if_model_says_working`. **Never merge
@@ -129,7 +133,7 @@ Layered GMM-HMM (observation: d, v_proj, speed, a_proj)
    cold-start priors only — reporting them would be circular validation.
 3. **Synthetic data never appears in reported results.** The `sim/` scenario exists only to
    exercise the pipeline pilot data will flow through.
-4. **The adaptive command NEVER exceeds the safety envelope.** The learned layers are
+4. **The adaptive command NEVER exceeds the deterministic envelope.** The learned layers are
    shielded: `final speed = min(envelope, model)`, so a recognition or prediction error
    can only add caution, never raise speed. Locked by
    `test_adaptive_never_exceeds_envelope`. **Never merge anything that lets the model
@@ -143,9 +147,10 @@ docker compose -f sim/ursim/docker-compose.yml up
 python scripts/demo_ursim.py --log adaptive        # replay a logged rung onto URSim live (see also --log fixed_zone)
 ```
 
-`URRobot` maps full/reduced speed to the RTDE speed slider and a protective stop to the
-Dashboard pause (resume = play) — identical in URSim and on hardware. **Lab-review note:** a
-real safeguard stop must be wired through the robot's safety I/O, not the Dashboard.
+`URRobot` maps full/reduced speed to the RTDE speed slider and a stop request to Dashboard
+pause plus slider zero. That path is **not safety-rated**. It is for URSim and controlled
+engineering bring-up only; participant SSM trials require an independently validated
+safeguard output through the robot safety chain.
 
 ## Paper (LaTeX) — numbers flow from data to the PDF
 

@@ -1,10 +1,14 @@
-"""Speed-and-Separation Monitoring zone model (ISO/TS 15066).
+"""Standards-informed prototype Speed-and-Separation Monitoring zone model.
 
 Two concentric zones around the robot's occupied column:
   red    = S0            (protective separation; breach => protective stop)
   yellow = margin * S0   (warning band; reduced speed / adaptive behaviour)
 
 S0 = K*T + C + Sa.
+
+This reduced equation is an experimental abstraction, not a certification result.
+The installed system must account for the complete protective-separation equation,
+including robot reaction/stopping behaviour and validated uncertainty terms.
 
 EXIT HYSTERESIS: entering a TIGHTER zone (red < yellow < green) is IMMEDIATE --
 safety reactions never wait. LEAVING a zone requires clearing its boundary by an
@@ -48,7 +52,7 @@ class ZoneModel:
 
     @property
     def S0(self) -> float:
-        """ISO/TS 15066 protective separation distance."""
+        """Configured prototype protective-separation threshold."""
         return self.K * self.T + self.C + self.Sa
 
     @property

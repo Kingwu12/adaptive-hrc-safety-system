@@ -430,6 +430,13 @@ class DashboardState:
                 raise ValueError("Xsens is not streaming yet")
             if self.optitrack_stale:
                 raise ValueError("OptiTrack is not streaming a fresh head pose yet")
+            # Every recorded trial is an independent sequence. Do not let the
+            # previous trial's HMM belief or derivative windows leak across it.
+            self.hmm.reset()
+            self.extractor.reset()
+            self.feature = None
+            self.posterior = {}
+            self.hmm_state = None
             self.participant_id = safe_id(participant, "P00")
             self.trial_id = safe_id(trial, "T00")
             stamp = datetime.now().strftime("%Y%m%d-%H%M%S")

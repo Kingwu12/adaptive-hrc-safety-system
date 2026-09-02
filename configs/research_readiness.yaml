@@ -1,0 +1,47 @@
+# Machine-readable evidence gates for a reported moving-participant controller run.
+# Set a gate true only when its evidence file is committed and identifies the setup,
+# method, repetitions, result, date and responsible researcher.
+reviewed_at: "2026-09-02"
+robot: "UR10 CB3"
+operational_event: >-
+  Experimenter-cued rapid movement of the OptiTrack head proxy toward the validated
+  protected robot-tool-panel volume during an SSM phase.
+excluded_claims:
+  - general hazard detection
+  - fall or trip detection
+  - whole-body collision prediction
+  - safety certification
+
+gates:
+  end_to_end_stop_time:
+    complete: false
+    evidence: null
+    requirement: Measure sensor-to-command-to-zero-motion time on the final hardware and program.
+  sensing_uncertainty:
+    complete: false
+    evidence: null
+    requirement: Bound total head-proxy, calibration, latency and tracking uncertainty for the final setup.
+  protected_geometry:
+    complete: false
+    evidence: null
+    requirement: Validate conservative arm, tool, panel and swept-volume geometry for every scored phase.
+  safety_rated_output:
+    complete: false
+    evidence: null
+    requirement: Validate the real safeguard stop chain; Dashboard pause and slider zero do not satisfy this gate.
+  controller_integration:
+    complete: false
+    evidence: null
+    requirement: Replay and then witness each controller condition driving the same live command path and logs.
+  protocol_and_ethics_reconciled:
+    complete: false
+    evidence: null
+    requirement: Reconcile the approved protocol with the actual robot, task, cued event, recording and consent wording.
+  frozen_analysis_plan:
+    complete: false
+    evidence: null
+    requirement: Freeze primary outcomes, event windows, exclusions, counterbalancing and statistical unit before collection.
+  untouched_final_evaluation:
+    complete: false
+    evidence: null
+    requirement: Evaluate the frozen model and thresholds once on data unused for model or threshold selection.

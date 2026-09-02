@@ -24,6 +24,7 @@ class TrialData:
     X: np.ndarray
     labels: list[str]
     sequences: list[list[str]]
+    feature_sequences: list[np.ndarray]
     total_rows: int
     skipped_rows: int
 
@@ -42,17 +43,21 @@ def load_trial(path: str | Path) -> TrialData:
     rows: list[list[float]] = []
     labels: list[str] = []
     sequences: list[list[str]] = []
-    current: list[str] = []
+    feature_sequences: list[np.ndarray] = []
+    current_labels: list[str] = []
+    current_rows: list[list[float]] = []
     total = 0
     skipped = 0
     participant_id = "unknown"
     trial_id = source.stem
 
     def end_segment() -> None:
-        nonlocal current
-        if current:
-            sequences.append(current)
-            current = []
+        nonlocal current_labels, current_rows
+        if current_labels:
+            sequences.append(current_labels)
+            feature_sequences.append(np.asarray(current_rows, dtype=float))
+            current_labels = []
+            current_rows = []
 
     with source.open("r", encoding="utf-8") as fh:
         for line_number, line in enumerate(fh, start=1):
@@ -83,7 +88,8 @@ def load_trial(path: str | Path) -> TrialData:
                 continue
             rows.append(vector)
             labels.append(label)
-            current.append(label)
+            current_labels.append(label)
+            current_rows.append(vector)
     end_segment()
 
     X = np.asarray(rows, dtype=float)
@@ -96,6 +102,7 @@ def load_trial(path: str | Path) -> TrialData:
         X=X,
         labels=labels,
         sequences=sequences,
+        feature_sequences=feature_sequences,
         total_rows=total,
         skipped_rows=skipped,
     )
@@ -170,6 +177,23 @@ def fit_trials(trials: list[TrialData], emission_components: int = 1) -> UpperHM
     return UpperHMM(transition_matrix=A, emissions=emissions)
 
 
+def _decode_trial(model: UpperHMM, trial: TrialData) -> tuple[list[str], list[str]]:
+    """Decode each contiguous labelled segment with a fresh HMM start state.
+
+    Unlabelled or invalid rows deliberately break a sequence during transition
+    fitting. Validation must respect the same boundary; otherwise Viterbi silently
+    invents temporal continuity across an experimenter reset or tracking gap.
+    """
+    predictions: list[str] = []
+    truth: list[str] = []
+    for X_segment, labels_segment in zip(
+        trial.feature_sequences, trial.sequences, strict=True
+    ):
+        predictions.extend(model.viterbi(X_segment))
+        truth.extend(labels_segment)
+    return predictions, truth
+
+
 def leave_one_trial_out(
     trials: list[TrialData], emission_components: int = 1
 ) -> dict:
@@ -182,10 +206,10 @@ def leave_one_trial_out(
         if not training:
             continue
         model = fit_trials(training, emission_components)
-        predicted = model.viterbi(held_out.X)
-        report = recognition_report(predicted, held_out.labels)
+        predicted, truth = _decode_trial(model, held_out)
+        report = recognition_report(predicted, truth)
         predictions.extend(predicted)
-        ground_truth.extend(held_out.labels)
+        ground_truth.extend(truth)
         folds.append({
             "trial_id": held_out.trial_id,
             "accuracy": report.accuracy,
@@ -223,9 +247,9 @@ def leave_one_participant_out(
         fold_predictions: list[str] = []
         fold_truth: list[str] = []
         for trial in held_out:
-            predicted = model.viterbi(trial.X)
+            predicted, truth = _decode_trial(model, trial)
             fold_predictions.extend(predicted)
-            fold_truth.extend(trial.labels)
+            fold_truth.extend(truth)
         report = recognition_report(fold_predictions, fold_truth)
         predictions.extend(fold_predictions)
         ground_truth.extend(fold_truth)

@@ -45,7 +45,11 @@ TEST_SEED = 7
 
 
 def fit_hmm(config: dict, seeds: tuple[int, ...] = TRAIN_SEEDS) -> UpperHMM:
-    """Fit A + emissions from separately-seeded labelled training loops (the REPORTED model)."""
+    """Fit a synthetic regression-test HMM from separately-seeded simulator loops.
+
+    This helper supports simulation and unit tests only. Live control must load a
+    fitted pilot artifact; synthetic parameters are never reported.
+    """
     obs_chunks: list[np.ndarray] = []
     all_labels: list[str] = []
     label_sequences: list[list[str]] = []

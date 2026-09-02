@@ -22,7 +22,7 @@ class RunResult:
     records: list[DecisionRecord]
     labels: list[str]  # ground-truth activity label aligned to each produced frame
     phases: list[str]  # cycle phase aligned to each produced frame ("" if none)
-    robot_modes: list[str]  # certified robot mode aligned to each produced frame
+    robot_modes: list[str]  # configured robot mode aligned to each produced frame
 
 
 def build_extractor(config: dict) -> FeatureExtractor:
@@ -39,7 +39,7 @@ _DEFAULT_MODE = CollaborativeMode.SSM.value
 
 
 def _aligned(config: dict, trace: LoopTrace):
-    """Extract feature frames with per-frame labels, phases, and certified robot modes.
+    """Extract feature frames with per-frame labels, phases, and configured robot modes.
 
     The extractor emits nothing on its warm-up sample; the dropped tick's label/phase/mode
     are dropped in lockstep so every list stays aligned one-to-one with `frames`. A trace
@@ -75,7 +75,7 @@ def extract_frames(config: dict, trace: LoopTrace) -> tuple[list[FeatureFrame], 
 def run_controller(config: dict, controller, trace: LoopTrace) -> RunResult:
     """Feed a trace through the extractor and a controller; collect decision records.
 
-    Each tick's decision is made under the certified robot collaborative mode for that
+    Each tick's decision is made under the configured robot collaborative mode for that
     tick, so the controller's mode-aware floor (SSM / hand-guiding / monitored stop) is
     exercised exactly as it would be on live robot-reported mode.
     """

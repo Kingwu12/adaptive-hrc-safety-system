@@ -110,7 +110,7 @@ def compute_metrics(
     omitted, those fields come back as None so callers with only a sem-1 trace still
     work.
 
-    robot_modes (v2, optional): the certified collaborative mode per record. When given,
+    robot_modes (v2, optional): the configured collaborative mode per record. When given,
     MINIMUM SEPARATION is measured only over SSM-mode ticks -- the phases where separation
     is a genuine safety quantity. In hand-guiding / monitored-stop the human is at the
     panel by design (~0 m), so including those ticks would report a spurious "breach"
@@ -241,7 +241,7 @@ class PhaseMetrics:
     """
 
     phase: str
-    collaborative_mode: str            # dominant certified robot mode in this phase
+    collaborative_mode: str            # dominant configured robot mode in this phase
     is_measurement_window: bool
     duration_s: float                  # phase cycle time (wall time spent in the phase)
     min_separation: float              # min d in-phase (a safety quantity only in SSM windows)

@@ -48,10 +48,15 @@ GOOD score of 100. The active local model was retrained on 32 accepted runs:
 - P04 (Mic): 12
 - P05 (Luke): 12
 
-The updated leave-one-participant-out development estimate is 0.669 accuracy,
+The updated leave-one-participant-out development estimate is 0.670 accuracy,
 0.490 hazard precision, and 0.526 hazard recall. This replaces the local 23-run
 artifact because it uses all accepted recordings and removes the severe P05 run
 imbalance. The small metric movement is not a like-for-like test comparison: the
 held-out P05 evaluation fold increased from 3 to 12 runs. P03 hazard recall rose
 from 0.509 to 0.534. A new untouched participant is still required for the final
 unbiased evaluation.
+
+The 2026-09-02 research audit corrected offline decoding so Viterbi resets at each
+unlabelled/invalid gap, matching the transition-training boundary. This changed only
+the development accuracy from 0.6691 to 0.6702; hazard recall remained 0.5256. The low
+score is therefore not explained by accidental decoding across protocol resets.

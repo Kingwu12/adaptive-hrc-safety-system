@@ -8,6 +8,7 @@ import threading
 import time
 import types
 
+import numpy as np
 import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
@@ -89,16 +90,43 @@ def test_dashboard_state_records_enriched_labelled_frames(tmp_path):
     state.mark_calibrated()
     state.start_session("P/01", "T 01")
     state.set_label("approaching")
-    state.tick()
+    for i in range(12, 15):
+        wall = base + i / 60.0
+        position = (1.5 - i * 0.01, 0.2, 1.0)
+        state.on_sample(i / 60.0, position, True, wall)
+        state.optitrack_bridge.on_sample(i / 60.0, position, True, wall)
+        state.tick()
     result = state.stop_session()
 
     path = tmp_path / result["path"].split("/")[-1]
-    row = json.loads(path.read_text().splitlines()[0])
+    rows = [json.loads(line) for line in path.read_text().splitlines()]
+    row = next(item for item in rows if item["features"] is not None)
     assert row["participant_id"] == "P-01"
     assert row["trial_id"] == "T-01"
     assert row["ground_truth"] == "approaching"
     assert row["features"]["v_proj"] > 0
     assert set(row["hmm_posterior"]) == {"approaching", "working", "retreating", "hazard"}
+
+
+def test_start_session_resets_temporal_model_state(tmp_path):
+    state = DashboardState(tmp_path, segment_id=1)
+    base = time.monotonic()
+    for i in range(8):
+        wall = base + i / 60.0
+        position = (1.5 - i * 0.01, 0.2, 1.0)
+        state.on_sample(i / 60.0, position, True, wall)
+        state.optitrack_bridge.on_sample(i / 60.0, position, True, wall)
+        state.tick()
+
+    assert state.feature is not None
+    assert state.posterior
+    state.start_session("P01", "T01")
+
+    assert state.feature is None
+    assert state.posterior == {}
+    assert state.hmm_state is None
+    np.testing.assert_allclose(state.hmm.belief, [0.25, 0.25, 0.25, 0.25])
+    state.stop_session()
 
 
 def test_dashboard_rejects_recording_without_optitrack(tmp_path):

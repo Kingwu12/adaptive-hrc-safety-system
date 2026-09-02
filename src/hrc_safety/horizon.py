@@ -38,7 +38,9 @@ TWO PHYSICAL GUARDS (why raw extrapolation is unusable here -- viva defence):
     closing) and ignores working sway, lateral darts, and retreats.
 
 FUSION RULE (documented plainly, used by the controller):
-    We combine two independent hazard signals and take the MORE cautious of the two:
+    The actionable event in this prototype is a rapid closing trajectory toward the
+    protected volume. We therefore gate BOTH learned and geometric evidence on a
+    measured minimum closing speed, then take the more cautious signal:
 
         imminence = sigmoid( steepness * (horizon_s - time_to_breach) )   in [0, 1]
                     (forced to 0 when closing speed < min_closing)
@@ -49,8 +51,9 @@ FUSION RULE (documented plainly, used by the controller):
     - imminence is pure geometry (where they will BE) -- it rises toward 1 as the
       predicted breach time drops below the horizon, and is ~0 when breach is far
       off or never (time_to_breach = inf -> imminence -> 0).
-    max() means EITHER signal can trigger caution: a recognised hazard OR an
-    imminent geometric breach. Neither can veto the other down -- caution only adds.
+    max() means either signal can trigger caution once physical closing is present.
+    A sticky or mistaken 'hazard' activity posterior cannot stop a stationary or
+    retreating operator by itself.
 """
 
 from __future__ import annotations
@@ -138,18 +141,17 @@ def fused_risk(
     v_proj: float = _INF,
     min_closing: float = 0.0,
 ) -> float:
-    """risk = max(p_hazard, imminence(ttb)), with imminence gated by closing speed.
+    """Rapid-closing risk from learned and geometric evidence.
 
-    When the operator's closing speed v_proj is below min_closing, the geometric
-    imminence is forced to 0 (they are not meaningfully moving toward the hazard, so
-    a small extrapolated time-to-breach is noise, not anticipation). The state-based
-    p_hazard is never gated -- a recognised hazard posture still counts. See the
-    module docstring for why this guard is necessary. Defaults leave the gate open.
+    When v_proj is below min_closing, risk is zero: the tracked point is not moving
+    toward the protected volume fast enough to meet this experiment's operational
+    event definition. Above the gate, risk=max(p_hazard, imminence). The learned
+    posterior remains available separately for analysis and for a conservative
+    slowdown, but cannot cause a pre-emptive stop without physical closing.
     """
     if float(v_proj) < float(min_closing):
-        imminence = 0.0
-    else:
-        imminence = breach_imminence(ttb, horizon, steepness)
+        return 0.0
+    imminence = breach_imminence(ttb, horizon, steepness)
     return max(float(p_hazard), imminence)
 
 

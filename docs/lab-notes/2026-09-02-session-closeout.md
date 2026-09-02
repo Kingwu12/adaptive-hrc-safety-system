@@ -20,6 +20,10 @@
 - The model remains an experimental caution layer. Independent robot interlocks and
   the separation envelope remain the safety authority.
 
+Post-closeout audit note: resetting Viterbi at unlabelled gaps revised accuracy to
+0.670 while leaving hazard precision and recall at 0.490 and 0.526 (rounded). No
+model parameter changed; only the validation sequence boundary was corrected.
+
 ## Archive policy
 
 The project owner confirmed on 2026-09-02 that the approved ethics and participant

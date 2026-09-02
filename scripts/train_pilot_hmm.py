@@ -114,6 +114,9 @@ def main() -> int:
     validation = (leave_one_participant_out(usable, args.emission_components)
                   if validation_method == "participant"
                   else leave_one_trial_out(usable, args.emission_components))
+    validation["sequence_boundary_policy"] = (
+        "reset Viterbi at every unlabelled or invalid gap"
+    )
     validation["role"] = (
         "development estimate; if this configuration was selected using these "
         "folds, confirm it once on a newly recruited untouched participant"

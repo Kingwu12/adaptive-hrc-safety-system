@@ -14,7 +14,7 @@ fields with the final lab setup and personnel before submission. Companion to
 ## 1. Study summary
 
 We compare fixed-zone and adaptive robot safety logic during a simulated overhead panel
-installation. A UR10e holds a lightweight surrogate panel while a participant performs an
+installation. A UR10 CB3 holds a lightweight surrogate panel while a participant performs an
 alignment-and-fastening task beneath it. We measure how each safety controller trades off
 **productivity** (robot speed while the participant works safely) against **hazard
 response** (how it reacts when the participant approaches the robot). The scientific

@@ -35,14 +35,16 @@ import time
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-from hrc_safety.analysis import build_controller, fit_hmm  # noqa: E402
+from hrc_safety.analysis import build_controller  # noqa: E402
 from hrc_safety.config import load_config  # noqa: E402
 from hrc_safety.features import FeatureExtractor  # noqa: E402
 from hrc_safety.logging_schema import Command  # noqa: E402
 from hrc_safety.mocap import MocapBridge, load_extrinsics  # noqa: E402
+from hrc_safety.pilot_model import load_upper_hmm  # noqa: E402
 
 REPO = os.path.join(os.path.dirname(__file__), "..")
 NEEDS_HMM = ("adaptive", "adaptive_no_pred", "adaptive_no_state")
+DEFAULT_PILOT_MODEL = os.path.join(REPO, "data", "models", "pilot_hmm.json")
 
 
 def _make_robot(kind: str, config: dict, host: str | None):
@@ -65,8 +67,16 @@ def _make_features(config: dict) -> FeatureExtractor:
     )
 
 
-def _make_controller(name: str, config: dict):
-    fitted = fit_hmm(config) if name in NEEDS_HMM else None
+def _make_controller(name: str, config: dict, model_path: str | None = None):
+    fitted = None
+    if name in NEEDS_HMM:
+        source = os.path.abspath(model_path or DEFAULT_PILOT_MODEL)
+        if not os.path.isfile(source):
+            raise SystemExit(
+                f"REFUSING adaptive live run without fitted pilot model: {source}"
+            )
+        fitted = load_upper_hmm(source)
+        print(f"live_run: loaded pilot model {source}")
     return build_controller(name, config, fitted)
 
 
@@ -96,6 +106,11 @@ def run_live(args) -> int:
     if ext is None and args.robot == "ur":
         raise SystemExit("REFUSING real-arm run without --extrinsics. Calibrate "
                          "OptiTrack into the robot-base frame first.")
+    if args.robot == "ur" and args.source == "xsens":
+        raise SystemExit(
+            "REFUSING real-arm run with Xsens-only absolute position. Use "
+            "--source optitrack or --source fused with validated extrinsics."
+        )
 
     bridge = MocapBridge(sample_rate_hz=config["features"]["sample_rate_hz"],
                          extrinsics=ext)
@@ -133,7 +148,7 @@ def run_live(args) -> int:
         listeners.append(xsens_listener)
 
     fx = _make_features(config)
-    controller = _make_controller(args.controller, config)
+    controller = _make_controller(args.controller, config, args.model)
     robot = _make_robot(args.robot, config, args.host)
 
     rec_fh = None
@@ -302,6 +317,10 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--controller", default="adaptive",
                     choices=["fixed_zone", "dynamic_ssm", "adaptive"])
+    ap.add_argument(
+        "--model", default=DEFAULT_PILOT_MODEL,
+        help="fitted pilot-model JSON for adaptive control (default: active pilot artifact)",
+    )
     ap.add_argument("--robot", default="mock", choices=["mock", "ur"],
                     help="mock = console only (default); ur = real arm/URSim")
     ap.add_argument("--host", default=None, help="robot IP (default: config)")

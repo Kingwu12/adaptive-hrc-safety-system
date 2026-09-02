@@ -1,16 +1,16 @@
 """Robot command interface.
 
 MockRobot -- records commands; used by tests and the simulation runner.
-URRobot   -- drives a real UR10e / URSim via ur-rtde (lazily imported so the core
+URRobot   -- drives a real UR10 CB3 / URSim via ur-rtde (lazily imported so the core
              package has no hard dependency on the robot extra).
 
 Command mapping (identical in URSim and on hardware):
   * full / reduced speed  -> RTDE speed-slider fraction (setSpeedSlider).
-  * protective stop       -> Dashboard 'pause'; resume -> Dashboard 'play'.
+  * stop request          -> Dashboard 'pause' plus speed slider 0; resume -> 'play'.
 
-LAB-REVIEW NOTE: driving the protective stop through the Dashboard pause is fine
-for URSim and bring-up, but a REAL safeguard stop must be wired through the robot's
-safety I/O (configurable safety inputs), not the Dashboard, per the lab safety review.
+LAB-REVIEW NOTE: Dashboard pause is not a safety-rated protective stop. It is suitable
+only for URSim and controlled engineering bring-up. A participant run that relies on
+SSM requires an independently validated safeguard output through the robot safety chain.
 """
 
 from __future__ import annotations
@@ -64,7 +64,7 @@ class MockRobot:
 
 
 class URRobot:
-    """Real UR10e / URSim driver via ur-rtde (imported lazily)."""
+    """Real UR10 CB3 / URSim research driver via ur-rtde (imported lazily)."""
 
     def __init__(
         self,

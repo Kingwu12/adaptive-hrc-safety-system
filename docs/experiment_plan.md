@@ -11,7 +11,7 @@ the simulated hazard, and one design finding surfaced during simulation.
 |------|-------|------|
 | Cell | ~3 × 4 m | working area around the robot |
 | Motion-capture volume | ~4 × 4 × 2.5 m (OptiTrack) | **the binding constraint** — the tracked space is smaller than the cell; all stances must sit inside it |
-| Robot | UR10e, ~1.3 m reach | holds the panel overhead (TCP ~2.2 m) |
+| Robot | UR10 CB3, ~1.3 m reach | holds the lightweight surrogate panel |
 | Fastening stances | ~1.1 m from the column | inside yellow (1.504 m), outside red (0.940 m) at defaults |
 | Bench | ~1.9 m from the column | DERIVED = yellow_radius + bench_clearance (1.504 + 0.40) |
 
@@ -24,8 +24,11 @@ panel has ~0 m of separation even though the TCP is far overhead.
 `S0 = K·T + C + Sa = 1.6·0.40 + 0.20 + 0.10 = 0.940 m` (red radius);
 `yellow = yellow_margin · S0 = 1.6 · 0.940 = 1.504 m`.
 
-`T` (system reaction/stopping time) and `Sa` (operator position uncertainty) in the config
-are **pilot placeholders** and must be measured before any reported run.
+`T` (end-to-end reaction plus stopping time), `Sa` (validated sensing/body-proxy
+uncertainty), and the simplified occupied-column geometry in the config are **pilot
+placeholders**. They must be measured or conservatively bounded before any reported
+moving-participant controller comparison. The reduced equation used here is not itself a
+complete ISO 13855/TS 15066 safety calculation or a certification result.
 
 ## 3. Pilot calibration checklist
 
@@ -40,7 +43,11 @@ Run once per hardware configuration, before collecting reported data:
       `fit_emissions` for the Gaussians. These produce the reported model; the config's
       hand-set numbers are cold-start priors only.
 - [ ] **Verify the command path in URSim first**, then on hardware — full/reduced speed via
-      the RTDE speed slider, protective stop via Dashboard pause (interim) / safety I/O (final).
+      the RTDE speed slider. Dashboard pause is only a research stop request; SSM with a
+      participant requires an independently validated safety-rated stop path.
+- [ ] Validate that the protected geometry conservatively covers the arm, tool, panel and
+      their swept volume for every reported phase; a TCP-centred vertical column is not
+      automatically sufficient.
 - [ ] Confirm all stances and the slip target fall inside the OptiTrack volume.
 
 ## 4. Ethics notes

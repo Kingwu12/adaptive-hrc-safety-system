@@ -1,7 +1,7 @@
 """Feature extraction from raw operator position samples.
 
 CRITICAL DESIGN DECISION -- protective separation is measured to the robot's
-OCCUPIED COLUMN, not to the TCP point. The UR10e holds a ceiling panel ~2.2 m
+OCCUPIED COLUMN, not to the TCP point. The UR10 CB3 holds a ceiling panel ~2.2 m
 overhead; the physical hazard the operator can reach is the whole vertical column
 of space the arm+panel occupies, from the ground under the TCP up to TCP height.
 A human standing directly under the panel has ~0 m of protective separation even
@@ -100,6 +100,17 @@ class FeatureExtractor:
         phantom robot and every safety number the study reports is wrong.
         """
         self.tcp = np.asarray(tcp_position, dtype=float)
+
+    def reset(self) -> None:
+        """Clear temporal history before an independent recording or replay.
+
+        Velocity and acceleration windows must not bridge two trials. Keeping the
+        current TCP is intentional because the live robot pose is refreshed each tick.
+        """
+        self._pos.clear()
+        self._t.clear()
+        self._vel_hist.clear()
+        self._t0 = None
 
     @staticmethod
     def _slope(times: np.ndarray, values: np.ndarray) -> float:

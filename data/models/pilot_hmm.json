@@ -365,31 +365,32 @@
   },
   "validation": {
     "method": "leave-one-participant-out",
+    "sequence_boundary_policy": "reset Viterbi at every unlabelled or invalid gap",
     "participants": [
       "P03",
       "P04",
       "P05"
     ],
-    "accuracy": 0.6690730014829738,
-    "hazard_precision": 0.48972431077694234,
+    "accuracy": 0.6701549194623987,
+    "hazard_precision": 0.4899153108981502,
     "hazard_recall": 0.5255827854154214,
     "confusion": [
       [
-        9861,
+        9934,
         2525,
-        3263,
+        3190,
         1618
       ],
       [
         2240,
-        43566,
+        43573,
         2088,
-        5715
+        5708
       ],
       [
-        3690,
+        3654,
         4576,
-        9516,
+        9552,
         1829
       ],
       [
@@ -404,14 +405,14 @@
         "participant_id": "P03",
         "held_out_trials": 8,
         "training_trials": 24,
-        "accuracy": 0.6270650146549427,
+        "accuracy": 0.6284305888622436,
         "hazard_precision": 0.436212504517528,
         "hazard_recall": 0.5276502732240437,
         "confusion": [
           [
-            2105,
+            2130,
             391,
-            1789,
+            1764,
             974
           ],
           [
@@ -421,9 +422,9 @@
             1489
           ],
           [
-            784,
+            768,
             1004,
-            2790,
+            2806,
             657
           ],
           [
@@ -438,8 +439,8 @@
         "participant_id": "P04",
         "held_out_trials": 12,
         "training_trials": 20,
-        "accuracy": 0.7006161652772743,
-        "hazard_precision": 0.6517735334242838,
+        "accuracy": 0.7010752688172043,
+        "hazard_precision": 0.652552501280519,
         "hazard_recall": 0.5545560069645966,
         "confusion": [
           [
@@ -450,14 +451,14 @@
           ],
           [
             1256,
-            18200,
+            18207,
             374,
-            1209
+            1202
           ],
           [
-            1523,
+            1511,
             2423,
-            3676,
+            3688,
             484
           ],
           [
@@ -472,14 +473,14 @@
         "participant_id": "P05",
         "held_out_trials": 12,
         "training_trials": 20,
-        "accuracy": 0.6678395889186773,
+        "accuracy": 0.6694034852546917,
         "hazard_precision": 0.3899649229830715,
         "hazard_recall": 0.4858445753372601,
         "confusion": [
           [
-            4459,
+            4507,
             582,
-            1324,
+            1276,
             295
           ],
           [
@@ -489,9 +490,9 @@
             3017
           ],
           [
-            1383,
+            1375,
             1149,
-            3050,
+            3058,
             688
           ],
           [

@@ -1,4 +1,4 @@
-"""Dynamic Speed-and-Separation safety ENVELOPE -- the certified speed floor.
+"""Prototype dynamic speed-and-separation envelope -- deterministic command bound.
 
 WHY THIS MODULE EXISTS (viva defence, in one line):
     "The smart part can only ADD caution, never remove it."
@@ -21,10 +21,13 @@ and maps the current gap (d - S) to the MAXIMUM permissible speed fraction:
     S < d < S + ramp  -> (d - S)/ramp  (linear scale-down as separation tightens)
     d >= S + ramp     -> 1.0           (full speed permitted)
 
-This is a certified FLOOR: the runtime-assurance / shielding pattern. The learned
+This is a DETERMINISTIC BOUND in a runtime-assurance / shielding pattern. The learned
 LHMM layer sits ON TOP and may only reduce the command below the envelope, never
 raise it above -- so a recognition error can at worst make the robot too cautious,
-which is safe. This is locked by test_adaptive_never_exceeds_envelope.
+not more permissive than this bound. This is locked by
+test_adaptive_never_exceeds_envelope. The prototype is not certified: T, uncertainty,
+robot stopping distance, swept-volume geometry, and the safety-rated output path must
+all be measured and validated for the installed cell before any safety claim.
 
 WHY v_proj, not K:  the fixed-K zone (K=1.6 m/s worst case) stops the robot for a
 stationary worker standing 1.1 m away, because it assumes they might lunge at full
@@ -36,9 +39,10 @@ therefore never LESS safe than the fixed zone at the speed the zone assumed; it 
 only less conservative when the person is demonstrably moving slower.
 
 NOTE the envelope is NOT the absolute floor on its own: at v_proj~=0 its stop
-distance (C + Sa) is well inside the certified fixed RED radius. The fixed-zone RED
+distance (C + Sa) is well inside the configured fixed RED radius. The fixed-zone RED
 hard-stop invariant is kept ON TOP of the envelope in the controllers, so a body
-inside the certified red radius always stops regardless of measured speed.
+inside the configured red radius always produces a stop request regardless of measured
+speed. Whether that request is safety-rated depends on the physical output chain.
 """
 
 from __future__ import annotations
@@ -55,7 +59,7 @@ class EnvelopeDecision:
 
 
 class DynamicSSMEnvelope:
-    """Speed-aware ISO/TS 15066 stop-distance envelope (the certified floor).
+    """Standards-informed prototype stop-distance envelope.
 
     T, C, Sa are the SAME quantities the ZoneModel uses (system reaction/stopping
     time, sensor intrusion distance, operator position uncertainty). They have ONE

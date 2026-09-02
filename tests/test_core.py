@@ -303,12 +303,25 @@ def test_time_to_breach_kinematics_and_accel_clamp():
 
 def test_fused_risk_gated_by_closing_speed():
     # Imminent breach geometry, but the operator is barely closing (below the gate):
-    # imminence is suppressed, so risk falls back to p_hazard alone.
-    r_slow = fused_risk(0.1, ttb=0.05, horizon=0.5, steepness=8.0, v_proj=0.1, min_closing=0.6)
-    assert r_slow == pytest.approx(0.1)
+    # both signals are suppressed. A sticky activity label cannot stop a stationary
+    # or retreating operator by itself.
+    r_slow = fused_risk(0.9, ttb=0.05, horizon=0.5, steepness=8.0, v_proj=0.1, min_closing=0.6)
+    assert r_slow == pytest.approx(0.0)
     # Same geometry but genuinely closing fast: imminence dominates.
     r_fast = fused_risk(0.1, ttb=0.05, horizon=0.5, steepness=8.0, v_proj=1.5, min_closing=0.6)
     assert r_fast > 0.9
+
+
+def test_hazard_posterior_alone_cannot_preemptively_stop_stationary_operator():
+    zm = _zone_model()
+    obs = np.array([1.20, 0.0, 0.1, 0.0])
+    ctrl = _adaptive(zm, _forced_hmm("hazard", obs))
+
+    records = [ctrl.decide(_frame(d=1.20, v_proj=0.0, a_proj=0.0, t=i))
+               for i in range(5)]
+
+    assert all(record.risk == 0.0 for record in records)
+    assert all(record.command != Command.PROTECTIVE_STOP.value for record in records)
 
 
 # --- 13. anticipation lead time: full system pre-empts, fixed zone reacts ------
