@@ -39,7 +39,7 @@ def test_load_fit_validate_and_roundtrip_pilot_model(tmp_path):
     model = fit_trials(trials, emission_components=2)
     validation = leave_one_trial_out(trials, emission_components=2)
     assert validation["accuracy"] > 0.95
-    assert validation["hazard_recall"] > 0.95
+    assert validation["balanced_accuracy"] > 0.95
 
     target = save_upper_hmm(tmp_path / "model.json", model, validation=validation)
     restored = load_upper_hmm(target)

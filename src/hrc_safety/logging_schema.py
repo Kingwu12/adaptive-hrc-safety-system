@@ -38,14 +38,14 @@ class DecisionRecord:
     zone: str
     state_posterior: list[float]
     predicted_posterior: list[float]
-    p_hazard_next: float
+    p_hazard_next: float  # legacy compatibility field; always 0 in phase/event model
     inferred_state: str
     rule: str
     command: str
     speed_fraction: float
     # --- sem-2 traceability (optional; baseline leaves them at defaults) --------
     envelope_max_speed: float = 1.0  # deterministic prototype bound this tick
-    risk: float = 0.0                # fused hazard risk (posterior + breach imminence)
+    risk: float = 0.0                # independent kinematic rapid-intrusion risk
     time_to_breach_s: float | None = None  # predicted s until red-radius breach (None = n/a)
     # v2: configured/controller-reported collaborative mode for this tick. It is not a
     # learned inference and selects the deterministic command bound. Recording a mode

@@ -44,16 +44,13 @@ FUSION RULE (documented plainly, used by the controller):
 
         imminence = sigmoid( steepness * (horizon_s - time_to_breach) )   in [0, 1]
                     (forced to 0 when closing speed < min_closing)
-        risk      = max( p_hazard , imminence )
+        risk      = imminence
 
-    - p_hazard is the state posterior's belief in the 'hazard' activity (what the
-      operator is DOING -- a lunge posture, erratic motion).
     - imminence is pure geometry (where they will BE) -- it rises toward 1 as the
       predicted breach time drops below the horizon, and is ~0 when breach is far
       off or never (time_to_breach = inf -> imminence -> 0).
-    max() means either signal can trigger caution once physical closing is present.
-    A sticky or mistaken 'hazard' activity posterior cannot stop a stationary or
-    retreating operator by itself.
+    The retained ``p_hazard`` parameter is a compatibility shim and must be zero in
+    the redesigned controller. Hazard is not a mutually exclusive task phase.
 """
 
 from __future__ import annotations
@@ -141,18 +138,18 @@ def fused_risk(
     v_proj: float = _INF,
     min_closing: float = 0.0,
 ) -> float:
-    """Rapid-closing risk from learned and geometric evidence.
+    """Rapid-closing event risk from geometric evidence.
 
     When v_proj is below min_closing, risk is zero: the tracked point is not moving
     toward the protected volume fast enough to meet this experiment's operational
-    event definition. Above the gate, risk=max(p_hazard, imminence). The learned
-    posterior remains available separately for analysis and for a conservative
-    slowdown, but cannot cause a pre-emptive stop without physical closing.
+    event definition. ``p_hazard`` must be zero: it remains only to avoid breaking
+    old callers while hazard-event detection is kept independent from phase recognition.
     """
     if float(v_proj) < float(min_closing):
         return 0.0
     imminence = breach_imminence(ttb, horizon, steepness)
-    return max(float(p_hazard), imminence)
+    # Deliberately ignore the legacy argument. It can no longer influence risk.
+    return imminence
 
 
 __all__ = ["time_to_breach", "breach_imminence", "fused_risk"]

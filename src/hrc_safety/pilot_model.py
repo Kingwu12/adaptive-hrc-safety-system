@@ -14,8 +14,8 @@ import numpy as np
 from .lhmm.upper import (STATES, GaussianEmissions, GaussianMixtureEmissions,
                          UpperHMM)
 
-MODEL_SCHEMA_VERSION = 2
-FEATURE_ORDER = ("d", "v_proj", "speed", "a_proj")
+MODEL_SCHEMA_VERSION = 3
+FEATURE_ORDER = ("d", "v_proj", "speed", "heading_alignment")
 
 
 def model_payload(hmm: UpperHMM, **metadata) -> dict:

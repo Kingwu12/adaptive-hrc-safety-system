@@ -32,8 +32,9 @@ class FeatureFrame:
     v_lat_frac -- fraction of speed that is lateral (perpendicular to the closing
                   direction); ~1 while side-stepping/swaying, ~0 while walking in.
     a_proj     -- acceleration projected onto the closing direction (m/s^2).
-    torso_facing -- cosine similarity of heading with the closing direction
-                  (proxy for whether the operator faces the robot).
+    torso_facing -- LEGACY FIELD NAME: cosine similarity of velocity heading with
+                    the closing direction. This is heading alignment, not measured
+                    torso orientation.
     """
 
     t: float
@@ -51,8 +52,14 @@ class FeatureFrame:
         Order is fixed and shared by fit_emissions / step / viterbi.
         """
         return np.array(
-            [self.d, self.v_proj, self.speed, self.a_proj], dtype=float
+            [self.d, self.v_proj, self.speed, self.torso_facing],
+            dtype=float,
         )
+
+    @property
+    def heading_alignment(self) -> float:
+        """Accurate name for the legacy ``torso_facing`` field."""
+        return self.torso_facing
 
 
 def nearest_column_point(p: np.ndarray, tcp: np.ndarray) -> np.ndarray:

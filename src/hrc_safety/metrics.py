@@ -342,15 +342,19 @@ def compute_phase_metrics(
 class RecognitionReport:
     accuracy: float
     confusion: np.ndarray  # (n_states, n_states); rows = true, cols = predicted
-    hazard_precision: float
-    hazard_recall: float
+    balanced_accuracy: float
+    per_state_recall: dict[str, float]
     states: tuple[str, ...] = field(default=STATES)
 
 
 def recognition_report(
     predicted_states: list[str], gt_labels: list[str]
 ) -> RecognitionReport:
-    """Accuracy, confusion matrix, and hazard precision/recall for the LHMM."""
+    """Accuracy and per-phase recall for the three-state phase HMM.
+
+    Hazard-event performance is intentionally evaluated by the controller metrics,
+    not mixed into task-phase classification.
+    """
     if len(predicted_states) != len(gt_labels):
         raise ValueError("predicted_states and gt_labels must be the same length")
 
@@ -364,16 +368,20 @@ def recognition_report(
             correct += 1
     accuracy = correct / len(gt_labels) if gt_labels else 0.0
 
-    h = index["hazard"]
-    tp = int(confusion[h, h])
-    fp = int(confusion[:, h].sum() - tp)
-    fn = int(confusion[h, :].sum() - tp)
-    precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
-    recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
+    per_state_recall = {}
+    for state, i in index.items():
+        support = int(confusion[i, :].sum())
+        per_state_recall[state] = (
+            float(confusion[i, i] / support) if support else 0.0
+        )
+    balanced_accuracy = (
+        sum(per_state_recall.values()) / len(per_state_recall)
+        if per_state_recall else 0.0
+    )
 
     return RecognitionReport(
         accuracy=accuracy,
         confusion=confusion,
-        hazard_precision=precision,
-        hazard_recall=recall,
+        balanced_accuracy=balanced_accuracy,
+        per_state_recall=per_state_recall,
     )

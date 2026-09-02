@@ -38,18 +38,19 @@ from hrc_safety.mocap import (MocapBridge, NatNetV4Listener,
 from hrc_safety.mocap.xsens_transport import (  # noqa: E402
     MVN_FULL_BODY_SEGMENTS, PELVIS, XsensListener)
 
-ALLOWED_LABELS = {"unlabelled", "approaching", "working", "retreating", "hazard"}
+ALLOWED_PHASE_LABELS = {"unlabelled", "approaching", "working", "retreating"}
+ALLOWED_EVENT_LABELS = {"none", "hazard", "distractor"}
 GUIDED_PROTOCOL_LABELS = (
-    "unlabelled",   # collect panel and move to the marked start position
-    "approaching",  # normal approach with the panel
-    "working",      # place, align, and fasten at the work position
-    "retreating",   # return to the start position
-    "unlabelled",   # reset before the cued-hazard sequence
-    "approaching",  # second approach
-    "working",      # resume the panel task
-    "hazard",       # experimenter-cued, ethics-approved simulated hazard
-    "retreating",   # controlled recovery and retreat
-    "unlabelled",   # sequence complete
+    ("unlabelled", "none"),  # collect panel and move to the marked start position
+    ("approaching", "none"), # normal approach with the panel
+    ("working", "none"),     # place, align, and fasten at the work position
+    ("retreating", "none"),  # return to the start position
+    ("unlabelled", "none"),  # reset before the cued-hazard sequence
+    ("approaching", "none"), # second approach
+    ("working", "none"),     # resume the panel task
+    ("working", "hazard"),   # same task phase; cued rapid-intrusion event
+    ("retreating", "none"),  # controlled recovery and retreat
+    ("unlabelled", "none"),  # sequence complete
 )
 
 PHYSICAL_STEP_WARNINGS = {
@@ -68,10 +69,10 @@ def safe_id(value: object, fallback: str) -> str:
 class RunCatalog:
     """Index saved recordings and keep the local participant-name registry."""
 
-    REQUIRED_LABELS = ("approaching", "working", "retreating", "hazard")
+    REQUIRED_LABELS = ("approaching", "working", "retreating")
     EXPECTED_SEQUENCE = (
         "approaching", "working", "retreating",
-        "approaching", "working", "hazard", "retreating",
+        "approaching", "working", "retreating",
     )
 
     def __init__(self, output_dir: Path) -> None:
@@ -124,7 +125,8 @@ class RunCatalog:
     @classmethod
     def _quality(cls, samples: int, duration_s: float, rate_hz: float,
                  stale_ratio: float, label_counts: dict[str, int],
-                 sequence: list[str], invalid_rows: int) -> dict:
+                 sequence: list[str], invalid_rows: int,
+                 event_counts: dict[str, int] | None = None) -> dict:
         score = 100
         issues: list[str] = []
         missing = [label for label in cls.REQUIRED_LABELS
@@ -132,6 +134,10 @@ class RunCatalog:
         if missing:
             score -= 15 * len(missing)
             issues.append("missing " + ", ".join(missing))
+        event_counts = event_counts or {}
+        if event_counts.get("hazard", 0) == 0:
+            score -= 15
+            issues.append("missing cued hazard event")
         if tuple(sequence) != cls.EXPECTED_SEQUENCE:
             score -= 15
             issues.append("phase order or completion differs from the guided run")
@@ -174,6 +180,7 @@ class RunCatalog:
         participant_id = "P00"
         trial_id = "T00"
         label_counts: dict[str, int] = {}
+        event_counts: dict[str, int] = {}
         sequence: list[str] = []
         previous_label = None
         with path.open("r", encoding="utf-8") as handle:
@@ -195,8 +202,20 @@ class RunCatalog:
                     last_t = float(value)
                 if row.get("stale"):
                     stale += 1
-                label = str(row.get("ground_truth") or "unlabelled")
+                legacy = str(row.get("ground_truth") or "unlabelled")
+                if row.get("ground_truth_phase"):
+                    label = str(row["ground_truth_phase"])
+                elif legacy == "hazard":
+                    # Migrate old mutually-exclusive labelling on read: the event
+                    # occurred during the phase already in progress.
+                    label = previous_label or "working"
+                else:
+                    label = legacy
+                event = str(row.get("ground_truth_event") or (
+                    "hazard" if legacy == "hazard" else "none"
+                ))
                 label_counts[label] = label_counts.get(label, 0) + 1
+                event_counts[event] = event_counts.get(event, 0) + 1
                 if label != "unlabelled" and label != previous_label:
                     sequence.append(label)
                 previous_label = label
@@ -204,7 +223,7 @@ class RunCatalog:
         rate_hz = samples / duration_s if duration_s > 0 else 0.0
         stale_ratio = stale / samples if samples else 1.0
         quality = self._quality(samples, duration_s, rate_hz, stale_ratio,
-                                label_counts, sequence, invalid)
+                                label_counts, sequence, invalid, event_counts)
         label_seconds = {
             label: round(count / rate_hz, 1) if rate_hz > 0 else 0.0
             for label, count in label_counts.items()
@@ -220,6 +239,7 @@ class RunCatalog:
             "rate_hz": round(rate_hz, 1),
             "stale_percent": round(stale_ratio * 100, 2),
             "labels": label_seconds,
+            "events": event_counts,
             "sequence": sequence,
             "quality": quality,
         }
@@ -360,6 +380,7 @@ class DashboardState:
         self.participant_id: str | None = None
         self.trial_id: str | None = None
         self.label = "unlabelled"
+        self.event_label = "none"
         self.guided_step: int | None = None
         self.recording_path: str | None = None
         self.samples_written = 0
@@ -409,7 +430,7 @@ class DashboardState:
             self.hmm_state = state
             if self.recording and self.file is not None:
                 record = {
-                    "schema_version": 2,
+                    "schema_version": 3,
                     "session_id": self.session_id,
                     "participant_id": self.participant_id,
                     "trial_id": self.trial_id,
@@ -423,6 +444,8 @@ class DashboardState:
                               round(self.optitrack_age_s, 5)),
                     "features": feature,
                     "ground_truth": self.label,
+                    "ground_truth_phase": self.label,
+                    "ground_truth_event": self.event_label,
                     "hmm_state": state,
                     "hmm_posterior": posterior,
                     "model_source": self.model_source,
@@ -472,6 +495,7 @@ class DashboardState:
             self.samples_written = 0
             self.mvn_recording_confirmed = True
             self.label = "unlabelled"
+            self.event_label = "none"
             self.guided_step = 0
             self.recording = True
             return {
@@ -491,18 +515,26 @@ class DashboardState:
                 self.file.close()
                 self.file = None
             self.label = "unlabelled"
+            self.event_label = "none"
             self.guided_step = None
             self.mvn_recording_confirmed = False
             return {"message": f"Saved {self.samples_written} samples", "path": self.recording_path}
 
     def set_label(self, label: object) -> dict:
         value = str(label or "")
-        if value not in ALLOWED_LABELS:
+        if value == "hazard":
+            with self.lock:
+                if not self.recording:
+                    raise ValueError("Start recording before applying labels")
+                self.event_label = "hazard"
+            return {"message": "Ground-truth event: hazard"}
+        if value not in ALLOWED_PHASE_LABELS:
             raise ValueError(f"Unknown label: {value}")
         with self.lock:
             if not self.recording:
                 raise ValueError("Start recording before applying labels")
             self.label = value
+            self.event_label = "none"
         return {"message": f"Ground truth: {value}"}
 
     def advance_guided_protocol(self) -> dict:
@@ -519,11 +551,16 @@ class DashboardState:
             if self.guided_step >= len(GUIDED_PROTOCOL_LABELS) - 1:
                 raise ValueError("Guided sequence is complete; stop and save the run")
             self.guided_step += 1
-            self.label = GUIDED_PROTOCOL_LABELS[self.guided_step]
+            self.label, self.event_label = GUIDED_PROTOCOL_LABELS[self.guided_step]
             return {
-                "message": f"Guided step {self.guided_step + 1}: {self.label}",
+                "message": (
+                    f"Guided step {self.guided_step + 1}: {self.label}"
+                    + (f" + {self.event_label} event"
+                       if self.event_label != "none" else "")
+                ),
                 "guided_step": self.guided_step,
                 "label": self.label,
+                "event_label": self.event_label,
             }
 
     def mark_calibrated(self) -> dict:
@@ -568,6 +605,7 @@ class DashboardState:
                 "participant_id": self.participant_id,
                 "trial_id": self.trial_id,
                 "label": self.label,
+                "event_label": self.event_label,
                 "guided_step": self.guided_step,
                 "guided_steps_total": len(GUIDED_PROTOCOL_LABELS),
                 "recording_path": self.recording_path,

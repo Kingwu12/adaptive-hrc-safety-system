@@ -52,14 +52,14 @@ from ..horizon import fused_risk, time_to_breach
 from ..logging_schema import Command, DecisionRecord
 from ..lhmm.upper import STATES, UpperHMM
 from ..panel_cycle import CollaborativeMode
-from ..prediction import hazard_probability, predict_next
+from ..prediction import predict_next
 from ..zones import Zone, ZoneModel
 
 _SSM = CollaborativeMode.SSM.value
 _HAND_GUIDE = CollaborativeMode.HAND_GUIDE.value
 _MONITORED_STOP = CollaborativeMode.MONITORED_STOP.value
 
-_NEUTRAL = [0.0, 0.0, 0.0, 0.0]
+_NEUTRAL = [0.0] * len(STATES)
 
 
 def _zone_name(z: Zone) -> str:
@@ -151,8 +151,8 @@ class EnvelopeAdaptiveController:
     with a fixed-RED hard stop and a sustained-risk pre-emptive stop above both.
 
     The `use_state_layer` and `use_horizon` flags exist for the REPLAY ABLATION:
-      * use_horizon=False   -> "full minus prediction": falls back to the superseded
-                               one-step p@A hazard instead of horizon time-to-breach.
+      * use_horizon=False   -> "full minus prediction": disables independent
+                               kinematic event anticipation while retaining phase caution.
       * use_state_layer=False -> "full minus state": envelope + hard stop only (this is
                                exactly rung 2, DynamicSSMController).
     """
@@ -213,12 +213,12 @@ class EnvelopeAdaptiveController:
             posterior = self.hmm.step(frame.as_vector())
             inferred = STATES[int(np.argmax(posterior))]
             posterior_list = [float(x) for x in posterior]
-            p_haz = hazard_probability(posterior)
         else:
             posterior = None
             inferred = "n/a"
             posterior_list = _NEUTRAL
-            p_haz = 0.0
+        # Hazard is not a task phase. Event risk is computed independently below.
+        p_haz = 0.0
 
         # ---- Predict: kinematic horizon (or superseded one-step for the ablation) -
         ttb = time_to_breach(
@@ -227,14 +227,15 @@ class EnvelopeAdaptiveController:
         )
         if self.use_horizon:
             risk = fused_risk(
-                p_haz, ttb, self.horizon_s, self.imminence_steepness,
+                0.0, ttb, self.horizon_s, self.imminence_steepness,
                 v_proj=frame.v_proj, min_closing=self.min_closing_speed,
             )
             predicted_list = posterior_list  # horizon does not produce a posterior
         elif posterior is not None:
-            # Ablation: fall back to one-step p@A prediction (paper Eq.1).
+            # Keep the next-phase prediction for analysis, but a phase transition
+            # is not evidence of a hazard event.
             predicted = predict_next(posterior, self.hmm.A)
-            risk = hazard_probability(predicted)
+            risk = 0.0
             predicted_list = [float(x) for x in predicted]
         else:
             risk = 0.0
@@ -329,9 +330,8 @@ class EnvelopeAdaptiveController:
             )
 
         # ---- Pre-emptive stop on sustained RAPID-CLOSING risk --------------------
-        # `fused_risk` gates both the legacy activity posterior and the kinematic
-        # signal on measured closing speed. A sticky 'hazard' label alone cannot
-        # stop a stationary or retreating operator.
+        # Event anticipation is independent of the task-phase classifier. It is
+        # gated on measured closing speed and predicted boundary breach.
         if self._hazard_streak >= self.hazard_dwell_ticks:
             return (
                 Command.PROTECTIVE_STOP,
@@ -346,7 +346,7 @@ class EnvelopeAdaptiveController:
         if self.use_state_layer and zone == Zone.YELLOW:
             if inferred == "retreating":
                 cap, cap_reason = 1.0, "retreating -> no extra caution (envelope governs)"
-            elif inferred in ("working", "approaching", "hazard"):
+            elif inferred in ("working", "approaching"):
                 cap = self.speed_reduced
                 cap_reason = f"{inferred} in yellow -> cap at reduced speed"
 

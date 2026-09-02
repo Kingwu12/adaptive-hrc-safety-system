@@ -58,8 +58,9 @@ weakening the protective stop.
 
 - **Motion capture** (OptiTrack) of the participant's tracked points — the primary
   measurement.
-- **Video** — for offline labelling of operator state (approaching / working /
-  retreating / hazard) and distractor/slip windows. Faces [blurred / not recorded — decide].
+- **Video** — for offline labelling of task phase (approaching / working /
+  retreating) and, independently, distractor/slip event windows. A slip does not replace
+  the participant's task-phase label. Faces [blurred / not recorded — decide].
 - **Questionnaires** — perceived safety, comfort, and trust per condition.
 - **Robot decision logs** — per-tick controller records (no personal data).
 

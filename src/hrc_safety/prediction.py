@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from .lhmm.upper import STATES, _INDEX
+from .lhmm.upper import STATES
 
 
 def predict_next(p: np.ndarray, A: np.ndarray) -> np.ndarray:
@@ -34,9 +34,4 @@ def predict_next(p: np.ndarray, A: np.ndarray) -> np.ndarray:
     return nxt / s if s > 0 else np.full(len(p), 1.0 / len(p))
 
 
-def hazard_probability(p_next: np.ndarray) -> float:
-    """Probability mass on the 'hazard' state in a (predicted) posterior."""
-    return float(np.asarray(p_next, dtype=float)[_INDEX["hazard"]])
-
-
-__all__ = ["predict_next", "hazard_probability", "STATES"]
+__all__ = ["predict_next", "STATES"]

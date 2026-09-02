@@ -1,7 +1,13 @@
-"""Upper layer of the Layered HMM: operator-state recognition.
+"""Upper layer of the Layered HMM: operator task-phase recognition.
 
-States: approaching / working / retreating / hazard.
-Emissions: diagonal Gaussian or Gaussian mixture over [d, v_proj, speed, a_proj].
+States: approaching / working / retreating.
+Emissions: diagonal Gaussian or Gaussian mixture over
+[d, v_proj, speed, heading_alignment]. Acceleration is reserved for the
+independent rapid-intrusion predictor; its pilot estimate is too noisy for phase.
+
+Hazard is deliberately NOT a fourth task phase. A rapid intrusion can happen while
+the operator is in any phase, so it is detected independently from kinematics and
+evaluated with event sensitivity, false-stop burden, and response latency.
 
 Three entry points, matching the paper's reporting discipline:
   * step(x)   -- streaming forward-filter update; returns the online posterior the
@@ -20,11 +26,11 @@ from dataclasses import dataclass
 
 import numpy as np
 
-STATES: tuple[str, ...] = ("approaching", "working", "retreating", "hazard")
+STATES: tuple[str, ...] = ("approaching", "working", "retreating")
 _INDEX = {s: i for i, s in enumerate(STATES)}
 
 # Feature vector order (must match FeatureFrame.as_vector):
-#   [ d, v_proj, speed, a_proj ]
+#   [ d, v_proj, speed, heading_alignment ]
 _N_FEATURES = 4
 
 
@@ -46,13 +52,7 @@ class GaussianEmissions:
 
 @dataclass
 class GaussianMixtureEmissions:
-    """Per-state diagonal Gaussian mixtures for multi-modal activities.
-
-    A simulated hazard contains a rapid closing movement and a recovery movement.
-    One Gaussian averages those opposing velocities into a misleading stationary
-    state; two components preserve both modes while the HMM still exposes the same
-    four interpretable activity states.
-    """
+    """Per-state diagonal Gaussian mixtures for multi-modal task phases."""
 
     weights: np.ndarray  # (n_states, n_components)
     means: np.ndarray  # (n_states, n_components, n_features)
@@ -77,24 +77,24 @@ def default_emissions() -> GaussianEmissions:
       approaching -- mid distance, closing (v_proj>0), walking speed, +accel.
       working     -- near work_radius, ~stationary net, low speed, ~0 accel.
       retreating  -- mid distance, opening (v_proj<0), walking speed.
-      hazard      -- small distance, fast closing, high speed, strong +accel (lunge).
-    Columns: [ d, v_proj, speed, a_proj ].
+    ``heading_alignment`` is the velocity direction aligned with the robot direction;
+    it separates approach from lateral working motion without pretending to measure
+    torso orientation.
+    Columns: [ d, v_proj, speed, heading_alignment ].
     """
     means = np.array(
         [
-            [1.30, 0.60, 0.65, 0.30],   # approaching
-            [1.10, 0.00, 0.15, 0.00],   # working
-            [1.30, -0.60, 0.65, -0.20], # retreating
-            [0.70, 1.80, 1.90, 1.50],   # hazard
+            [1.30, 0.60, 0.65, 0.80],    # approaching
+            [1.10, 0.00, 0.15, 0.00],    # working
+            [1.30, -0.60, 0.65, -0.80],  # retreating
         ],
         dtype=float,
     )
     variances = np.array(
         [
-            [0.20, 0.25, 0.25, 0.30],
-            [0.15, 0.10, 0.10, 0.15],
-            [0.20, 0.25, 0.25, 0.30],
-            [0.20, 0.60, 0.60, 0.80],
+            [0.20, 0.25, 0.25, 0.20],
+            [0.15, 0.10, 0.10, 0.35],
+            [0.20, 0.25, 0.25, 0.20],
         ],
         dtype=float,
     )
@@ -102,7 +102,7 @@ def default_emissions() -> GaussianEmissions:
 
 
 class UpperHMM:
-    """Interpretable 4-state HMM over the operator's activity."""
+    """Interpretable 3-state HMM over the operator's task phase."""
 
     def __init__(
         self,

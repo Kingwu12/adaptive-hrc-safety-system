@@ -84,15 +84,15 @@ this bound; a recognition error can therefore only add caution, never speed. Thi
 software invariant is not a certification claim: the installed geometry, uncertainty,
 reaction/stopping time, collaborative mode and output chain require physical validation.
 
-\subsection{Horizon Prediction}
-% STUB. Constant-acceleration time-to-breach fused with the state posterior.
+\subsection{Independent Rapid-Intrusion Prediction}
+% STUB. Constant-acceleration time-to-breach, independent from task-phase recognition.
 The anticipation signal is kinematic, not label-based: a constant-acceleration
 extrapolation gives the time until the operator crosses the red radius, clamped to a
 human-plausible acceleration to reject sensor noise, and gated on genuine closing
-motion. Because the operational event is a rapid closing trajectory, both the legacy
-``hazard'' activity posterior and geometric imminence are gated on measured closing
-speed before fusion. The activity label alone cannot trigger a stop request for a
-stationary or retreating operator.
+motion. Because the operational event is a rapid closing trajectory, geometric
+imminence is gated on measured closing speed. Hazard is an event that can occur during
+any task phase, not a mutually exclusive fourth phase; phase belief cannot trigger a
+stop request.
 
 \section{Experimental Method}
 \label{sec:method}

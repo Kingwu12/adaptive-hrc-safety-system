@@ -209,12 +209,12 @@ Code: `envelope.py`, `controllers/controllers.py`. Tests: `test_adaptive_never_e
 
 **What changed.** New `src/hrc_safety/horizon.py`. `time_to_breach(d, v_proj, a_proj,
 red_radius, horizon)` extrapolates the operator's motion under constant acceleration
-and returns the time until they cross the red radius. It is fused with the state
-posterior:
+and returns the time until they cross the red radius. It is deliberately independent
+from the task-phase posterior:
 
 ```
 imminence = sigmoid( steepness * (horizon - time_to_breach) )   # gated by closing speed
-risk      = max( p_hazard , imminence )
+risk      = imminence
 ```
 
 `prediction.py` (one-step `p_{t+1} = normalize(p_t @ A)`, paper Eq.1) is kept for

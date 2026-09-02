@@ -154,18 +154,18 @@ def test_prediction_equals_eq1():
 def test_fit_transitions_rows_sum_to_one():
     seqs = [
         ["approaching", "approaching", "working", "working", "retreating"],
-        ["working", "working", "hazard", "retreating", "retreating"],
+        ["working", "working", "approaching", "retreating", "retreating"],
     ]
     A = UpperHMM.fit_transitions(seqs, laplace=1.0)
-    assert A.shape == (4, 4)
-    np.testing.assert_allclose(A.sum(axis=1), np.ones(4))
+    assert A.shape == (3, 3)
+    np.testing.assert_allclose(A.sum(axis=1), np.ones(3))
 
 
 # --- 6. THE PERMANENT MERGE BLOCKER ----------------------------------------
 
 def test_red_zone_always_stops_adaptive_even_if_model_says_working():
     """RED breach => protective stop, even when the model is certain it's 'working'."""
-    obs = np.array([0.30, 0.0, 0.9, 0.0])  # working-like kinematics, but d in RED
+    obs = np.array([0.30, 0.0, 0.9, 1.0])  # working-like kinematics, but d in RED
     hmm = _forced_hmm("working", obs)
     ctrl = _adaptive(_zone_model(), hmm)
 
@@ -192,7 +192,7 @@ def test_static_zone_mapping():
 # --- 8. adaptive full speed when retreating in yellow ----------------------
 
 def test_adaptive_full_speed_when_retreating_in_yellow():
-    obs = np.array([1.20, -0.6, 0.15, -0.2])  # retreating kinematics in the yellow band
+    obs = np.array([1.20, -0.6, 0.75, 1.0])  # retreating kinematics in the yellow band
     hmm = _forced_hmm("retreating", obs)
     ctrl = _adaptive(_zone_model(), hmm)
 
@@ -312,10 +312,10 @@ def test_fused_risk_gated_by_closing_speed():
     assert r_fast > 0.9
 
 
-def test_hazard_posterior_alone_cannot_preemptively_stop_stationary_operator():
+def test_phase_posterior_cannot_preemptively_stop_stationary_operator():
     zm = _zone_model()
-    obs = np.array([1.20, 0.0, 0.1, 0.0])
-    ctrl = _adaptive(zm, _forced_hmm("hazard", obs))
+    obs = np.array([1.20, 0.0, 0.0, 1.0])
+    ctrl = _adaptive(zm, _forced_hmm("working", obs))
 
     records = [ctrl.decide(_frame(d=1.20, v_proj=0.0, a_proj=0.0, t=i))
                for i in range(5)]
@@ -461,7 +461,7 @@ def test_hand_guide_feasible_for_envelope_infeasible_for_fixed_zone():
 
 def test_collaborative_mode_governs_envelope_floor():
     zm = _zone_model()
-    obs = np.array([0.12, 0.0, 0.9, 0.0])  # working-like, at contact distance (in RED)
+    obs = np.array([0.12, 0.0, 0.9, 1.0])  # working-like, at contact distance (in RED)
     ctrl = _adaptive(zm, _forced_hmm("working", obs))
     contact = _frame(d=0.12, v_proj=0.05, v_lat_frac=0.3)
 
@@ -480,15 +480,15 @@ def test_collaborative_mode_governs_envelope_floor():
 
 def test_hand_guide_still_stops_for_fast_lunge():
     zm = _zone_model()
-    obs = np.array([0.12, 2.0, 0.1, 1.5])  # hazard-like fast closing at contact
-    ctrl = _adaptive(zm, _forced_hmm("hazard", obs))
+    obs = np.array([0.12, 2.0, 2.1, 1.0])  # phase is irrelevant to event detection
+    ctrl = _adaptive(zm, _forced_hmm("working", obs))
     rec = None
     for i in range(5):  # sustained fast-closing lunge during hand-guiding
         rec = ctrl.decide(
             _frame(d=0.12, v_proj=2.0, v_lat_frac=0.1, a_proj=1.5, t=i),
             robot_mode="hand_guide",
         )
-    # The learned layer may ADD caution atop the compliant-hold floor: a real lunge stops.
+    # The independent kinematic event layer adds caution: a real lunge stops.
     assert rec.command == Command.PROTECTIVE_STOP.value
 
 

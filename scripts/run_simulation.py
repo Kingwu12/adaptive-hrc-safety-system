@@ -165,8 +165,9 @@ def main() -> None:
     rep = recognition_report(predicted_path, test_labels)
     print("\nLHMM recognition report (test trace, Viterbi vs ground truth):")
     print(f"  accuracy          = {rep.accuracy:.3f}")
-    print(f"  hazard precision  = {rep.hazard_precision:.3f}")
-    print(f"  hazard recall     = {rep.hazard_recall:.3f}")
+    print(f"  balanced accuracy = {rep.balanced_accuracy:.3f}")
+    for state, recall in rep.per_state_recall.items():
+        print(f"  {state:11s} recall = {recall:.3f}")
 
     os.makedirs(LOG_DIR, exist_ok=True)
 
@@ -201,8 +202,8 @@ def main() -> None:
         },
         "recognition": {
             "accuracy": rep.accuracy,
-            "hazard_precision": rep.hazard_precision,
-            "hazard_recall": rep.hazard_recall,
+            "balanced_accuracy": rep.balanced_accuracy,
+            "per_phase_recall": rep.per_state_recall,
         },
         "metrics": metrics,
         "phase_metrics": phase_metrics,

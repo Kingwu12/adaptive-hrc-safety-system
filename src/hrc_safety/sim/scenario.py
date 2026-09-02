@@ -62,12 +62,11 @@ import numpy as np
 
 from ..panel_cycle import CollaborativeMode, Phase
 
-# Ground-truth activity labels (subset of the LHMM state set) -- what the HUMAN is doing.
-# These are distinct from the cycle Phase and the robot's CollaborativeMode.
+# Ground-truth task-phase labels -- what the human is doing. Hazard and distractor
+# status live in separate event windows and never replace the phase label.
 _APPROACH = "approaching"
 _WORKING = "working"
 _RETREAT = "retreating"
-_HAZARD = "hazard"
 
 _TORSO_Z = 1.4  # operator torso height (m); constant standing height
 
@@ -83,7 +82,7 @@ class LoopTrace:
 
     times: np.ndarray  # (T,)
     positions: np.ndarray  # (T, 3)
-    labels: list[str]  # length T ground-truth activity (LHMM state)
+    labels: list[str]  # length T ground-truth task phase (LHMM state)
     events: list[tuple[str, float]]  # (name, timestamp)
     dt: float
     hazard_onset_t: float  # ground-truth slip onset (== hazard-latency reference)
@@ -202,7 +201,7 @@ def generate_loop(config: dict, seed: int = 0) -> LoopTrace:
     add_move(prep, dart_pt, dart_dist / dart_speed, _WORKING, P_TRANSIT, _SSM, tag="distractor")
     add_move(dart_pt, prep, dart_dist / dart_speed, _WORKING, P_TRANSIT, _SSM, tag="distractor")
     # SIMULATED SLIP (lunge in, breaching red) -- the ONE true hazard, in SSM mode.
-    add_move(prep, slip_pt, 0.5, _HAZARD, P_TRANSIT, _SSM, tag="slip")
+    add_move(prep, slip_pt, 0.5, _APPROACH, P_TRANSIT, _SSM, tag="slip")
     add_move(slip_pt, prep, 0.8, _RETREAT, P_TRANSIT, _SSM)  # recover outward
 
     # P3 HAND_GUIDE -- robot in certified compliant hold; human nudges the panel. MEASURE.

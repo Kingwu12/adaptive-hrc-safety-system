@@ -26,6 +26,7 @@ type Status = {
   participant_id: string | null;
   trial_id: string | null;
   label: string;
+  event_label: string;
   guided_step: number | null;
   guided_steps_total: number;
   recording_path: string | null;
@@ -55,6 +56,7 @@ type RunSummary = {
   rate_hz: number;
   stale_percent: number;
   labels: Record<string, number>;
+  events: Record<string, number>;
   sequence: string[];
   quality: { grade: "good" | "review" | "repeat"; label: string; score: number; reasons: string[] };
 };
@@ -67,12 +69,12 @@ const EMPTY: Status = {
   optitrack_connected: false, optitrack_age_s: null,
   feature: null, posterior: {}, hmm_state: null,
   model_source: "synthetic baseline", recording: false, session_id: null,
-  participant_id: null, trial_id: null, label: "unlabelled",
+  participant_id: null, trial_id: null, label: "unlabelled", event_label: "none",
   guided_step: null, guided_steps_total: 10,
   recording_path: null, samples_written: 0, calibration_elapsed_s: null,
 };
 
-const STATES = ["approaching", "working", "retreating", "hazard"];
+const STATES = ["approaching", "working", "retreating"];
 
 const GUIDED_PROTOCOL = [
   {
@@ -111,7 +113,7 @@ const GUIDED_PROTOCOL = [
     next: "PRESS & SAY ‘HAZARD’ TOGETHER",
   },
   {
-    label: "hazard", title: "PERFORM THE APPROVED CUED HAZARD",
+    label: "working", event: "hazard", title: "PERFORM THE APPROVED CUED HAZARD",
     cue: "Participant performs only the brief, pre-briefed simulated slip or near-approach. Keep the E-stop in reach.",
     next: "PRESS THE INSTANT THE HAZARD MOTION ENDS",
   },
@@ -506,10 +508,10 @@ export default function Home() {
       </nav>
 
       {tab === "operate" && status.recording && (
-        <section className={`runDirector label-${guided.label}`} aria-live="polite">
+        <section className={`runDirector label-${status.event_label === "hazard" ? "hazard" : guided.label}`} aria-live="polite">
           <div className="runDirectorHead">
             <span>LIVE RUN DIRECTOR · STEP {guidedIndex + 1}/{GUIDED_PROTOCOL.length}</span>
-            <strong>RECORDING LABEL: {status.label.toUpperCase()}</strong>
+            <strong>PHASE: {status.label.toUpperCase()} · EVENT: {status.event_label.toUpperCase()}</strong>
           </div>
           <h2>{guided.title}</h2>
           <p>{guided.cue}</p>
@@ -567,7 +569,7 @@ export default function Home() {
               <div className="runMetrics">
                 <span>{run.samples.toLocaleString()} samples</span><span>{run.duration_s.toFixed(1)} s</span><span>{run.rate_hz.toFixed(1)} Hz</span><span>{run.stale_percent.toFixed(2)}% stale</span>
               </div>
-              <div className="labelCoverage">{STATES.map(label => <span key={label}>{label} {run.labels[label] == null ? "—" : `${n(run.labels[label], 1)}s`}</span>)}</div>
+              <div className="labelCoverage">{STATES.map(label => <span key={label}>{label} {run.labels[label] == null ? "—" : `${n(run.labels[label], 1)}s`}</span>)}<span>hazard event {run.events?.hazard ?? 0} frames</span></div>
               <p>{run.quality.reasons.join(" · ")}</p>
             </div>)}
           </div>
@@ -585,7 +587,7 @@ export default function Home() {
         </article>
 
         <article className="panel labels">
-          <div className="panelHead"><div><p className="kicker">03 · GROUND TRUTH</p><h2>What is actually happening?</h2></div><span className="currentLabel">{status.label}</span></div>
+          <div className="panelHead"><div><p className="kicker">03 · GROUND TRUTH</p><h2>Phase + independent event</h2></div><span className="currentLabel">{status.label} · {status.event_label}</span></div>
           <p className="help">The experimenter advances the protocol at each real phase onset. The active label then persists on every frame until the next cue; the participant never touches this console.</p>
           <div className="guidedRun">
             <span>GUIDED RUN · STEP {guidedIndex + 1}/{GUIDED_PROTOCOL.length} · {status.label.toUpperCase()}</span>
@@ -598,13 +600,14 @@ export default function Home() {
           </div>
           <p className="manualLabelTitle">Manual label override — recovery/debugging only</p>
           <div className="labelButtons">{STATES.map(s => <button key={s} className={status.label === s ? "selected" : ""} disabled={!status.recording} onClick={() => post("/api/label", { label: s })}>{s}</button>)}</div>
+          <button className="unlabel" disabled={!status.recording} onClick={() => post("/api/label", { label: "hazard" })}>Mark hazard event (phase stays unchanged)</button>
           <button className="unlabel" disabled={!status.recording} onClick={() => post("/api/label", { label: "unlabelled" })}>Mark transition / unlabelled</button>
           <p className="shortcutHelp"><kbd>Enter</kbd> next guided phase · <kbd>1</kbd> approach · <kbd>2</kbd> work · <kbd>3</kbd> retreat · <kbd>4</kbd> hazard · <kbd>0</kbd> unlabelled</p>
         </article>
 
         <article className="panel probabilities">
           <div className="panelHead"><div><p className="kicker">04 · MODEL</p><h2>HMM belief</h2></div><span className="quiet">not ground truth</span></div>
-          <div className="bars">{["approaching", "working", "retreating", "hazard"].map(s => { const value = status.posterior[s] || 0; return <div className="barRow" key={s}><span>{s}</span><div><i style={{ width: `${value * 100}%` }} /></div><strong>{Math.round(value * 100)}%</strong></div>; })}</div>
+          <div className="bars">{STATES.map(s => { const value = status.posterior[s] || 0; return <div className="barRow" key={s}><span>{s}</span><div><i style={{ width: `${value * 100}%` }} /></div><strong>{Math.round(value * 100)}%</strong></div>; })}</div>
           <p className="modelNote"><b>Model source:</b> {status.model_source}. Model inference is experimental and may add caution; the independent separation envelope remains the safety floor.</p>
         </article>
 

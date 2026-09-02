@@ -32,13 +32,12 @@ state and not the safety truth.
 |---|---|---|---|
 | OptiTrack geometry | One tracked head rigid body and live TCP | Head-proxy distance and closing kinematics | Full body or reaching-limb clearance |
 | Xsens path | Historical pilot files: pelvis XYZ only. Schema v2 onward: all received segment positions/quaternions, while the current model still excludes them | Concurrent wearable trace; future posture/event-feature research after validation | Existing-pilot full-body evidence, validated fall recognition or safety-rated fusion |
-| GMM-HMM | `d`, `v_proj`, speed, `a_proj` | Development activity classifier and optional conservative slowdown context | General hazard detection or safety certification |
+| GMM-HMM | `d`, `v_proj`, speed, heading alignment | Three-phase development classifier and optional conservative slowdown context | Hazard detection or safety certification |
 | Kinematic horizon | Head-proxy distance, closing speed and acceleration | Anticipation of a defined rapid boundary intrusion | Intent, loss of balance, or arbitrary hazards |
 | Zone/envelope code | Simplified `K*T+C+Sa` geometry | Reproducible deterministic command bound for comparison | A complete validated protective-separation calculation |
 | Robot output | RTDE slider plus Dashboard pause | Simulation/bring-up stop request | Safety-rated protective stop |
 
-The learned layer is now gated so a sticky `hazard` posterior cannot by itself create a
-pre-emptive stop while the tracked point is stationary or retreating. The fixed red-zone
+The phase layer contains no `hazard` state and cannot create a pre-emptive stop. The fixed red-zone
 software invariant remains independent of the learned label.
 
 ## 3. Hazard analysis for the whole robot system

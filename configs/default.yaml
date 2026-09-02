@@ -20,15 +20,17 @@ features:
   accel_window: 3     # samples in the least-squares acceleration slope window
 
 lhmm:
-  states: ["approaching", "working", "retreating", "hazard"]
+  # Mutually exclusive TASK PHASES only. A rapid-intrusion hazard is orthogonal
+  # and is handled by the kinematic horizon detector below.
+  states: ["approaching", "working", "retreating"]
   # COLD-START ONLY. The reported transition matrix A is FITTED from labelled
   # pilot loops (fit_transitions). Reporting these hand-set numbers would be
   # circular validation -- they exist solely to bootstrap before data exists.
   transition_prior:
-    - [0.80, 0.15, 0.03, 0.02]  # from approaching
-    - [0.10, 0.80, 0.07, 0.03]  # from working
-    - [0.03, 0.07, 0.85, 0.05]  # from retreating
-    - [0.20, 0.10, 0.20, 0.50]  # from hazard
+    - [0.82, 0.15, 0.03]  # from approaching
+    - [0.10, 0.83, 0.07]  # from working
+    - [0.04, 0.08, 0.88]  # from retreating
+  # Legacy constructor fallback only; live event threshold is horizon.risk_threshold.
   hazard_prob_threshold: 0.35
   hazard_dwell_ticks: 2
 

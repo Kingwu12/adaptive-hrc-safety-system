@@ -33,8 +33,14 @@ def main() -> int:
     parser.add_argument(
         "--emission-components",
         type=int,
-        default=2,
-        help="diagonal Gaussian components per state (default: 2)",
+        default=3,
+        help="diagonal Gaussian components per phase (default: 3)",
+    )
+    parser.add_argument(
+        "--transition-power",
+        type=float,
+        default=8.0,
+        help="row-normalized transition sharpening power (default: 8)",
     )
     parser.add_argument(
         "--participants",
@@ -52,6 +58,8 @@ def main() -> int:
     args = parser.parse_args()
     if args.emission_components < 1:
         parser.error("--emission-components must be at least one")
+    if args.transition_power <= 0:
+        parser.error("--transition-power must be positive")
 
     scanned = load_trials(args.input)
     if not scanned:
@@ -110,10 +118,12 @@ def main() -> int:
         print("NOT READY: participant-level validation requires at least two participants")
         return 2
 
-    model = fit_trials(usable, args.emission_components)
-    validation = (leave_one_participant_out(usable, args.emission_components)
+    model = fit_trials(usable, args.emission_components, args.transition_power)
+    validation = (leave_one_participant_out(
+                      usable, args.emission_components, args.transition_power)
                   if validation_method == "participant"
-                  else leave_one_trial_out(usable, args.emission_components))
+                  else leave_one_trial_out(
+                      usable, args.emission_components, args.transition_power))
     validation["sequence_boundary_policy"] = (
         "reset Viterbi at every unlabelled or invalid gap"
     )
@@ -136,8 +146,14 @@ def main() -> int:
             state: sum(trial.counts[state] for trial in usable) for state in STATES
         },
         "min_samples_per_state_per_trial": args.min_samples_per_state,
-        "feature_order": ["d", "v_proj", "speed", "a_proj"],
+        "feature_order": [
+            "d", "v_proj", "speed", "heading_alignment"
+        ],
         "emission_components_per_state": args.emission_components,
+        "transition_power": args.transition_power,
+        "target_definition": (
+            "three mutually exclusive task phases; hazard is an orthogonal event"
+        ),
     }
     target = save_upper_hmm(
         args.output,
@@ -150,14 +166,14 @@ def main() -> int:
     )
     print(f"FITTED: {target.resolve()}")
     print(
-        f"Observation: d, v_proj, speed, a_proj; "
+        f"Observation: d, v_proj, speed, heading_alignment; "
         f"emission components/state: {args.emission_components}"
     )
     print(
         f"{validation['method']} validation: "
         f"accuracy={validation['accuracy']:.3f} "
-        f"hazard_precision={validation['hazard_precision']:.3f} "
-        f"hazard_recall={validation['hazard_recall']:.3f}"
+        f"balanced_accuracy={validation['balanced_accuracy']:.3f} "
+        f"online_filter_accuracy={validation['online_filter_accuracy']:.3f}"
     )
     return 0
 

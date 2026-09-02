@@ -104,7 +104,7 @@ def test_dashboard_state_records_enriched_labelled_frames(tmp_path):
     snap = state.snapshot()
     assert snap["connected"] is True
     assert snap["xsens_segment_count"] == 23
-    assert snap["hmm_state"] in {"approaching", "working", "retreating", "hazard"}
+    assert snap["hmm_state"] in {"approaching", "working", "retreating"}
     assert snap["feature"]["speed"] > 0
 
     state.mark_calibrated()
@@ -122,14 +122,16 @@ def test_dashboard_state_records_enriched_labelled_frames(tmp_path):
     rows = [json.loads(line) for line in path.read_text().splitlines()]
     row = next(item for item in rows if item["features"] is not None)
     assert row["participant_id"] == "P-01"
-    assert row["schema_version"] == 2
+    assert row["schema_version"] == 3
     assert len(row["xsens_frame"]["segments"]) == 23
     assert row["xsens_frame"]["segments"]["2"]["quaternion_wxyz"] == [
         0.5, 0.5, 0.5, 0.5]
     assert row["trial_id"] == "T-01"
     assert row["ground_truth"] == "approaching"
+    assert row["ground_truth_phase"] == "approaching"
+    assert row["ground_truth_event"] == "none"
     assert row["features"]["v_proj"] > 0
-    assert set(row["hmm_posterior"]) == {"approaching", "working", "retreating", "hazard"}
+    assert set(row["hmm_posterior"]) == {"approaching", "working", "retreating"}
 
 
 def test_start_session_resets_temporal_model_state(tmp_path):
@@ -150,7 +152,7 @@ def test_start_session_resets_temporal_model_state(tmp_path):
     assert state.feature is None
     assert state.posterior == {}
     assert state.hmm_state is None
-    np.testing.assert_allclose(state.hmm.belief, [0.25, 0.25, 0.25, 0.25])
+    np.testing.assert_allclose(state.hmm.belief, [1 / 3, 1 / 3, 1 / 3])
     state.stop_session()
 
 

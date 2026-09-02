@@ -37,11 +37,13 @@ Run once per hardware configuration, before collecting reported data:
 - [ ] **Measure `T` end-to-end** — command → sensed → robot fully stopped (not a datasheet value).
 - [ ] **Measure `Sa`** — operator position uncertainty from the mocap + body-model chain.
 - [ ] **Recompute `S0`** from measured `T`, `Sa` and re-tape the red/yellow zones on the floor.
-- [ ] **Fit the models from ≥ 3 complete labelled loops** — every loop must include
-      approaching, working, retreating, and the experimenter-cued hazard; use
+- [ ] **Fit the phase model from ≥ 3 complete labelled loops** — every loop must include
+      approaching, working, and retreating. Record the experimenter-cued rapid
+      intrusion in a separate event field without replacing the active task phase; use
       `scripts/train_pilot_hmm.py` to enforce this gate, then `fit_transitions` for `A`,
-      `fit_emissions` for the Gaussians. These produce the reported model; the config's
-      hand-set numbers are cold-start priors only.
+      `fit_emissions` for the Gaussian mixtures. Report phase accuracy/balanced accuracy
+      separately from event sensitivity, specificity, false-stop rate, and latency.
+      These produce the reported model; the config's hand-set numbers are cold-start priors only.
 - [ ] **Verify the command path in URSim first**, then on hardware — full/reduced speed via
       the RTDE speed slider. Dashboard pause is only a research stop request; SSM with a
       participant requires an independently validated safety-rated stop path.

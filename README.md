@@ -46,7 +46,7 @@ python scripts/replay.py --controller all   # offline replay/ablation over a log
 python scripts/dashboard_server.py          # localhost-only sensor service
 cd dashboard && npm run dev                 # open http://localhost:3000
 
-# After collecting labelled pilot loops (requires >=3 complete four-state loops).
+# After collecting labelled pilot loops (requires >=3 complete three-phase loops).
 # Install the training-only Gaussian-mixture fitter, filter out bring-up files,
 # and validate on people absent from model fitting.
 python -m pip install -e ".[training]"
@@ -56,7 +56,7 @@ python scripts/train_pilot_hmm.py --participants P03,P04,P05 --validation partic
 
 # On a Windows 10/11 machine, run Xsens Analyze/Animate with the Awinda
 # dongle attached. Stream Position + Quaternion over UDP to this Mac:9763.
-# Before a real run, the console must show Xsens 23/23 segments. Schema v2
+# Before a real run, the console must show Xsens 23/23 segments. Schema v3
 # persists every segment XYZ + quaternion and refuses pelvis-only recording.
 
 # Optional group viewing on trusted lab Wi-Fi (remote browsers are view-only)
@@ -74,11 +74,11 @@ make paper                                  # regenerate result tables; build th
  FeatureExtractor ──► FeatureFrame(d, d_dot, speed, v_proj, v_lat_frac, a_proj, torso_facing)
         │                 (d = distance to the robot's OCCUPIED COLUMN, not the TCP point)
         ▼
-Layered GMM-HMM (observation: d, v_proj, speed, a_proj)
-        │          (upper: approaching/working/retreating/hazard  ·  lower: stationary/walking)
+Layered GMM-HMM (observation: d, v_proj, speed, heading alignment)
+        │          (upper task phase: approaching/working/retreating · lower: stationary/walking)
         │  step(x) → posterior p_t
         ▼
- Horizon prediction   time_to_breach(d, v_proj, a_proj)  ⊕  legacy p_hazard → rapid-closing risk
+ Independent event prediction   time_to_breach(d, v_proj, a_proj) → rapid-intrusion risk
         │              (constant-accel; one-step p@A kept as superseded component)
         ▼
  DynamicSSMEnvelope   S(t)=max(0,v_proj)·T+C+Sa  →  prototype command bound
