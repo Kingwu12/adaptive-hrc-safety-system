@@ -9,7 +9,8 @@ pelvis quaternion and never persisted the remaining segment items.
 
 This is a logger/receiver design failure. It is not evidence that MVN lacked
 full-body estimates, and it is not accurate to say that today's runs contain no
-Xsens data.
+Xsens data. The team confirmed after the run that native recording was never
+started in MVN Analyze; MVN was used only as a live UDP source.
 
 ## What is present in today's Mac captures
 
@@ -25,18 +26,19 @@ The fitted model still uses OptiTrack head-relative geometry. It did not train
 on full-body Xsens kinematics, because those fields were not in the saved Mac
 records or feature vector.
 
-## Possible recovery of today's full-body data
+## Recovery status
 
-Recovery is **unverified**. Check the Windows Xsens laptop in MVN Analyze for a
-native recording of today's sessions. If a native MVN session exists, export
-segment position and orientation with timestamps and preserve the untouched
-native file. If it does not exist, the discarded UDP fields cannot be
-reconstructed from pelvis XYZ.
+Today's missing full-body data is **not recoverable**. There is no native MVN
+recording on the Windows laptop, and the Mac did not retain the raw UDP packets.
+The discarded segment positions and quaternions cannot be reconstructed from
+the saved pelvis XYZ. Do not spend time searching for a Windows file or present
+today's trials as full-body Xsens captures.
 
 The three reported failed sensors (left foot, left shoulder and right upper
-leg) still matter. A native MVN export may contain biomechanical estimates for
-those segments, but it must be described as degraded capture and cannot support
-strong direct-measurement claims for those limbs.
+leg) still matter for future runs. A future native MVN export may contain
+biomechanical estimates for those segments, but it must be described as
+degraded capture and cannot support strong direct-measurement claims for those
+limbs.
 
 ## Correction now in the acquisition path
 
