@@ -30,3 +30,13 @@ privately in the connected cloud account and retained locally for the project te
 
 Before any public release of raw recordings, confirm that the approved ethics and
 participant-consent documents explicitly permit public distribution of motion data.
+
+## Verified archive receipt
+
+- Source snapshot tag: `lab-closeout-2026-09-02` (`5fd6ee7`)
+- ZIP bytes: `64,778,807`
+- SHA-256: `4628d648164c68f506e1ddc46e076c7a35e657602e83ae3aefb825669227d6f0`
+- ZIP entries: 203, including 46 raw recording JSONL files and three model JSON files
+- Private Google Drive copy: verified uploaded and `not shared`
+- Empire artifact: `academic/eng4702/archives/adaptive-hrc-fyp-closeout-2026-09-02.zip` version 1, digest verified
+- Excluded secret: `data/xsens/.control_key`
