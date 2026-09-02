@@ -59,6 +59,40 @@ def test_dashboard_rejects_recording_without_optitrack(tmp_path):
         state.start_session("P01", "T07")
 
 
+def test_guided_protocol_persists_and_applies_labels(tmp_path):
+    state = DashboardState(tmp_path, segment_id=1)
+    now = time.monotonic()
+    state.on_sample(0.0, (2.0, 0.0, 1.0), True, now)
+    state.optitrack_bridge.on_sample(0.0, (2.0, 0.0, 1.0), True, now)
+    state.tick()
+    state.start_session("P01", "T-guided")
+
+    first = state.snapshot()
+    assert first["guided_step"] == 0
+    assert first["label"] == "unlabelled"
+
+    state.advance_guided_protocol()
+    second = state.snapshot()
+    assert second["guided_step"] == 1
+    assert second["label"] == "approaching"
+
+    # The server state, rather than browser-local state, remains authoritative.
+    state.advance_guided_protocol()
+    third = state.snapshot()
+    assert third["guided_step"] == 2
+    assert third["label"] == "working"
+    state.stop_session()
+    stopped = state.snapshot()
+    assert stopped["guided_step"] is None
+    assert stopped["label"] == "unlabelled"
+
+
+def test_guided_protocol_requires_active_recording(tmp_path):
+    state = DashboardState(tmp_path, segment_id=1)
+    with pytest.raises(ValueError, match="Start guided recording"):
+        state.advance_guided_protocol()
+
+
 def test_rig_status_poll_returns_cached_value_while_probe_is_slow():
     rig = RigControl.__new__(RigControl)
     rig._status_lock = threading.Lock()

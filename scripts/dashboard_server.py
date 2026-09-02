@@ -38,6 +38,18 @@ from hrc_safety.mocap import (MocapBridge, NatNetV4Listener,
 from hrc_safety.mocap.xsens_transport import PELVIS, XsensListener  # noqa: E402
 
 ALLOWED_LABELS = {"unlabelled", "approaching", "working", "retreating", "hazard"}
+GUIDED_PROTOCOL_LABELS = (
+    "unlabelled",   # collect panel and move to the marked start position
+    "approaching",  # normal approach with the panel
+    "working",      # place, align, and fasten at the work position
+    "retreating",   # return to the start position
+    "unlabelled",   # reset before the cued-hazard sequence
+    "approaching",  # second approach
+    "working",      # resume the panel task
+    "hazard",       # experimenter-cued, ethics-approved simulated hazard
+    "retreating",   # controlled recovery and retreat
+    "unlabelled",   # sequence complete
+)
 
 
 def safe_id(value: object, fallback: str) -> str:
@@ -85,6 +97,7 @@ class DashboardState:
         self.participant_id: str | None = None
         self.trial_id: str | None = None
         self.label = "unlabelled"
+        self.guided_step: int | None = None
         self.recording_path: str | None = None
         self.samples_written = 0
         self.calibration_started: float | None = None
@@ -166,6 +179,7 @@ class DashboardState:
             self.recording_path = str(path.resolve())
             self.samples_written = 0
             self.label = "unlabelled"
+            self.guided_step = 0
             self.recording = True
             return {"message": f"Recording {self.session_id}", "path": self.recording_path}
 
@@ -177,6 +191,8 @@ class DashboardState:
             if self.file is not None:
                 self.file.close()
                 self.file = None
+            self.label = "unlabelled"
+            self.guided_step = None
             return {"message": f"Saved {self.samples_written} samples", "path": self.recording_path}
 
     def set_label(self, label: object) -> dict:
@@ -188,6 +204,27 @@ class DashboardState:
                 raise ValueError("Start recording before applying labels")
             self.label = value
         return {"message": f"Ground truth: {value}"}
+
+    def advance_guided_protocol(self) -> dict:
+        """Atomically advance the run instruction and its ground-truth label.
+
+        The server owns this index so a page refresh cannot silently reset the
+        experimenter to step one while an existing recording is still active.
+        """
+        with self.lock:
+            if not self.recording:
+                raise ValueError("Start guided recording before advancing the protocol")
+            if self.guided_step is None:
+                raise ValueError("This recording has no guided protocol state")
+            if self.guided_step >= len(GUIDED_PROTOCOL_LABELS) - 1:
+                raise ValueError("Guided sequence is complete; stop and save the run")
+            self.guided_step += 1
+            self.label = GUIDED_PROTOCOL_LABELS[self.guided_step]
+            return {
+                "message": f"Guided step {self.guided_step + 1}: {self.label}",
+                "guided_step": self.guided_step,
+                "label": self.label,
+            }
 
     def mark_calibrated(self) -> dict:
         with self.lock:
@@ -229,6 +266,8 @@ class DashboardState:
                 "participant_id": self.participant_id,
                 "trial_id": self.trial_id,
                 "label": self.label,
+                "guided_step": self.guided_step,
+                "guided_steps_total": len(GUIDED_PROTOCOL_LABELS),
                 "recording_path": self.recording_path,
                 "samples_written": self.samples_written,
                 "calibration_elapsed_s": None if calibration_elapsed is None else round(calibration_elapsed, 1),
@@ -744,6 +783,8 @@ class ApiHandler(BaseHTTPRequestHandler):
                 result = self.state.stop_session()
             elif self.path == "/api/label":
                 result = self.state.set_label(body.get("label"))
+            elif self.path == "/api/protocol/advance":
+                result = self.state.advance_guided_protocol()
             elif self.path == "/api/calibration/mark":
                 result = self.state.mark_calibrated()
             else:

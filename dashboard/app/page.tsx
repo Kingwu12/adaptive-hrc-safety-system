@@ -25,6 +25,8 @@ type Status = {
   participant_id: string | null;
   trial_id: string | null;
   label: string;
+  guided_step: number | null;
+  guided_steps_total: number;
   recording_path: string | null;
   samples_written: number;
   calibration_elapsed_s: number | null;
@@ -37,20 +39,63 @@ const EMPTY: Status = {
   feature: null, posterior: {}, hmm_state: null,
   model_source: "synthetic baseline", recording: false, session_id: null,
   participant_id: null, trial_id: null, label: "unlabelled",
+  guided_step: null, guided_steps_total: 10,
   recording_path: null, samples_written: 0, calibration_elapsed_s: null,
 };
 
 const STATES = ["approaching", "working", "retreating", "hazard"];
 
 const GUIDED_PROTOCOL = [
-  { label: "approaching", cue: "Cue the participant to approach the work position" },
-  { label: "working", cue: "Begin alignment / fastening at the work position" },
-  { label: "retreating", cue: "Cue a controlled step back from the work position" },
-  { label: "approaching", cue: "Begin the second approach" },
-  { label: "working", cue: "Resume the task at the work position" },
-  { label: "hazard", cue: "Give the planned hazard / slip cue now" },
-  { label: "retreating", cue: "Cue controlled recovery and retreat" },
-  { label: "unlabelled", cue: "Sequence complete — end the labelled interval" },
+  {
+    label: "unlabelled", title: "GET READY",
+    cue: "Pick up the panel at the loading point and stand on the marked start position. Do not approach the robot yet.",
+    next: "READY — begin approach",
+  },
+  {
+    label: "approaching", title: "APPROACH WITH THE PANEL",
+    cue: "Walk normally from the start marker toward the robot while carrying the panel.",
+    next: "AT WORK POSITION — begin placement",
+  },
+  {
+    label: "working", title: "PLACE, ALIGN, AND WORK",
+    cue: "Place and align the panel, then perform the normal fastening task at the work position.",
+    next: "TASK COMPLETE — retreat",
+  },
+  {
+    label: "retreating", title: "RETREAT TO THE START MARKER",
+    cue: "Walk away from the robot and return fully to the marked start position.",
+    next: "AT START — prepare hazard loop",
+  },
+  {
+    label: "unlabelled", title: "RESET FOR THE CUED-HAZARD LOOP",
+    cue: "Pause at the start marker. Reset the panel and wait for the experimenter's instruction.",
+    next: "READY — begin second approach",
+  },
+  {
+    label: "approaching", title: "SECOND APPROACH",
+    cue: "Approach the robot normally with the panel for the cued-hazard training loop.",
+    next: "AT WORK POSITION — resume task",
+  },
+  {
+    label: "working", title: "WORK AND WAIT FOR THE CUE",
+    cue: "Perform the panel task normally. Only the experimenter decides when the approved hazard cue begins.",
+    next: "EXPERIMENTER — give hazard cue now",
+  },
+  {
+    label: "hazard", title: "PERFORM THE APPROVED CUED HAZARD",
+    cue: "Participant performs only the brief, pre-briefed simulated slip or near-approach. Keep the E-stop in reach.",
+    next: "HAZARD OVER — recover and retreat",
+  },
+  {
+    label: "retreating", title: "CONTROLLED RECOVERY AND RETREAT",
+    cue: "Recover, turn away from the robot, and return to the marked start position.",
+    next: "AT START — complete run",
+  },
+  {
+    label: "unlabelled", title: "RUN COMPLETE",
+    cue: "Hold at the start marker. The labelled sequence is complete and ready to save.",
+    next: "STOP & SAVE THIS RUN",
+  },
 ] as const;
 
 function apiBase() {
@@ -151,7 +196,6 @@ export default function Home() {
   const [vacuum, setVacuum] = useState(60);
   const [rigMsg, setRigMsg] = useState("");
   const [tab, setTab] = useState<"operate" | "monitor">("operate");
-  const [protocolIndex, setProtocolIndex] = useState(0);
   const protocolBusy = useRef(false);
 
   useEffect(() => {
@@ -236,18 +280,17 @@ export default function Home() {
   };
 
   const startRecording = async () => {
-    if (await post("/api/session/start", { participant_id: participant, trial_id: trial })) {
-      setProtocolIndex(0);
-    }
+    await post("/api/session/start", { participant_id: participant, trial_id: trial });
   };
 
   const advanceProtocol = async () => {
-    if (!status.recording || protocolIndex >= GUIDED_PROTOCOL.length || protocolBusy.current) return;
+    if (!status.recording || status.guided_step == null || protocolBusy.current) return;
     protocolBusy.current = true;
-    const step = GUIDED_PROTOCOL[protocolIndex];
     try {
-      if (await post("/api/label", { label: step.label })) {
-        setProtocolIndex(index => index + 1);
+      if (status.guided_step >= GUIDED_PROTOCOL.length - 1) {
+        await post("/api/session/stop");
+      } else {
+        await post("/api/protocol/advance");
       }
     } finally {
       protocolBusy.current = false;
@@ -278,6 +321,8 @@ export default function Home() {
   const calibration = status.calibration_elapsed_s;
   const calibrationClass = calibration != null && calibration >= 270 ? "warning" : "ok";
   const dominant = useMemo(() => status.hmm_state || "waiting", [status.hmm_state]);
+  const guidedIndex = Math.min(status.guided_step ?? 0, GUIDED_PROTOCOL.length - 1);
+  const guided = GUIDED_PROTOCOL[guidedIndex];
 
   return (
     <main>
@@ -309,13 +354,27 @@ export default function Home() {
         </button>
       </nav>
 
+      {tab === "operate" && status.recording && (
+        <section className={`runDirector label-${guided.label}`} aria-live="polite">
+          <div className="runDirectorHead">
+            <span>LIVE RUN DIRECTOR · STEP {guidedIndex + 1}/{GUIDED_PROTOCOL.length}</span>
+            <strong>RECORDING LABEL: {guided.label.toUpperCase()}</strong>
+          </div>
+          <h2>{guided.title}</h2>
+          <p>{guided.cue}</p>
+          <button onClick={advanceProtocol}>{guided.next}</button>
+          <small>Press this button or Enter exactly when the next physical phase begins. Hold each labelled phase for at least 2 seconds.</small>
+        </section>
+      )}
+
       <section className={`grid tab-${tab}`}>
         <article className="panel capture">
           <div className="panelHead"><div><p className="kicker">01 · CAPTURE</p><h2>Session control</h2></div><span className={`recordLamp ${status.recording ? "active" : ""}`}>{status.recording ? "REC" : "IDLE"}</span></div>
           <div className="fields"><label>Participant<input value={participant} onChange={e => setParticipant(e.target.value)} disabled={status.recording} /></label><label>Trial<input value={trial} onChange={e => setTrial(e.target.value)} disabled={status.recording} /></label></div>
           <div className="actions">
-            {!status.recording ? <button className="primary" disabled={!status.connected || !status.optitrack_connected} onClick={startRecording}>Start guided recording</button> : <button className="stop" onClick={() => post("/api/session/stop")}>Stop & save</button>}
+            {!status.recording ? <button className="primary" disabled={!status.connected || !status.optitrack_connected} onClick={startRecording}>Start guided scenario run</button> : <button className="stop" onClick={() => post("/api/session/stop")}>Abort / stop & save</button>}
           </div>
+          {!status.recording && <p className="startHint">Starts at GET READY (unlabelled), then the run director tells you exactly when to approach, work, retreat, and perform the approved cued-hazard loop.</p>}
           <p className="feedback">{message}</p>
           <dl className="sessionFacts"><div><dt>Samples</dt><dd>{status.samples_written.toLocaleString()}</dd></div><div><dt>Packet age</dt><dd>{n(status.age_s, 3)} s</dd></div><div><dt>Calibration</dt><dd className={calibrationClass}>{calibration == null ? "Not marked" : `${Math.floor(calibration / 60)}:${String(Math.floor(calibration % 60)).padStart(2, "0")}`}</dd></div></dl>
           <button className="calibrate" disabled={!status.connected || status.recording} onClick={() => post("/api/calibration/mark")}>Mark Xsens calibration complete</button>
@@ -336,13 +395,15 @@ export default function Home() {
           <div className="panelHead"><div><p className="kicker">03 · GROUND TRUTH</p><h2>What is actually happening?</h2></div><span className="currentLabel">{status.label}</span></div>
           <p className="help">The experimenter advances the protocol at each real phase onset. The active label then persists on every frame until the next cue; the participant never touches this console.</p>
           <div className="guidedRun">
-            <span>GUIDED RUN · STEP {Math.min(protocolIndex + 1, GUIDED_PROTOCOL.length)}/{GUIDED_PROTOCOL.length}</span>
-            <strong>{protocolIndex < GUIDED_PROTOCOL.length ? GUIDED_PROTOCOL[protocolIndex].cue : "All phases labelled — stop and save this run"}</strong>
+            <span>GUIDED RUN · STEP {guidedIndex + 1}/{GUIDED_PROTOCOL.length} · {guided.label.toUpperCase()}</span>
+            <strong>{guided.title}</strong>
+            <p>{guided.cue}</p>
             <small>Hold each labelled state for at least 2 seconds. Press Enter or use the button.</small>
-            <button className="protocolNext" disabled={!status.recording || protocolIndex >= GUIDED_PROTOCOL.length} onClick={advanceProtocol}>
-              {protocolIndex < GUIDED_PROTOCOL.length ? `Advance & label ${GUIDED_PROTOCOL[protocolIndex].label}` : "Sequence complete"}
+            <button className="protocolNext" disabled={!status.recording || status.guided_step == null} onClick={advanceProtocol}>
+              {guided.next}
             </button>
           </div>
+          <p className="manualLabelTitle">Manual label override — recovery/debugging only</p>
           <div className="labelButtons">{STATES.map(s => <button key={s} className={status.label === s ? "selected" : ""} disabled={!status.recording} onClick={() => post("/api/label", { label: s })}>{s}</button>)}</div>
           <button className="unlabel" disabled={!status.recording} onClick={() => post("/api/label", { label: "unlabelled" })}>Mark transition / unlabelled</button>
           <p className="shortcutHelp"><kbd>Enter</kbd> next guided phase · <kbd>1</kbd> approach · <kbd>2</kbd> work · <kbd>3</kbd> retreat · <kbd>4</kbd> hazard · <kbd>0</kbd> unlabelled</p>
