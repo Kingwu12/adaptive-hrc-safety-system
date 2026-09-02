@@ -38,3 +38,20 @@ motion ends. This reduces stationary reaction-time padding around the event.
 
 The model remains an experimental caution layer. Robot motion interlocks and the
 certified separation envelope remain independent of its prediction.
+
+## Retraining after additional P05 runs
+
+Nine further P05 (Luke) runs, T04–T12, passed the dashboard capture checks with a
+GOOD score of 100. The active local model was retrained on 32 accepted runs:
+
+- P03 (King): 8
+- P04 (Mic): 12
+- P05 (Luke): 12
+
+The updated leave-one-participant-out development estimate is 0.669 accuracy,
+0.490 hazard precision, and 0.526 hazard recall. This replaces the local 23-run
+artifact because it uses all accepted recordings and removes the severe P05 run
+imbalance. The small metric movement is not a like-for-like test comparison: the
+held-out P05 evaluation fold increased from 3 to 12 runs. P03 hazard recall rose
+from 0.509 to 0.534. A new untouched participant is still required for the final
+unbiased evaluation.
