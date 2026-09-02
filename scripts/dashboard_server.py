@@ -556,7 +556,10 @@ class RigControl:
                 try:
                     control.stopJ(0.5)
                 finally:
-                    control.disconnect()
+                    try:
+                        control.stopScript()
+                    finally:
+                        control.disconnect()
         return {"pose": name, "q": pose["q"], "speed": spd,
                 "vacuum": vacuum, "completed": True}
 

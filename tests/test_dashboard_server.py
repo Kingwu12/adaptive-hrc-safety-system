@@ -109,6 +109,9 @@ def test_goto_pose_uses_rtde_and_disconnects(monkeypatch):
         def stopJ(self, deceleration):
             calls.append(("stopJ", deceleration))
 
+        def stopScript(self):
+            calls.append(("stopScript",))
+
         def disconnect(self):
             calls.append(("disconnect",))
 
@@ -132,7 +135,7 @@ def test_goto_pose_uses_rtde_and_disconnects(monkeypatch):
 
     assert result["completed"] is True
     assert ("moveJ", [1.0, 2.0, 3.0, 4.0, 5.0, 6.0], 0.1, 0.15) in calls
-    assert calls[-2:] == [("stopJ", 0.5), ("disconnect",)]
+    assert calls[-3:] == [("stopJ", 0.5), ("stopScript",), ("disconnect",)]
 
 
 def test_goto_pose_rejects_low_vacuum_before_connecting(monkeypatch):
