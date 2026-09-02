@@ -21,6 +21,7 @@ type Status = {
   posterior: Record<string, number>;
   hmm_state: string | null;
   model_source: string;
+  model_sha256: string;
   recording: boolean;
   session_id: string | null;
   participant_id: string | null;
@@ -32,6 +33,7 @@ type Status = {
   recording_path: string | null;
   samples_written: number;
   calibration_elapsed_s: number | null;
+  mvn_native_recording_reference: string | null;
   error?: string;
 };
 
@@ -69,9 +71,11 @@ const EMPTY: Status = {
   optitrack_connected: false, optitrack_age_s: null,
   feature: null, posterior: {}, hmm_state: null,
   model_source: "synthetic baseline", recording: false, session_id: null,
+  model_sha256: "synthetic-baseline",
   participant_id: null, trial_id: null, label: "unlabelled", event_label: "none",
   guided_step: null, guided_steps_total: 10,
   recording_path: null, samples_written: 0, calibration_elapsed_s: null,
+  mvn_native_recording_reference: null,
 };
 
 const STATES = ["approaching", "working", "retreating"];
@@ -227,6 +231,7 @@ export default function Home() {
   const [participantEditor, setParticipantEditor] = useState<"new" | "rename" | null>(null);
   const [participantName, setParticipantName] = useState("");
   const [mvnRecordingConfirmed, setMvnRecordingConfirmed] = useState(false);
+  const [mvnRecordingReference, setMvnRecordingReference] = useState("");
   const [message, setMessage] = useState("Start the local sensor service, then enable MVN Network Streamer.");
   const [rig, setRig] = useState<Rig>({});
   const [rigBusy, setRigBusy] = useState<string | null>(null);
@@ -350,8 +355,12 @@ export default function Home() {
     const result = await post("/api/protocol/start", {
       participant_id: participant,
       mvn_recording_confirmed: mvnRecordingConfirmed,
+      mvn_recording_reference: mvnRecordingReference.trim(),
     });
-    if (result) setMvnRecordingConfirmed(false);
+    if (result) {
+      setMvnRecordingConfirmed(false);
+      setMvnRecordingReference("");
+    }
   };
 
   const abortRecording = async () => {
@@ -544,12 +553,13 @@ export default function Home() {
             <button onClick={() => { setParticipantEditor(null); setParticipantName(""); }}>Cancel</button>
           </div>}
           <div className="actions">
-            {!status.recording ? <button className="primary" disabled={!xsensComplete || !status.optitrack_connected || !participant || !mvnRecordingConfirmed} onClick={startRecording}>Start {nextTrial} guided run</button> : <button className="stop" onClick={() => void abortRecording()}>Abort / stop & save</button>}
+            {!status.recording ? <button className="primary" disabled={!xsensComplete || !status.optitrack_connected || !participant || !mvnRecordingConfirmed || !mvnRecordingReference.trim() || calibration == null || calibration > 300} onClick={startRecording}>Start {nextTrial} guided run</button> : <button className="stop" onClick={() => void abortRecording()}>Abort / stop & save</button>}
           </div>
+          {!status.recording && <label className="nativeReference"><span>Visible native MVN file name/path for this run</span><input value={mvnRecordingReference} maxLength={500} placeholder="e.g. C:\\MVN\\P06-T01.mvn" onChange={event => setMvnRecordingReference(event.target.value)} /></label>}
           {!status.recording && <label className="preflightCheck"><input type="checkbox" checked={mvnRecordingConfirmed} onChange={event => setMvnRecordingConfirmed(event.target.checked)} /><span>Native recording is active in MVN Analyze and its file path is visible.</span></label>}
           {!status.recording && <p className="startHint">The next trial number comes from the files already saved for this participant. Every attempt is preserved and counted automatically.</p>}
           <p className="feedback">{message}</p>
-          <dl className="sessionFacts"><div><dt>Samples</dt><dd>{status.samples_written.toLocaleString()}</dd></div><div><dt>Packet age</dt><dd>{n(status.age_s, 3)} s</dd></div><div><dt>Calibration</dt><dd className={calibrationClass}>{calibration == null ? "Not marked" : `${Math.floor(calibration / 60)}:${String(Math.floor(calibration % 60)).padStart(2, "0")}`}</dd></div></dl>
+          <dl className="sessionFacts"><div><dt>Samples</dt><dd>{status.samples_written.toLocaleString()}</dd></div><div><dt>Packet age</dt><dd>{n(status.age_s, 3)} s</dd></div><div><dt>Calibration</dt><dd className={calibrationClass}>{calibration == null ? "Not marked" : `${Math.floor(calibration / 60)}:${String(Math.floor(calibration % 60)).padStart(2, "0")}`}</dd></div><div><dt>Model</dt><dd title={status.model_sha256}>{status.model_sha256 === "synthetic-baseline" ? "SYNTHETIC" : status.model_sha256.slice(0, 12)}</dd></div></dl>
           <button className="calibrate" disabled={!status.connected || status.recording} onClick={() => post("/api/calibration/mark")}>Mark Xsens calibration complete</button>
         </article>
 

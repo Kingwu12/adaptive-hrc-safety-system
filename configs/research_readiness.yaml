@@ -17,7 +17,7 @@ gates:
     complete: false
     evidence: null
     requirement: >-
-      Pass verify_xsens_capture.py on a schema-v2 preflight with all 23 body
+      Pass verify_xsens_capture.py on a schema-v3 preflight with all 23 body
       segment poses, and document the corresponding native MVN recording file.
   end_to_end_stop_time:
     complete: false
@@ -48,6 +48,7 @@ gates:
     evidence: null
     requirement: Freeze primary outcomes, event windows, exclusions, counterbalancing and statistical unit before collection.
   untouched_final_evaluation:
+    stage: report
     complete: false
     evidence: null
     requirement: Evaluate the frozen model and thresholds once on data unused for model or threshold selection.

@@ -42,7 +42,7 @@ limbs.
 
 ## Correction now in the acquisition path
 
-Schema version 2 stores an `xsens_frame` on every recording tick. It contains:
+Schema version 3 stores an `xsens_frame` on every recording tick. It contains:
 
 - MXTP02 sample, datagram and avatar counters;
 - MVN time code and local receive time;
@@ -54,9 +54,12 @@ builds the complete packet first; the pelvis-only interface selects from that
 complete representation instead of creating a second lossy path.
 
 The dashboard displays the received body-segment count and refuses to begin a
-session below 23 segments. The standalone recorder refuses to write incomplete
-frames. A recorded `live_run.py` run fails closed if the Xsens packet contains
-fewer than 23 body segments.
+session below 23 segments. It also requires a calibration mark less than five
+minutes old and the visible filename/path of the native Windows MVN recording.
+That reference and the active model digest are written into every schema-v3 row.
+The standalone recorder refuses to write incomplete frames. A recorded
+`live_run.py` run fails closed if the Xsens packet contains fewer than 23 body
+segments.
 
 ## Mandatory preflight before the next participant
 
@@ -65,7 +68,7 @@ fewer than 23 body segments.
 2. Record a disposable five-second test.
 3. Run `python scripts/verify_xsens_capture.py <preflight.jsonl>` and require
    `XSENS CAPTURE PASS`.
-4. Inspect one JSONL row: `schema_version` must be 2; `xsens_frame.segments`
+4. Inspect one JSONL row: `schema_version` must be 3; `xsens_frame.segments`
    must contain keys 1 through 23; each must contain three `position_m` values
    and four `quaternion_wxyz` values.
 5. Confirm `sample_counter` and `time_code_s` advance across rows.
@@ -74,6 +77,20 @@ fewer than 23 body segments.
    source for MVN outputs not carried by the MXTP02 pose stream.
 7. Stop if any condition fails. Do not discover capture completeness after the
    participant leaves.
+
+After the ten planned pre-study guided runs, run the batch gate:
+
+```bash
+python scripts/verify_xsens_capture.py data/xsens/P06-T*.jsonl \
+  --trial-batch --min-captures 10 \
+  --report data/verification/prestudy-xsens-batch.json
+```
+
+This additionally requires unique session and native-MVN references, one
+unchanged real model digest, all three phase labels, a hazard-event window,
+less than five percent stale OptiTrack rows, advancing Xsens counters and actual
+pelvis motion. A passing Mac report does not prove that the referenced Windows
+files exist; the operator must verify those files on Windows before leaving.
 
 [Movella's current MVN user manual](https://www.movella.com/hubfs/Downloads/Manuals/MVN_User_Manual_2025.0.pdf)
 defines Position + Orientation (Quaternion) as the position and quaternion

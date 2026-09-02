@@ -4,8 +4,10 @@
 
 The repository is suitable for continued engineering and controlled pilot work, but it
 is **not yet ready for a reported moving-participant controller comparison**. Run
-`python scripts/research_readiness.py` for the evidence gates. A red gate is not a request
-for more model training; it is a missing part of the experimental safety case or validity.
+`python scripts/research_readiness.py --stage collection` for the pre-collection evidence
+gates. After data collection, use `--stage report` for the additional untouched-evaluation
+and real-results gates. A red gate is not a request for more model training; it is a missing
+part of the experimental safety case or validity.
 
 ## 1. Research question, derived from first principles
 
@@ -22,9 +24,9 @@ crushing is the possible harm. The system must control the hazardous situation e
 it cannot name the initiating event.
 
 Task phase and risk are also orthogonal. A person may be `working` while slipping, or
-`retreating` while an arm or dropped panel creates danger. Therefore the four-state HMM's
-legacy `hazard` label is an experimental activity/event label, not a universal fourth task
-state and not the safety truth.
+`retreating` while an arm or dropped panel creates danger. The active three-state HMM
+therefore recognises only `approaching`, `working`, and `retreating`; the separately logged
+`hazard` value is an experimental event window, not a task state or universal safety truth.
 
 ## 2. What each layer can honestly claim
 
@@ -69,11 +71,21 @@ That does **not** make next week's experiment impossible. It changes the claim:
 - Not valid now: performance on unseen people, arbitrary falls, all real-world hazards, or
   deployment outside this cell.
 
-The corrected participant-held-out development estimate is approximately 0.670 accuracy,
-0.490 legacy-hazard precision and 0.526 legacy-hazard recall. Decoding is now reset at
-unlabelled gaps; this correction barely moves the score, so the weakness is substantive.
-Frame accuracy remains a secondary diagnostic because adjacent 60 Hz frames are highly
-correlated and long `working` intervals dominate it.
+After correcting the target definition, the participant-held-out development estimate is
+0.8208 offline Viterbi phase accuracy and 0.7567 balanced accuracy. The causal online filter,
+which is closer to what the live controller sees, is 0.7937 accurate with 0.7250 balanced
+accuracy. Per-phase recall is 0.6933 approaching, 0.9229 working, and 0.6539 retreating.
+These figures cross the requested 0.80 only for the offline decoder; they do not establish
+hazard detection. Frame accuracy remains a secondary diagnostic because adjacent 60 Hz
+frames are highly correlated and long `working` intervals dominate it.
+
+The ten planned full-body Xsens runs should be treated as a pre-study qualification batch,
+not as ten new independent people. The current phase feature vector is still derived from
+OptiTrack head-to-robot geometry, so merely recording all 23 Xsens segments cannot honestly
+be claimed to increase current classifier accuracy. Use the batch to prove lossless Xsens
+capture, native-file pairing, calibration discipline, synchronised labels, stale-data rates,
+repeatability, and end-to-end operation. Do not add new full-body features or tune the model
+after viewing reported participant outcomes.
 
 For the reported study, freeze the model, thresholds, exclusions and event definition
 before collection. Do not retrain between participants or inspect final-test labels and
@@ -101,6 +113,10 @@ effects) or the predefined event (for response), not an individual frame.
    pseudo-replication.
 7. Keep synthetic traces for regression tests only. The paper now withholds its synthetic
    result tables by default.
+8. Before freezing, require the ten-run capture batch to pass
+   `scripts/verify_xsens_capture.py --trial-batch`; then generate the immutable manifest with
+   `scripts/freeze_study_release.py`. Any later model, threshold, controller, metric, or
+   protocol change creates a new release and must occur before reported participant data.
 
 ## 6. Go/no-go rule
 

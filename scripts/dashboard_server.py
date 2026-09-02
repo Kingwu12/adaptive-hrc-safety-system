@@ -8,6 +8,7 @@ pass --share to allow browsers on the same trusted lab network to connect.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
 import os
@@ -357,6 +358,7 @@ class DashboardState:
         )
         if model_path is not None and model_path.exists():
             self.hmm = load_upper_hmm(model_path)
+            self.model_sha256 = hashlib.sha256(model_path.read_bytes()).hexdigest()
             model_kind = ("pilot GMM-HMM" if isinstance(
                 self.hmm.emissions, GaussianMixtureEmissions
             ) else "pilot Gaussian HMM")
@@ -364,6 +366,7 @@ class DashboardState:
         else:
             self.hmm = fit_hmm(self.config)
             self.model_source = "synthetic baseline"
+            self.model_sha256 = "synthetic-baseline"
         self.packet_times: deque[float] = deque(maxlen=240)
         self.packets = 0
         self.last_packet_wall: float | None = None
@@ -385,6 +388,7 @@ class DashboardState:
         self.recording_path: str | None = None
         self.samples_written = 0
         self.mvn_recording_confirmed = False
+        self.mvn_recording_reference: str | None = None
         self.calibration_started: float | None = None
         self.file = None
 
@@ -449,14 +453,17 @@ class DashboardState:
                     "hmm_state": state,
                     "hmm_posterior": posterior,
                     "model_source": self.model_source,
+                    "model_sha256": self.model_sha256,
                     "mvn_native_recording_confirmed": self.mvn_recording_confirmed,
+                    "mvn_native_recording_reference": self.mvn_recording_reference,
                 }
                 self.file.write(json.dumps(record, separators=(",", ":")) + "\n")
                 self.file.flush()
                 self.samples_written += 1
 
     def start_session(self, participant: object, trial: object,
-                      mvn_recording_confirmed: bool = False) -> dict:
+                      mvn_recording_confirmed: bool = False,
+                      mvn_recording_reference: object = None) -> dict:
         with self.lock:
             if self.recording:
                 raise ValueError("A recording is already active")
@@ -472,11 +479,42 @@ class DashboardState:
                     f"received {segment_count}/{MVN_FULL_BODY_SEGMENTS} "
                     "segments. Check MVN Position + Quaternion streaming."
                 )
+            if self.calibration_started is None:
+                raise ValueError(
+                    "Mark Xsens calibration complete before starting the run."
+                )
+            calibration_age = time.monotonic() - self.calibration_started
+            if calibration_age > 300.0:
+                raise ValueError(
+                    f"Xsens calibration is {calibration_age:.0f}s old; recalibrate "
+                    "and mark it complete again before starting."
+                )
             if mvn_recording_confirmed is not True:
                 raise ValueError(
                     "Confirm that native recording is active in MVN Analyze "
                     "before starting the participant run."
                 )
+            native_reference = str(mvn_recording_reference or "").strip()
+            if len(native_reference) < 3:
+                raise ValueError(
+                    "Enter the visible Windows MVN recording filename or path."
+                )
+            reference_key = native_reference.replace("\\", "/").casefold()
+            for prior_path in self.output_dir.glob("*.jsonl"):
+                try:
+                    with prior_path.open(encoding="utf-8") as prior_file:
+                        prior_row = json.loads(next(
+                            line for line in prior_file if line.strip()))
+                except (OSError, StopIteration, json.JSONDecodeError):
+                    continue
+                prior_reference = str(
+                    prior_row.get("mvn_native_recording_reference") or ""
+                ).strip().replace("\\", "/").casefold()
+                if prior_reference and prior_reference == reference_key:
+                    raise ValueError(
+                        "That native MVN filename/path was already used by "
+                        f"{prior_path.name}; create a unique native recording."
+                    )
             # Every recorded trial is an independent sequence. Do not let the
             # previous trial's HMM belief or derivative windows leak across it.
             self.hmm.reset()
@@ -494,6 +532,7 @@ class DashboardState:
             self.recording_path = str(path.resolve())
             self.samples_written = 0
             self.mvn_recording_confirmed = True
+            self.mvn_recording_reference = native_reference[:500]
             self.label = "unlabelled"
             self.event_label = "none"
             self.guided_step = 0
@@ -504,6 +543,8 @@ class DashboardState:
                 "session_id": self.session_id,
                 "participant_id": self.participant_id,
                 "trial_id": self.trial_id,
+                "mvn_native_recording_reference": self.mvn_recording_reference,
+                "model_sha256": self.model_sha256,
             }
 
     def stop_session(self) -> dict:
@@ -518,6 +559,7 @@ class DashboardState:
             self.event_label = "none"
             self.guided_step = None
             self.mvn_recording_confirmed = False
+            self.mvn_recording_reference = None
             return {"message": f"Saved {self.samples_written} samples", "path": self.recording_path}
 
     def set_label(self, label: object) -> dict:
@@ -600,6 +642,7 @@ class DashboardState:
                 "posterior": self.posterior,
                 "hmm_state": self.hmm_state,
                 "model_source": self.model_source,
+                "model_sha256": self.model_sha256,
                 "recording": self.recording,
                 "session_id": self.session_id,
                 "participant_id": self.participant_id,
@@ -611,6 +654,7 @@ class DashboardState:
                 "recording_path": self.recording_path,
                 "samples_written": self.samples_written,
                 "calibration_elapsed_s": None if calibration_elapsed is None else round(calibration_elapsed, 1),
+                "mvn_native_recording_reference": self.mvn_recording_reference,
             }
 
 
@@ -1073,7 +1117,8 @@ class GuidedRunController:
         return pose
 
     def start(self, participant: object, trial: object,
-              mvn_recording_confirmed: bool = False) -> dict:
+              mvn_recording_confirmed: bool = False,
+              mvn_recording_reference: object = None) -> dict:
         """Preflight the low, released rig before opening a guided recording."""
         with self.lock:
             self._clear_arm()
@@ -1090,7 +1135,8 @@ class GuidedRunController:
                     "use the manual recovery controls to release the current panel first"
                 )
             result = self.state.start_session(
-                participant, trial, mvn_recording_confirmed)
+                participant, trial, mvn_recording_confirmed,
+                mvn_recording_reference)
             return {**result, "preflight": {
                 "pose": "pose1_low", "vacuum": vacuum,
                 "operator_clearance_m": self.motion_clearance_m,
@@ -1315,7 +1361,8 @@ class ApiHandler(BaseHTTPRequestHandler):
                     participant_id = body.get("participant_id")
                     result = self.guided.start(
                         participant_id, self.catalog.next_trial(participant_id),
-                        body.get("mvn_recording_confirmed") is True)
+                        body.get("mvn_recording_confirmed") is True,
+                        body.get("mvn_recording_reference"))
                 elif self.path == "/api/protocol/arm":
                     result = self.guided.arm_step()
                 elif self.path == "/api/protocol/complete":
@@ -1331,7 +1378,8 @@ class ApiHandler(BaseHTTPRequestHandler):
             if self.path == "/api/session/start":
                 result = self.state.start_session(
                     body.get("participant_id"), body.get("trial_id"),
-                    body.get("mvn_recording_confirmed") is True)
+                    body.get("mvn_recording_confirmed") is True,
+                    body.get("mvn_recording_reference"))
             elif self.path == "/api/session/stop":
                 result = self.state.stop_session()
             elif self.path == "/api/label":

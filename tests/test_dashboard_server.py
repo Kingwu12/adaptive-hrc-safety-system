@@ -108,7 +108,9 @@ def test_dashboard_state_records_enriched_labelled_frames(tmp_path):
     assert snap["feature"]["speed"] > 0
 
     state.mark_calibrated()
-    state.start_session("P/01", "T 01", mvn_recording_confirmed=True)
+    state.start_session(
+        "P/01", "T 01", mvn_recording_confirmed=True,
+        mvn_recording_reference=r"C:\MVN\P01-T01.mvn")
     state.set_label("approaching")
     for i in range(12, 15):
         wall = base + i / 60.0
@@ -130,6 +132,8 @@ def test_dashboard_state_records_enriched_labelled_frames(tmp_path):
     assert row["ground_truth"] == "approaching"
     assert row["ground_truth_phase"] == "approaching"
     assert row["ground_truth_event"] == "none"
+    assert row["mvn_native_recording_reference"] == r"C:\MVN\P01-T01.mvn"
+    assert row["model_sha256"] == "synthetic-baseline"
     assert row["features"]["v_proj"] > 0
     assert set(row["hmm_posterior"]) == {"approaching", "working", "retreating"}
 
@@ -147,7 +151,10 @@ def test_start_session_resets_temporal_model_state(tmp_path):
 
     assert state.feature is not None
     assert state.posterior
-    state.start_session("P01", "T01", mvn_recording_confirmed=True)
+    state.mark_calibrated()
+    state.start_session(
+        "P01", "T01", mvn_recording_confirmed=True,
+        mvn_recording_reference=r"C:\MVN\P01-T01.mvn")
 
     assert state.feature is None
     assert state.posterior == {}
@@ -178,6 +185,46 @@ def test_dashboard_rejects_incomplete_xsens_body_stream(tmp_path):
         state.start_session("P01", "T08")
 
 
+def test_dashboard_rejects_unmarked_calibration_and_missing_native_reference(tmp_path):
+    state = DashboardState(tmp_path, segment_id=1)
+    now = time.monotonic()
+    state.on_xsens_frame(_full_xsens_frame())
+    state.on_sample(0.0, (1.0, 0.0, 1.0), True, now)
+    state.optitrack_bridge.on_sample(0.0, (1.0, 0.0, 1.0), True, now)
+    state.tick()
+    with pytest.raises(ValueError, match="calibration"):
+        state.start_session(
+            "P01", "T09", mvn_recording_confirmed=True,
+            mvn_recording_reference=r"C:\MVN\P01-T09.mvn")
+    state.mark_calibrated()
+    with pytest.raises(ValueError, match="filename"):
+        state.start_session("P01", "T09", mvn_recording_confirmed=True)
+
+
+def test_dashboard_rejects_reused_native_recording_reference(tmp_path):
+    state = DashboardState(tmp_path, segment_id=1)
+    now = time.monotonic()
+    state.on_xsens_frame(_full_xsens_frame())
+    state.on_sample(0.0, (1.0, 0.0, 1.0), True, now)
+    state.optitrack_bridge.on_sample(0.0, (1.0, 0.0, 1.0), True, now)
+    state.tick()
+    state.mark_calibrated()
+    reference = r"C:\MVN\P01-T10.mvn"
+    state.start_session(
+        "P01", "T10", mvn_recording_confirmed=True,
+        mvn_recording_reference=reference)
+    later = now + 1 / 60.0
+    state.on_sample(1 / 60.0, (0.99, 0.0, 1.0), True, later)
+    state.optitrack_bridge.on_sample(
+        1 / 60.0, (0.99, 0.0, 1.0), True, later)
+    state.tick()
+    state.stop_session()
+    with pytest.raises(ValueError, match="already used"):
+        state.start_session(
+            "P01", "T11", mvn_recording_confirmed=True,
+            mvn_recording_reference=reference.lower())
+
+
 def test_guided_protocol_persists_and_applies_labels(tmp_path):
     state = DashboardState(tmp_path, segment_id=1)
     state.on_xsens_frame(_full_xsens_frame())
@@ -185,7 +232,10 @@ def test_guided_protocol_persists_and_applies_labels(tmp_path):
     state.on_sample(0.0, (2.0, 0.0, 1.0), True, now)
     state.optitrack_bridge.on_sample(0.0, (2.0, 0.0, 1.0), True, now)
     state.tick()
-    state.start_session("P01", "T-guided", mvn_recording_confirmed=True)
+    state.mark_calibrated()
+    state.start_session(
+        "P01", "T-guided", mvn_recording_confirmed=True,
+        mvn_recording_reference=r"C:\MVN\P01-T-guided.mvn")
 
     first = state.snapshot()
     assert first["guided_step"] == 0
@@ -344,9 +394,12 @@ class FakeGuidedState:
         }
 
     def start_session(self, participant, trial,
-                      mvn_recording_confirmed=False):
+                      mvn_recording_confirmed=False,
+                      mvn_recording_reference=None):
         if not mvn_recording_confirmed:
             raise ValueError("Confirm that native recording is active")
+        if not mvn_recording_reference:
+            raise ValueError("Enter the visible Windows MVN recording filename")
         self.recording = True
         self.step = 0
         return {"message": "recording", "path": "fake.jsonl"}
@@ -507,7 +560,11 @@ def test_integrated_guided_start_requires_released_low_rig():
     rig.vacuum = (0, 0)
     with pytest.raises(ValueError, match="native recording"):
         guided.start("P01", "T01")
-    result = guided.start("P01", "T01", mvn_recording_confirmed=True)
+    with pytest.raises(ValueError, match="filename"):
+        guided.start("P01", "T01", mvn_recording_confirmed=True)
+    result = guided.start(
+        "P01", "T01", mvn_recording_confirmed=True,
+        mvn_recording_reference=r"C:\MVN\P01-T01.mvn")
     assert result["message"] == "recording"
     assert state.recording is True
 

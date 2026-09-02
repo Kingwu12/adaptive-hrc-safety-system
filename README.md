@@ -58,6 +58,16 @@ python scripts/train_pilot_hmm.py --participants P03,P04,P05 --validation partic
 # dongle attached. Stream Position + Quaternion over UDP to this Mac:9763.
 # Before a real run, the console must show Xsens 23/23 segments. Schema v3
 # persists every segment XYZ + quaternion and refuses pelvis-only recording.
+# The run cannot start until calibration was marked within five minutes and a
+# visible, unique native MVN filename/path is entered.
+
+# After the 10 pre-study qualification runs (replace P06 with the pilot ID):
+python scripts/verify_xsens_capture.py data/xsens/P06-T*.jsonl \
+  --trial-batch --min-captures 10 \
+  --report data/verification/prestudy-xsens-batch.json
+# Commit the verified implementation, then freeze the exact study release:
+python scripts/freeze_study_release.py data/verification/prestudy-xsens-batch.json
+python scripts/research_readiness.py --stage collection
 
 # Optional group viewing on trusted lab Wi-Fi (remote browsers are view-only)
 python scripts/dashboard_server.py --share
