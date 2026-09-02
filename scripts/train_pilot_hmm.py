@@ -31,6 +31,12 @@ def main() -> int:
     parser.add_argument("--min-complete-trials", type=int, default=3)
     parser.add_argument("--min-samples-per-state", type=int, default=30)
     parser.add_argument(
+        "--emission-components",
+        type=int,
+        default=2,
+        help="diagonal Gaussian components per state (default: 2)",
+    )
+    parser.add_argument(
         "--participants",
         help="comma-separated participant IDs to include (for example P03,P04,P05)",
     )
@@ -44,6 +50,8 @@ def main() -> int:
         "--check-only", action="store_true", help="report readiness without fitting"
     )
     args = parser.parse_args()
+    if args.emission_components < 1:
+        parser.error("--emission-components must be at least one")
 
     scanned = load_trials(args.input)
     if not scanned:
@@ -102,10 +110,14 @@ def main() -> int:
         print("NOT READY: participant-level validation requires at least two participants")
         return 2
 
-    model = fit_trials(usable)
-    validation = (leave_one_participant_out(usable)
+    model = fit_trials(usable, args.emission_components)
+    validation = (leave_one_participant_out(usable, args.emission_components)
                   if validation_method == "participant"
-                  else leave_one_trial_out(usable))
+                  else leave_one_trial_out(usable, args.emission_components))
+    validation["role"] = (
+        "development estimate; if this configuration was selected using these "
+        "folds, confirm it once on a newly recruited untouched participant"
+    )
     summary = {
         "recordings_scanned": len(scanned),
         "recordings_selected": len(trials),
@@ -121,16 +133,23 @@ def main() -> int:
             state: sum(trial.counts[state] for trial in usable) for state in STATES
         },
         "min_samples_per_state_per_trial": args.min_samples_per_state,
+        "feature_order": ["d", "v_proj", "speed", "a_proj"],
+        "emission_components_per_state": args.emission_components,
     }
     target = save_upper_hmm(
         args.output,
         model,
-        source="labelled real pilot recordings",
+        source=("labelled real pilot recordings · "
+                f"{args.emission_components}-component diagonal GMM"),
         generated_at_utc=datetime.now(timezone.utc).isoformat(),
         data_summary=summary,
         validation=validation,
     )
     print(f"FITTED: {target.resolve()}")
+    print(
+        f"Observation: d, v_proj, speed, a_proj; "
+        f"emission components/state: {args.emission_components}"
+    )
     print(
         f"{validation['method']} validation: "
         f"accuracy={validation['accuracy']:.3f} "

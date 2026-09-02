@@ -51,7 +51,7 @@ class FeatureFrame:
         Order is fixed and shared by fit_emissions / step / viterbi.
         """
         return np.array(
-            [self.d, self.v_proj, self.v_lat_frac, self.a_proj], dtype=float
+            [self.d, self.v_proj, self.speed, self.a_proj], dtype=float
         )
 
 

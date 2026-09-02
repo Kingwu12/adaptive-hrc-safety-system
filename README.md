@@ -43,7 +43,9 @@ python scripts/dashboard_server.py          # localhost-only sensor service
 cd dashboard && npm run dev                 # open http://localhost:3000
 
 # After collecting labelled pilot loops (requires >=3 complete four-state loops).
-# Filter out bring-up files and validate on people absent from model fitting.
+# Install the training-only Gaussian-mixture fitter, filter out bring-up files,
+# and validate on people absent from model fitting.
+python -m pip install -e ".[training]"
 python scripts/train_pilot_hmm.py --participants P03,P04,P05 --validation participant --check-only
 python scripts/train_pilot_hmm.py --participants P03,P04,P05 --validation participant
 # Restart dashboard_server.py; it loads data/models/pilot_hmm.json automatically.
@@ -66,7 +68,8 @@ make paper                                  # regenerate result tables; build th
  FeatureExtractor ──► FeatureFrame(d, d_dot, speed, v_proj, v_lat_frac, a_proj, torso_facing)
         │                 (d = distance to the robot's OCCUPIED COLUMN, not the TCP point)
         ▼
- Layered HMM (upper: approaching/working/retreating/hazard  ·  lower: stationary/walking)
+Layered GMM-HMM (observation: d, v_proj, speed, a_proj)
+        │          (upper: approaching/working/retreating/hazard  ·  lower: stationary/walking)
         │  step(x) → posterior p_t
         ▼
  Horizon prediction   time_to_breach(d, v_proj, a_proj)  ⊕  p_hazard   → risk
@@ -121,8 +124,8 @@ make paper                                  # regenerate result tables; build th
    (speed-aware) envelope, and is locked by
    `test_red_zone_always_stops_adaptive_even_if_model_says_working`. **Never merge
    anything that weakens this test.**
-2. **The reported transition matrix `A` and emissions MUST be fitted from labelled pilot
-   data** (`fit_transitions` / `fit_emissions`). The hand-set values in the config are
+2. **The reported transition matrix `A` and mixture emissions MUST be fitted from labelled
+   pilot data.** The hand-set values in the config are
    cold-start priors only — reporting them would be circular validation.
 3. **Synthetic data never appears in reported results.** The `sim/` scenario exists only to
    exercise the pipeline pilot data will flow through.

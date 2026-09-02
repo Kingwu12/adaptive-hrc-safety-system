@@ -1,7 +1,7 @@
 """Upper layer of the Layered HMM: operator-state recognition.
 
 States: approaching / working / retreating / hazard.
-Emissions: diagonal-Gaussian over the feature vector [d, v_proj, v_lat_frac, a_proj].
+Emissions: diagonal Gaussian or Gaussian mixture over [d, v_proj, speed, a_proj].
 
 Three entry points, matching the paper's reporting discipline:
   * step(x)   -- streaming forward-filter update; returns the online posterior the
@@ -24,7 +24,7 @@ STATES: tuple[str, ...] = ("approaching", "working", "retreating", "hazard")
 _INDEX = {s: i for i, s in enumerate(STATES)}
 
 # Feature vector order (must match FeatureFrame.as_vector):
-#   [ d, v_proj, v_lat_frac, a_proj ]
+#   [ d, v_proj, speed, a_proj ]
 _N_FEATURES = 4
 
 
@@ -44,31 +44,57 @@ class GaussianEmissions:
         return -0.5 * (log_norm + quad)
 
 
+@dataclass
+class GaussianMixtureEmissions:
+    """Per-state diagonal Gaussian mixtures for multi-modal activities.
+
+    A simulated hazard contains a rapid closing movement and a recovery movement.
+    One Gaussian averages those opposing velocities into a misleading stationary
+    state; two components preserve both modes while the HMM still exposes the same
+    four interpretable activity states.
+    """
+
+    weights: np.ndarray  # (n_states, n_components)
+    means: np.ndarray  # (n_states, n_components, n_features)
+    variances: np.ndarray  # same shape as means, strictly positive
+
+    def log_likelihood(self, x: np.ndarray) -> np.ndarray:
+        x = np.asarray(x, dtype=float)
+        diff = x[None, None, :] - self.means
+        log_norm = np.sum(np.log(2.0 * np.pi * self.variances), axis=2)
+        quad = np.sum((diff * diff) / self.variances, axis=2)
+        component_log = np.log(self.weights + 1e-300) - 0.5 * (log_norm + quad)
+        peak = component_log.max(axis=1)
+        return peak + np.log(
+            np.exp(component_log - peak[:, None]).sum(axis=1) + 1e-300
+        )
+
+
 def default_emissions() -> GaussianEmissions:
     """Physics-motivated cold-start emissions (COLD START ONLY -- not reported).
 
     Rough priors so the filter behaves sanely before pilot data exists:
-      approaching -- mid distance, closing (v_proj>0), low lateral fraction, +accel.
-      working     -- near work_radius, ~stationary net, high lateral (sway), ~0 accel.
-      retreating  -- mid distance, opening (v_proj<0), low lateral fraction.
-      hazard      -- small distance, fast closing, low lateral, strong +accel (lunge).
-    Columns: [ d, v_proj, v_lat_frac, a_proj ].
+      approaching -- mid distance, closing (v_proj>0), walking speed, +accel.
+      working     -- near work_radius, ~stationary net, low speed, ~0 accel.
+      retreating  -- mid distance, opening (v_proj<0), walking speed.
+      hazard      -- small distance, fast closing, high speed, strong +accel (lunge).
+    Columns: [ d, v_proj, speed, a_proj ].
     """
     means = np.array(
         [
-            [1.30, 0.60, 0.15, 0.30],   # approaching
-            [1.10, 0.00, 0.80, 0.00],   # working
-            [1.30, -0.60, 0.15, -0.20], # retreating
-            [0.70, 1.80, 0.10, 1.50],   # hazard
+            [1.30, 0.60, 0.65, 0.30],   # approaching
+            [1.10, 0.00, 0.15, 0.00],   # working
+            [1.30, -0.60, 0.65, -0.20], # retreating
+            [0.70, 1.80, 1.90, 1.50],   # hazard
         ],
         dtype=float,
     )
     variances = np.array(
         [
-            [0.20, 0.25, 0.10, 0.30],
-            [0.15, 0.10, 0.15, 0.15],
-            [0.20, 0.25, 0.10, 0.30],
-            [0.20, 0.60, 0.10, 0.80],
+            [0.20, 0.25, 0.25, 0.30],
+            [0.15, 0.10, 0.10, 0.15],
+            [0.20, 0.25, 0.25, 0.30],
+            [0.20, 0.60, 0.60, 0.80],
         ],
         dtype=float,
     )
@@ -81,7 +107,7 @@ class UpperHMM:
     def __init__(
         self,
         transition_matrix: np.ndarray,
-        emissions: GaussianEmissions | None = None,
+        emissions: GaussianEmissions | GaussianMixtureEmissions | None = None,
         start_prob: np.ndarray | None = None,
     ) -> None:
         A = np.asarray(transition_matrix, dtype=float)

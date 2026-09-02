@@ -10,10 +10,10 @@ from pathlib import Path
 
 import numpy as np
 
-from .lhmm.upper import STATES, UpperHMM
+from .lhmm.upper import (STATES, GaussianMixtureEmissions, UpperHMM)
 from .metrics import recognition_report
 
-FEATURES = ("d", "v_proj", "v_lat_frac", "a_proj")
+FEATURES = ("d", "v_proj", "speed", "a_proj")
 
 
 @dataclass
@@ -112,18 +112,67 @@ def complete_trials(
     return [trial for trial in trials if trial.is_complete(min_samples_per_state)]
 
 
-def fit_trials(trials: list[TrialData]) -> UpperHMM:
+def _fit_mixture_emissions(
+    X: np.ndarray, labels: list[str], components: int
+) -> GaussianMixtureEmissions:
+    """Fit deterministic diagonal GMM emissions without adding a runtime dependency."""
+    try:
+        from sklearn.mixture import GaussianMixture
+    except ImportError as exc:  # pragma: no cover - environment-specific guidance
+        raise RuntimeError(
+            "Gaussian-mixture training requires scikit-learn; install the "
+            "project's training extras"
+        ) from exc
+
+    weights = []
+    means = []
+    variances = []
+    label_array = np.asarray(labels)
+    for state in STATES:
+        rows = X[label_array == state]
+        if len(rows) < components:
+            raise ValueError(
+                f"State {state!r} has {len(rows)} samples; cannot fit "
+                f"{components} mixture components"
+            )
+        mixture = GaussianMixture(
+            n_components=components,
+            covariance_type="diag",
+            reg_covar=1e-3,
+            random_state=7,
+            n_init=3,
+            max_iter=200,
+        ).fit(rows)
+        weights.append(mixture.weights_)
+        means.append(mixture.means_)
+        variances.append(mixture.covariances_)
+    return GaussianMixtureEmissions(
+        weights=np.asarray(weights),
+        means=np.asarray(means),
+        variances=np.asarray(variances),
+    )
+
+
+def fit_trials(trials: list[TrialData], emission_components: int = 1) -> UpperHMM:
     if not trials:
         raise ValueError("No complete labelled trials supplied")
     sequences = [seq for trial in trials for seq in trial.sequences]
     X = np.concatenate([trial.X for trial in trials], axis=0)
     labels = [label for trial in trials for label in trial.labels]
     A = UpperHMM.fit_transitions(sequences, laplace=1.0)
-    emissions = UpperHMM.fit_emissions(X, labels, var_floor=1e-3)
+    if emission_components < 1:
+        raise ValueError("emission_components must be at least one")
+    emissions = (
+        UpperHMM.fit_emissions(X, labels, var_floor=1e-3)
+        if emission_components == 1
+        else _fit_mixture_emissions(X, labels, emission_components)
+    )
     return UpperHMM(transition_matrix=A, emissions=emissions)
 
 
-def leave_one_trial_out(trials: list[TrialData]) -> dict:
+def leave_one_trial_out(
+    trials: list[TrialData], emission_components: int = 1
+) -> dict:
     """Validate on unseen whole trials so adjacent frames cannot leak across folds."""
     predictions: list[str] = []
     ground_truth: list[str] = []
@@ -132,7 +181,7 @@ def leave_one_trial_out(trials: list[TrialData]) -> dict:
         training = [trial for trial in trials if trial is not held_out]
         if not training:
             continue
-        model = fit_trials(training)
+        model = fit_trials(training, emission_components)
         predicted = model.viterbi(held_out.X)
         report = recognition_report(predicted, held_out.labels)
         predictions.extend(predicted)
@@ -154,7 +203,9 @@ def leave_one_trial_out(trials: list[TrialData]) -> dict:
     }
 
 
-def leave_one_participant_out(trials: list[TrialData]) -> dict:
+def leave_one_participant_out(
+    trials: list[TrialData], emission_components: int = 1
+) -> dict:
     """Validate on people absent from fitting, not merely unseen adjacent runs."""
     participant_ids = sorted({trial.participant_id for trial in trials})
     if len(participant_ids) < 2:
@@ -168,7 +219,7 @@ def leave_one_participant_out(trials: list[TrialData]) -> dict:
                     if trial.participant_id != held_out_id]
         held_out = [trial for trial in trials
                     if trial.participant_id == held_out_id]
-        model = fit_trials(training)
+        model = fit_trials(training, emission_components)
         fold_predictions: list[str] = []
         fold_truth: list[str] = []
         for trial in held_out:

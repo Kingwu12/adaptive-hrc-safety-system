@@ -15,6 +15,7 @@ def _write_trial(path, trial_id, offset=0.0, participant_id="P-test"):
                 feature = {
                     "d": 2.0 - 0.3 * state_index + offset,
                     "v_proj": [0.5, 0.0, -0.5, 1.4][state_index],
+                    "speed": [0.6, 0.1, 0.6, 1.5][state_index],
                     "v_lat_frac": [0.1, 0.8, 0.1, 0.05][state_index],
                     "a_proj": [0.2, 0.0, -0.2, 1.2][state_index],
                 }
@@ -34,23 +35,24 @@ def test_load_fit_validate_and_roundtrip_pilot_model(tmp_path):
     trials = [load_trial(path) for path in paths]
 
     assert all(trial.is_complete(30) for trial in trials)
-    model = fit_trials(trials)
-    validation = leave_one_trial_out(trials)
+    model = fit_trials(trials, emission_components=2)
+    validation = leave_one_trial_out(trials, emission_components=2)
     assert validation["accuracy"] > 0.95
     assert validation["hazard_recall"] > 0.95
 
     target = save_upper_hmm(tmp_path / "model.json", model, validation=validation)
     restored = load_upper_hmm(target)
     np.testing.assert_allclose(restored.A, model.A)
+    np.testing.assert_allclose(restored.emissions.weights, model.emissions.weights)
     np.testing.assert_allclose(restored.emissions.means, model.emissions.means)
 
 
 def test_unlabelled_gap_does_not_create_transition(tmp_path):
     path = tmp_path / "gap.jsonl"
     rows = [
-        ("approaching", {"d": 1.5, "v_proj": 0.5, "v_lat_frac": 0.1, "a_proj": 0.1}),
+        ("approaching", {"d": 1.5, "v_proj": 0.5, "speed": 0.6, "v_lat_frac": 0.1, "a_proj": 0.1}),
         ("unlabelled", None),
-        ("working", {"d": 1.1, "v_proj": 0.0, "v_lat_frac": 0.8, "a_proj": 0.0}),
+        ("working", {"d": 1.1, "v_proj": 0.0, "speed": 0.1, "v_lat_frac": 0.8, "a_proj": 0.0}),
     ]
     with path.open("w", encoding="utf-8") as fh:
         for label, feature in rows:

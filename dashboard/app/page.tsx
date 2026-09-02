@@ -105,13 +105,13 @@ const GUIDED_PROTOCOL = [
   },
   {
     label: "working", title: "WORK AND WAIT FOR THE CUE",
-    cue: "PARTICIPANT: perform the panel task normally on the panel held at the top. EXPERIMENTER: suction remains ON; decide when the approved hazard cue begins.",
-    next: "EXPERIMENTER — GIVE HAZARD CUE NOW",
+    cue: "PARTICIPANT: perform the panel task normally on the panel held at the top. EXPERIMENTER: press the button at the exact instant you say the approved hazard cue.",
+    next: "PRESS & SAY ‘HAZARD’ TOGETHER",
   },
   {
     label: "hazard", title: "PERFORM THE APPROVED CUED HAZARD",
     cue: "Participant performs only the brief, pre-briefed simulated slip or near-approach. Keep the E-stop in reach.",
-    next: "HAZARD OVER — RECOVER AND RETREAT",
+    next: "PRESS THE INSTANT THE HAZARD MOTION ENDS",
   },
   {
     label: "retreating", title: "CONTROLLED RECOVERY AND RETREAT",
@@ -596,7 +596,7 @@ export default function Home() {
         <article className="panel probabilities">
           <div className="panelHead"><div><p className="kicker">04 · MODEL</p><h2>HMM belief</h2></div><span className="quiet">not ground truth</span></div>
           <div className="bars">{["approaching", "working", "retreating", "hazard"].map(s => { const value = status.posterior[s] || 0; return <div className="barRow" key={s}><span>{s}</span><div><i style={{ width: `${value * 100}%` }} /></div><strong>{Math.round(value * 100)}%</strong></div>; })}</div>
-          <p className="modelNote"><b>Important:</b> this baseline model is fitted on synthetic loops until the real labelled dataset pipeline is completed.</p>
+          <p className="modelNote"><b>Model source:</b> {status.model_source}. Model inference is experimental and may add caution; the independent separation envelope remains the safety floor.</p>
         </article>
 
         <article className="panel rig">

@@ -31,7 +31,7 @@ from vg10 import VG10  # noqa: E402
 from hrc_safety.analysis import fit_hmm  # noqa: E402
 from hrc_safety.config import load_config  # noqa: E402
 from hrc_safety.features import FeatureExtractor  # noqa: E402
-from hrc_safety.lhmm.upper import STATES  # noqa: E402
+from hrc_safety.lhmm.upper import (STATES, GaussianMixtureEmissions)  # noqa: E402
 from hrc_safety.pilot_model import load_upper_hmm  # noqa: E402
 from hrc_safety.mocap import (MocapBridge, NatNetV4Listener,
                               RigidBodyMonitor, load_extrinsics)  # noqa: E402
@@ -336,7 +336,10 @@ class DashboardState:
         )
         if model_path is not None and model_path.exists():
             self.hmm = load_upper_hmm(model_path)
-            self.model_source = f"pilot model · {model_path.name}"
+            model_kind = ("pilot GMM-HMM" if isinstance(
+                self.hmm.emissions, GaussianMixtureEmissions
+            ) else "pilot Gaussian HMM")
+            self.model_source = f"{model_kind} · {model_path.name}"
         else:
             self.hmm = fit_hmm(self.config)
             self.model_source = "synthetic baseline"
