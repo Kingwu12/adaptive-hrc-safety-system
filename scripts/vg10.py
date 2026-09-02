@@ -103,7 +103,13 @@ class VG10:
             ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=6",
              self.robot, "python2 - " + b64],
             input=_AGENT, capture_output=True, text=True, timeout=30)
-        line = (proc.stdout.strip().splitlines() or ["{}"])[-1]
+        if proc.returncode != 0:
+            detail = proc.stderr.strip() or proc.stdout.strip()
+            return {"ok": False, "error": detail or f"ssh exited {proc.returncode}"}
+        lines = proc.stdout.strip().splitlines()
+        if not lines:
+            return {"ok": False, "error": "robot SSH agent returned no output"}
+        line = lines[-1]
         try:
             return json.loads(line)
         except ValueError:
