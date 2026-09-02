@@ -48,27 +48,27 @@ const STATES = ["approaching", "working", "retreating", "hazard"];
 const GUIDED_PROTOCOL = [
   {
     label: "unlabelled", title: "GET READY",
-    cue: "Check the arm is low and suction is off. Pick up the panel and stand on the marked start position. Do not approach yet.",
+    cue: "EXPERIMENTER: confirm the arm is low and suction is off. PARTICIPANT: pick up the panel, stand on the marked start position, and wait.",
     next: "READY — START APPROACH",
   },
   {
     label: "approaching", title: "APPROACH WITH THE PANEL",
-    cue: "Walk normally from the start marker to the low gripper while carrying the panel.",
+    cue: "PARTICIPANT: walk normally from the start marker to the low gripper while carrying the panel. EXPERIMENTER: press only when the panel reaches the gripper.",
     next: "PANEL AT GRIPPER — START ALIGNING",
   },
   {
     label: "working", title: "PLACE AND ALIGN ON THE GRIPPER",
-    cue: "Hold the panel flat against the suction cups. When it is aligned, the next button turns suction on and verifies both cups before continuing.",
+    cue: "PARTICIPANT: hold the panel flat against both suction cups. EXPERIMENTER: when aligned, press once to arm suction, then press again to grip and verify both cups.",
     next: "PANEL ALIGNED — SUCTION ON & VERIFY",
   },
   {
     label: "retreating", title: "RETREAT TO THE START MARKER",
-    cue: "The panel is now gripped. Let go, walk away, and return fully to the marked start position.",
+    cue: "PARTICIPANT: let go, walk away, and return fully to the start marker. EXPERIMENTER: after the cell is clear, press once to arm and again to lift. Suction stays ON.",
     next: "CELL CLEAR — LIFT ROBOT",
   },
   {
-    label: "unlabelled", title: "ROBOT UP — PREPARE THE WORK APPROACH",
-    cue: "The arm has completed the slow lift and is holding the panel. Pause at the start marker until ready.",
+    label: "unlabelled", title: "SIMULATED INSTALLED PANEL — PREPARE",
+    cue: "The robot is holding the panel at the top because this setup has no top retaining fixture. Suction intentionally stays ON. PARTICIPANT: wait at the start marker.",
     next: "ROBOT UP — BEGIN APPROACH",
   },
   {
@@ -78,7 +78,7 @@ const GUIDED_PROTOCOL = [
   },
   {
     label: "working", title: "WORK AND WAIT FOR THE CUE",
-    cue: "Perform the panel task normally. Only the experimenter decides when the approved hazard cue begins.",
+    cue: "PARTICIPANT: perform the panel task normally on the panel held at the top. EXPERIMENTER: suction remains ON; decide when the approved hazard cue begins.",
     next: "EXPERIMENTER — GIVE HAZARD CUE NOW",
   },
   {
@@ -88,15 +88,17 @@ const GUIDED_PROTOCOL = [
   },
   {
     label: "retreating", title: "CONTROLLED RECOVERY AND RETREAT",
-    cue: "Recover, turn away from the robot, and return to the marked start position.",
+    cue: "PARTICIPANT: recover, turn away, and return fully to the start marker. EXPERIMENTER: when clear, press once to arm and again to lower. Suction stays ON during lowering.",
     next: "CELL CLEAR — LOWER ROBOT",
   },
   {
     label: "unlabelled", title: "ROBOT LOW — READY TO RELEASE",
-    cue: "The arm is at the verified low pose. Make sure the panel is supported and everyone is clear; the final button releases suction and saves the run.",
-    next: "PANEL SUPPORTED & CLEAR — RELEASE & SAVE",
+    cue: "The robot is stationary at the verified low pose. PARTICIPANT: approach and firmly support the panel. EXPERIMENTER: press once to arm, then again to release suction and save the run.",
+    next: "PANEL SUPPORTED — RELEASE & SAVE",
   },
 ] as const;
+
+const PHYSICAL_STEPS = new Set([2, 3, 8, 9]);
 
 function apiBase() {
   // Keep browser requests same-origin. Next proxies /api/* to the local
@@ -106,6 +108,13 @@ function apiBase() {
 
 function n(value: number | null | undefined, digits = 2) {
   return value == null || !Number.isFinite(value) ? "—" : value.toFixed(digits);
+}
+
+function nextTrialId(value: string) {
+  const match = value.match(/^(.*?)(\d+)$/);
+  if (!match) return `${value || "T"}-2`;
+  const next = String(Number(match[2]) + 1).padStart(match[2].length, "0");
+  return `${match[1]}${next}`;
 }
 
 function Sparkline({ values, color }: { values: number[]; color: string }) {
@@ -125,7 +134,8 @@ function Sparkline({ values, color }: { values: number[]; color: string }) {
     values.forEach((v, i) => {
       const x = (i / (values.length - 1)) * rect.width;
       const y = rect.height - 5 - ((v - min) / span) * (rect.height - 10);
-      i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+      if (i) ctx.lineTo(x, y);
+      else ctx.moveTo(x, y);
     });
     ctx.stroke();
   }, [values, color]);
@@ -170,7 +180,7 @@ function RigButton(props: {
 }) {
   const { tag, label, kind, busy, result, onPress } = props;
   const isBusy = busy === tag;
-  const mine = result && result.tag === tag && Date.now() - result.at < 6000 ? result : null;
+  const mine = result && result.tag === tag ? result : null;
   const cls = ["rigBtn", kind ?? "", isBusy ? "isBusy" : "", mine ? (mine.ok ? "isOk" : "isErr") : ""]
     .filter(Boolean).join(" ");
   return (
@@ -197,7 +207,12 @@ export default function Home() {
   const [rigMsg, setRigMsg] = useState("");
   const [tab, setTab] = useState<"operate" | "monitor">("operate");
   const [protocolWorking, setProtocolWorking] = useState(false);
+  const [armedStep, setArmedStep] = useState<number | null>(null);
   const protocolBusy = useRef(false);
+  const armedStepRef = useRef<number | null>(null);
+  const armedAtRef = useRef(0);
+  const armedUntilRef = useRef(0);
+  const armedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     let live = true;
@@ -275,10 +290,10 @@ export default function Home() {
       const result = await res.json();
       if (!res.ok) throw new Error(result.error || "Request failed");
       setMessage(result.message || "Updated");
-      return true;
+      return result as { message?: string; completed?: boolean };
     } catch (err) {
       setMessage(err instanceof Error ? err.message : "Request failed");
-      return false;
+      return null;
     }
   };
 
@@ -291,25 +306,83 @@ export default function Home() {
     protocolBusy.current = true;
     setProtocolWorking(true);
     try {
-      await post("/api/protocol/complete", { vacuum });
+      const result = await post("/api/protocol/complete", { vacuum });
+      if (result?.completed) {
+        const next = nextTrialId(trial);
+        setTrial(next);
+        setMessage(`${result.message || "Run saved."} Next run is ready as ${next}.`);
+      }
     } finally {
       protocolBusy.current = false;
       setProtocolWorking(false);
     }
   };
 
+  const clearArmedAction = () => {
+    armedStepRef.current = null;
+    armedAtRef.current = 0;
+    armedUntilRef.current = 0;
+    setArmedStep(null);
+    if (armedTimerRef.current) clearTimeout(armedTimerRef.current);
+    armedTimerRef.current = null;
+  };
+
+  const armGuidedAction = async (step: number) => {
+    protocolBusy.current = true;
+    setProtocolWorking(true);
+    try {
+      if (!await post("/api/protocol/arm")) return;
+      const now = Date.now();
+      armedStepRef.current = step;
+      armedAtRef.current = now;
+      armedUntilRef.current = now + 5000;
+      setArmedStep(step);
+      armedTimerRef.current = setTimeout(clearArmedAction, 5000);
+    } finally {
+      protocolBusy.current = false;
+      setProtocolWorking(false);
+    }
+  };
+
+  const confirmGuidedAction = () => {
+    if (!status.recording || status.guided_step == null || protocolBusy.current) return;
+    const step = status.guided_step;
+    if (!PHYSICAL_STEPS.has(step)) {
+      clearArmedAction();
+      void advanceProtocol();
+      return;
+    }
+    const now = Date.now();
+    if (
+      armedStepRef.current === step
+      && now - armedAtRef.current >= 750
+      && now < armedUntilRef.current
+    ) {
+      clearArmedAction();
+      void advanceProtocol();
+      return;
+    }
+    if (armedStepRef.current === step && now < armedUntilRef.current) return;
+    clearArmedAction();
+    void armGuidedAction(step);
+  };
+
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
-      if (event.repeat || ["INPUT", "TEXTAREA", "BUTTON", "SELECT"].includes(target?.tagName ?? "")) return;
+      if (event.repeat || ["INPUT", "TEXTAREA", "SELECT"].includes(target?.tagName ?? "")) return;
+      // Enter on a focused button already produces its native click. Presenter
+      // keys such as ArrowRight/PageDown do not, so allow those to bubble into
+      // the guided-run handler even while the last action button has focus.
+      if (target?.tagName === "BUTTON" && event.key === "Enter") return;
       if (!status.recording) return;
       const direct: Record<string, string> = {
         "0": "unlabelled", "1": "approaching", "2": "working",
         "3": "retreating", "4": "hazard",
       };
-      if (event.key === "Enter") {
+      if (["Enter", "ArrowRight", "PageDown"].includes(event.key)) {
         event.preventDefault();
-        void advanceProtocol();
+        confirmGuidedAction();
       } else if (direct[event.key]) {
         event.preventDefault();
         void post("/api/label", { label: direct[event.key] });
@@ -363,8 +436,9 @@ export default function Home() {
           </div>
           <h2>{guided.title}</h2>
           <p>{guided.cue}</p>
-          <button onClick={advanceProtocol} disabled={protocolWorking}>{protocolWorking ? "CHECKING / WORKING…" : guided.next}</button>
-          <small>Press this button or Enter exactly when the next physical phase begins. Hold each labelled phase for at least 2 seconds.</small>
+          {guidedIndex >= 3 && guidedIndex <= 8 && <div className="simPanelNote">SIMULATION RULE: no top fixture means suction stays ON while the panel is at the top. Never release an unsupported panel overhead.</div>}
+          <button onClick={confirmGuidedAction} disabled={protocolWorking}>{protocolWorking ? "CHECKING / WORKING…" : armedStep === guidedIndex ? `PRESS AGAIN NOW — ${guided.next}` : guided.next}</button>
+          <small>The dashboard operator advances each real phase. Suction and robot motion require two separate presses within five seconds.</small>
         </section>
       )}
 
@@ -375,7 +449,7 @@ export default function Home() {
           <div className="actions">
             {!status.recording ? <button className="primary" disabled={!status.connected || !status.optitrack_connected} onClick={startRecording}>Start guided scenario run</button> : <button className="stop" onClick={() => post("/api/session/stop")}>Abort / stop & save</button>}
           </div>
-          {!status.recording && <p className="startHint">Starts at GET READY (unlabelled), then the run director tells you exactly when to approach, work, retreat, and perform the approved cued-hazard loop.</p>}
+          {!status.recording && <p className="startHint">Starts at GET READY, then tells the operator exactly when each real phase begins. After a completed run, the trial ID increments automatically.</p>}
           <p className="feedback">{message}</p>
           <dl className="sessionFacts"><div><dt>Samples</dt><dd>{status.samples_written.toLocaleString()}</dd></div><div><dt>Packet age</dt><dd>{n(status.age_s, 3)} s</dd></div><div><dt>Calibration</dt><dd className={calibrationClass}>{calibration == null ? "Not marked" : `${Math.floor(calibration / 60)}:${String(Math.floor(calibration % 60)).padStart(2, "0")}`}</dd></div></dl>
           <button className="calibrate" disabled={!status.connected || status.recording} onClick={() => post("/api/calibration/mark")}>Mark Xsens calibration complete</button>
@@ -400,8 +474,8 @@ export default function Home() {
             <strong>{guided.title}</strong>
             <p>{guided.cue}</p>
             <small>Hold each labelled state for at least 2 seconds. Press Enter or use the button.</small>
-            <button className="protocolNext" disabled={!status.recording || status.guided_step == null || protocolWorking} onClick={advanceProtocol}>
-              {protocolWorking ? "CHECKING / WORKING…" : guided.next}
+            <button className="protocolNext" disabled={!status.recording || status.guided_step == null || protocolWorking} onClick={confirmGuidedAction}>
+              {protocolWorking ? "CHECKING / WORKING…" : armedStep === guidedIndex ? `PRESS AGAIN NOW — ${guided.next}` : guided.next}
             </button>
           </div>
           <p className="manualLabelTitle">Manual label override — recovery/debugging only</p>
@@ -515,7 +589,7 @@ export default function Home() {
           <p className="feedback">{rigMsg || (rig.robot?.program_state ?? "")}</p>
         </article>
       </section>
-      <footer><span>Data remains on this Mac</span><span>{status.recording_path || "No active recording"}</span></footer>
+      <footer><span>Data remains on this lab PC</span><span>{status.recording_path || "No active recording"}</span></footer>
     </main>
   );
 }

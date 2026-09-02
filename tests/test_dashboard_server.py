@@ -292,25 +292,46 @@ class FakeGuidedRig:
         return {"pose": name, "completed": True}
 
 
+class FakeClock:
+    def __init__(self):
+        self.now = 100.0
+
+    def __call__(self):
+        return self.now
+
+    def advance(self, seconds):
+        self.now += seconds
+
+
+def arm_and_confirm(guided, clock, vacuum=60):
+    guided.arm_step()
+    clock.advance(1.0)
+    return guided.complete_step(vacuum)
+
+
 def test_integrated_guided_actions_grip_lift_lower_release_and_save():
     state = FakeGuidedState(step=2, distance=2.0)
     rig = FakeGuidedRig()
-    guided = GuidedRunController(state, rig)
+    clock = FakeClock()
+    guided = GuidedRunController(state, rig, clock=clock)
 
-    guided.complete_step(60)
+    arm_and_confirm(guided, clock)
     assert state.step == 3
     assert rig.actions[-1] == ("grip", "BOTH", 60)
 
-    guided.complete_step(60)
+    arm_and_confirm(guided, clock)
     assert state.step == 4
     assert rig.actions[-1] == ("goto", "pose2_top")
 
     state.step = 8
-    guided.complete_step(60)
+    arm_and_confirm(guided, clock)
     assert state.step == 9
     assert rig.actions[-1] == ("goto", "pose1_low")
 
-    result = guided.complete_step(60)
+    # Once the robot is stationary at low pose, the participant must be able
+    # to approach and physically support the panel before suction releases.
+    state.distance = 0.5
+    result = arm_and_confirm(guided, clock)
     assert result["completed"] is True
     assert state.stopped is True
     assert rig.actions[-1] == ("release", "BOTH", 0)
@@ -319,10 +340,11 @@ def test_integrated_guided_actions_grip_lift_lower_release_and_save():
 def test_integrated_guided_motion_is_blocked_inside_clearance_zone():
     state = FakeGuidedState(step=3, distance=1.0)
     rig = FakeGuidedRig(vacuum=(600, 650))
-    guided = GuidedRunController(state, rig)
+    clock = FakeClock()
+    guided = GuidedRunController(state, rig, clock=clock)
 
     with pytest.raises(ValueError, match="move beyond"):
-        guided.complete_step(60)
+        arm_and_confirm(guided, clock)
     assert state.step == 3
     assert not rig.actions
 
@@ -342,10 +364,11 @@ def test_integrated_guided_failed_grip_is_released_and_does_not_advance():
         }}
 
     rig.gripper_action = weak_grip
-    guided = GuidedRunController(state, rig)
+    clock = FakeClock()
+    guided = GuidedRunController(state, rig, clock=clock)
 
     with pytest.raises(ValueError, match="not verified"):
-        guided.complete_step(60)
+        arm_and_confirm(guided, clock)
     assert state.step == 2
     assert rig.actions[-1] == ("release", "BOTH", 0)
 
@@ -363,3 +386,37 @@ def test_integrated_guided_start_requires_released_low_rig():
     result = guided.start("P01", "T01")
     assert result["message"] == "recording"
     assert state.recording is True
+
+
+def test_integrated_guided_physical_action_requires_deliberate_second_press():
+    state = FakeGuidedState(step=2, distance=2.0)
+    rig = FakeGuidedRig()
+    clock = FakeClock()
+    guided = GuidedRunController(state, rig, clock=clock)
+
+    with pytest.raises(ValueError, match="not armed"):
+        guided.complete_step(60)
+    assert not rig.actions
+
+    guided.arm_step()
+    with pytest.raises(ValueError, match="too fast"):
+        guided.complete_step(60)
+    assert not rig.actions
+
+    clock.advance(1.0)
+    guided.complete_step(60)
+    assert rig.actions[-1] == ("grip", "BOTH", 60)
+
+
+def test_integrated_guided_physical_arm_expires_without_actuating():
+    state = FakeGuidedState(step=3, distance=2.0)
+    rig = FakeGuidedRig()
+    clock = FakeClock()
+    guided = GuidedRunController(state, rig, clock=clock)
+
+    guided.arm_step()
+    clock.advance(5.1)
+    with pytest.raises(ValueError, match="expired"):
+        guided.complete_step()
+    assert not rig.actions
+    assert state.step == 3

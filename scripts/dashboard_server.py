@@ -51,6 +51,13 @@ GUIDED_PROTOCOL_LABELS = (
     "unlabelled",   # sequence complete
 )
 
+PHYSICAL_STEP_WARNINGS = {
+    2: "Panel aligned. Suction will turn on and both cups will be verified.",
+    3: "Cell clear. The robot will lift the panel to the taught top pose.",
+    8: "Cell clear. The robot will lower the panel to the taught loading pose.",
+    9: "Panel supported at the verified low pose. Suction will release and the run will save.",
+}
+
 
 def safe_id(value: object, fallback: str) -> str:
     clean = re.sub(r"[^A-Za-z0-9_-]+", "-", str(value or "").strip()).strip("-")
@@ -636,16 +643,59 @@ class GuidedRunController:
     GRIP_MIN_PERMILLE = 500
     RELEASED_MAX_PERMILLE = 100
     POSE_TOLERANCE_RAD = 0.08
+    ARM_MIN_DELAY_S = 0.75
+    ARM_TIMEOUT_S = 5.0
 
-    def __init__(self, state: DashboardState, rig: RigControl) -> None:
+    def __init__(self, state: DashboardState, rig: RigControl,
+                 clock=time.monotonic) -> None:
         self.state = state
         self.rig = rig
+        self.clock = clock
         self.lock = threading.Lock()
+        self.armed_step: int | None = None
+        self.armed_at = 0.0
         zones = state.config["zones"]
         red = zones["K"] * zones["T"] + zones["C"] + zones["Sa"]
         self.motion_clearance_m = (
             zones["yellow_margin"] * red + zones.get("hysteresis", 0.0)
         )
+
+    def _clear_arm(self) -> None:
+        self.armed_step = None
+        self.armed_at = 0.0
+
+    def arm_step(self) -> dict:
+        """Arm one physical action; a later, separate request must execute it."""
+        with self.lock:
+            snap = self.state.snapshot()
+            if not snap.get("recording") or snap.get("guided_step") is None:
+                raise ValueError("No guided recording is active")
+            step = int(snap["guided_step"])
+            warning = PHYSICAL_STEP_WARNINGS.get(step)
+            if warning is None:
+                raise ValueError("This guided step does not perform a physical action")
+            self.armed_step = step
+            self.armed_at = self.clock()
+            return {
+                "message": f"ARMED: {warning} Press again within five seconds.",
+                "armed_step": step,
+                "expires_in_s": self.ARM_TIMEOUT_S,
+            }
+
+    def _require_armed(self, step: int) -> None:
+        if step not in PHYSICAL_STEP_WARNINGS:
+            self._clear_arm()
+            return
+        if self.armed_step != step:
+            self._clear_arm()
+            raise ValueError("Physical action is not armed; press once, then press again")
+        elapsed = self.clock() - self.armed_at
+        if elapsed < self.ARM_MIN_DELAY_S:
+            raise ValueError("Confirmation was too fast; wait, then press again")
+        if elapsed > self.ARM_TIMEOUT_S:
+            self._clear_arm()
+            raise ValueError("Physical-action confirmation expired; press once to arm again")
+        self._clear_arm()
 
     def _require_robot_ready(self) -> dict:
         robot = self.rig.robot_status()
@@ -692,6 +742,7 @@ class GuidedRunController:
     def start(self, participant: object, trial: object) -> dict:
         """Preflight the low, released rig before opening a guided recording."""
         with self.lock:
+            self._clear_arm()
             self._require_robot_ready()
             self._require_operator_clear()
             self._require_pose("pose1_low")
@@ -717,6 +768,7 @@ class GuidedRunController:
             if not snap.get("recording") or snap.get("guided_step") is None:
                 raise ValueError("No guided recording is active")
             step = int(snap["guided_step"])
+            self._require_armed(step)
             action: dict | None = None
 
             if step == 2:  # panel aligned at the low gripper
@@ -751,8 +803,7 @@ class GuidedRunController:
                     self.state.set_label("retreating")
                     raise
                 action["operator_distance_m"] = round(distance, 3)
-            elif step == 9:  # arm is low and participant is clear; release and save
-                distance = self._require_operator_clear()
+            elif step == 9:  # arm is stationary low and panel is manually supported
                 self._require_robot_ready()
                 self._require_pose("pose1_low")
                 action = self.rig.gripper_action("release", "BOTH", 0)
@@ -765,7 +816,6 @@ class GuidedRunController:
                     **saved,
                     "completed": True,
                     "action": action,
-                    "operator_distance_m": round(distance, 3),
                 }
 
             advanced = self.state.advance_guided_protocol()
@@ -906,7 +956,8 @@ class ApiHandler(BaseHTTPRequestHandler):
             body = json.loads(self.rfile.read(length) or b"{}")
             rig_paths = {
                 "/api/gripper", "/api/robot", "/api/demo", "/api/cycle",
-                "/api/xsens/reset", "/api/protocol/start", "/api/protocol/complete",
+                "/api/xsens/reset", "/api/protocol/start", "/api/protocol/arm",
+                "/api/protocol/complete",
             }
             if self.path in rig_paths:
                 # rig control needs the key from any remote browser
@@ -925,6 +976,8 @@ class ApiHandler(BaseHTTPRequestHandler):
                 elif self.path == "/api/protocol/start":
                     result = self.guided.start(
                         body.get("participant_id"), body.get("trial_id"))
+                elif self.path == "/api/protocol/arm":
+                    result = self.guided.arm_step()
                 elif self.path == "/api/protocol/complete":
                     result = self.guided.complete_step(int(body.get("vacuum", 60)))
                 else:
