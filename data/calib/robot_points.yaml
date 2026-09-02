@@ -1,0 +1,20 @@
+# Robot-base coordinates transcribed from pendant Tool Position screenshots.
+coordinate_frame: robot_base
+source: pendant_tool_position
+units: metres
+robot_points:
+  mark_D:
+    tcp_xyz_m: [0.29450, 0.94242, -0.70635]
+    tcp_rotvec_rad: [3.175, -0.286, -0.081]
+  mark_A:
+    tcp_xyz_m: [-0.16100, -0.71886, -0.69700]
+    tcp_rotvec_rad: [3.027, 0.384, 0.017]
+  mark_B:
+    tcp_xyz_m: [-0.72297, 0.03910, -0.69898]
+    tcp_rotvec_rad: [2.105, -2.287, -0.029]
+  mark_C:
+    tcp_xyz_m: [0.96653, 0.22648, -0.70727]
+    tcp_rotvec_rad: [2.683, -1.804, 0.002]
+floor_plane_check:
+  mean_z_m: -0.70240
+  z_range_m: 0.01027

@@ -1,0 +1,508 @@
+{
+  "schema_version": 2,
+  "states": [
+    "approaching",
+    "working",
+    "retreating",
+    "hazard"
+  ],
+  "feature_order": [
+    "d",
+    "v_proj",
+    "speed",
+    "a_proj"
+  ],
+  "transition_matrix": [
+    [
+      0.9961206646980487,
+      0.003763534248161658,
+      5.790052689479474e-05,
+      5.790052689479474e-05
+    ],
+    [
+      1.8652540476012832e-05,
+      0.9987502797881072,
+      0.0006155338357084235,
+      0.0006155338357084235
+    ],
+    [
+      5.1148278860416345e-05,
+      5.1148278860416345e-05,
+      0.9998465551634188,
+      5.1148278860416345e-05
+    ],
+    [
+      5.9762146656307895e-05,
+      5.9762146656307895e-05,
+      0.0019721508396581605,
+      0.9979083248670292
+    ]
+  ],
+  "emissions": {
+    "kind": "gaussian_mixture",
+    "weights": [
+      [
+        0.3745466248185212,
+        0.6254533751814788
+      ],
+      [
+        0.41603122699688033,
+        0.5839687730031197
+      ],
+      [
+        0.6489338135087014,
+        0.35106618649129856
+      ],
+      [
+        0.34890167004697253,
+        0.6510983299530274
+      ]
+    ],
+    "means": [
+      [
+        [
+          1.915892068765335,
+          0.022220204015435046,
+          0.11104281844908707,
+          0.030462470448683457
+        ],
+        [
+          1.513140290473264,
+          0.4630797962440123,
+          0.7191697069869314,
+          0.09207345436612904
+        ]
+      ],
+      [
+        [
+          0.742334262195876,
+          0.006616937613755356,
+          0.0700617471633602,
+          0.034232944931411664
+        ],
+        [
+          0.6709675726867482,
+          -0.00585305260722522,
+          0.5366535255368502,
+          -0.0708554863553156
+        ]
+      ],
+      [
+        [
+          1.486376755425931,
+          -0.4432270329737409,
+          0.7023710404761733,
+          -0.17184413740679214
+        ],
+        [
+          1.858341485292997,
+          -0.013686823330827503,
+          0.13159882608558204,
+          0.060241576080716744
+        ]
+      ],
+      [
+        [
+          0.8678727921142807,
+          0.06863607485369722,
+          1.0780749265615106,
+          -0.4578491708762088
+        ],
+        [
+          1.027264937314914,
+          -0.06652879714913185,
+          0.42038163274626084,
+          0.279253587739562
+        ]
+      ]
+    ],
+    "variances": [
+      [
+        [
+          0.6787919793422904,
+          0.007619197295804661,
+          0.010237353670822985,
+          0.2702518371436019
+        ],
+        [
+          0.44311428246343987,
+          0.1223706140668408,
+          0.05559625224780751,
+          6.10734644448116
+        ]
+      ],
+      [
+        [
+          0.181106681110358,
+          0.003471669320962093,
+          0.004981974136805313,
+          0.11670367914949237
+        ],
+        [
+          0.07858300815268143,
+          0.10495228221669926,
+          0.06546762894106528,
+          2.9771917687203446
+        ]
+      ],
+      [
+        [
+          0.43324852610908915,
+          0.1080628387377188,
+          0.046462373236845045,
+          5.469358490500196
+        ],
+        [
+          0.8245430346214203,
+          0.009931055618825974,
+          0.012371570675619163,
+          0.34533676166490684
+        ]
+      ],
+      [
+        [
+          0.09308132312871131,
+          0.4946065769956692,
+          0.14414989515029142,
+          16.28815815543766
+        ],
+        [
+          0.1259367384692328,
+          0.08420229777786338,
+          0.05802859371890309,
+          2.408568374662547
+        ]
+      ]
+    ]
+  },
+  "source": "labelled real pilot recordings \u00b7 2-component diagonal GMM",
+  "generated_at_utc": "2026-09-02T05:09:37.208558+00:00",
+  "data_summary": {
+    "recordings_scanned": 46,
+    "recordings_selected": 32,
+    "complete_trials": 32,
+    "participants": [
+      "P03",
+      "P04",
+      "P05"
+    ],
+    "training_runs": [
+      {
+        "participant_id": "P03",
+        "trial_id": "T01",
+        "file_name": "P03-T01-20260902-114344-df0d4d.jsonl"
+      },
+      {
+        "participant_id": "P03",
+        "trial_id": "T02",
+        "file_name": "P03-T02-20260902-114633-722395.jsonl"
+      },
+      {
+        "participant_id": "P03",
+        "trial_id": "T03",
+        "file_name": "P03-T03-20260902-114852-eba97c.jsonl"
+      },
+      {
+        "participant_id": "P03",
+        "trial_id": "T04",
+        "file_name": "P03-T04-20260902-115127-646b10.jsonl"
+      },
+      {
+        "participant_id": "P03",
+        "trial_id": "T05",
+        "file_name": "P03-T05-20260902-115353-7d4684.jsonl"
+      },
+      {
+        "participant_id": "P03",
+        "trial_id": "T06",
+        "file_name": "P03-T06-20260902-115614-8db39a.jsonl"
+      },
+      {
+        "participant_id": "P03",
+        "trial_id": "T07",
+        "file_name": "P03-T07-20260902-115816-6f848a.jsonl"
+      },
+      {
+        "participant_id": "P03",
+        "trial_id": "T08",
+        "file_name": "P03-T08-20260902-120035-1482ba.jsonl"
+      },
+      {
+        "participant_id": "P04",
+        "trial_id": "T01",
+        "file_name": "P04-T01-20260902-131706-cf4df4.jsonl"
+      },
+      {
+        "participant_id": "P04",
+        "trial_id": "T02",
+        "file_name": "P04-T02-20260902-132043-8f2c96.jsonl"
+      },
+      {
+        "participant_id": "P04",
+        "trial_id": "T03",
+        "file_name": "P04-T03-20260902-132317-eb63ed.jsonl"
+      },
+      {
+        "participant_id": "P04",
+        "trial_id": "T04",
+        "file_name": "P04-T04-20260902-132541-6ceb16.jsonl"
+      },
+      {
+        "participant_id": "P04",
+        "trial_id": "T05",
+        "file_name": "P04-T05-20260902-132755-eca79b.jsonl"
+      },
+      {
+        "participant_id": "P04",
+        "trial_id": "T06",
+        "file_name": "P04-T06-20260902-133036-d7846e.jsonl"
+      },
+      {
+        "participant_id": "P04",
+        "trial_id": "T07",
+        "file_name": "P04-T07-20260902-133257-5185a0.jsonl"
+      },
+      {
+        "participant_id": "P04",
+        "trial_id": "T08",
+        "file_name": "P04-T08-20260902-133526-f4e273.jsonl"
+      },
+      {
+        "participant_id": "P04",
+        "trial_id": "T09",
+        "file_name": "P04-T09-20260902-133728-a297ec.jsonl"
+      },
+      {
+        "participant_id": "P04",
+        "trial_id": "T10",
+        "file_name": "P04-T10-20260902-133950-0dc65f.jsonl"
+      },
+      {
+        "participant_id": "P04",
+        "trial_id": "T11",
+        "file_name": "P04-T11-20260902-134153-b5dca6.jsonl"
+      },
+      {
+        "participant_id": "P04",
+        "trial_id": "T12",
+        "file_name": "P04-T12-20260902-134346-ed4ec2.jsonl"
+      },
+      {
+        "participant_id": "P05",
+        "trial_id": "T01",
+        "file_name": "P05-T01-20260902-140637-260e10.jsonl"
+      },
+      {
+        "participant_id": "P05",
+        "trial_id": "T02",
+        "file_name": "P05-T02-20260902-140831-43d2b9.jsonl"
+      },
+      {
+        "participant_id": "P05",
+        "trial_id": "T03",
+        "file_name": "P05-T03-20260902-141029-108a72.jsonl"
+      },
+      {
+        "participant_id": "P05",
+        "trial_id": "T04",
+        "file_name": "P05-T04-20260902-144935-26b5f3.jsonl"
+      },
+      {
+        "participant_id": "P05",
+        "trial_id": "T05",
+        "file_name": "P05-T05-20260902-145138-4e866f.jsonl"
+      },
+      {
+        "participant_id": "P05",
+        "trial_id": "T06",
+        "file_name": "P05-T06-20260902-145338-88245c.jsonl"
+      },
+      {
+        "participant_id": "P05",
+        "trial_id": "T07",
+        "file_name": "P05-T07-20260902-145538-76fa1f.jsonl"
+      },
+      {
+        "participant_id": "P05",
+        "trial_id": "T08",
+        "file_name": "P05-T08-20260902-145740-73df42.jsonl"
+      },
+      {
+        "participant_id": "P05",
+        "trial_id": "T09",
+        "file_name": "P05-T09-20260902-145939-10ca6c.jsonl"
+      },
+      {
+        "participant_id": "P05",
+        "trial_id": "T10",
+        "file_name": "P05-T10-20260902-150200-da8c69.jsonl"
+      },
+      {
+        "participant_id": "P05",
+        "trial_id": "T11",
+        "file_name": "P05-T11-20260902-150356-50c93c.jsonl"
+      },
+      {
+        "participant_id": "P05",
+        "trial_id": "T12",
+        "file_name": "P05-T12-20260902-150604-6ceccf.jsonl"
+      }
+    ],
+    "label_counts": {
+      "approaching": 17267,
+      "working": 53609,
+      "retreating": 19611,
+      "hazard": 16730
+    },
+    "min_samples_per_state_per_trial": 30,
+    "feature_order": [
+      "d",
+      "v_proj",
+      "speed",
+      "a_proj"
+    ],
+    "emission_components_per_state": 2
+  },
+  "validation": {
+    "method": "leave-one-participant-out",
+    "participants": [
+      "P03",
+      "P04",
+      "P05"
+    ],
+    "accuracy": 0.6690730014829738,
+    "hazard_precision": 0.48972431077694234,
+    "hazard_recall": 0.5255827854154214,
+    "confusion": [
+      [
+        9861,
+        2525,
+        3263,
+        1618
+      ],
+      [
+        2240,
+        43566,
+        2088,
+        5715
+      ],
+      [
+        3690,
+        4576,
+        9516,
+        1829
+      ],
+      [
+        1344,
+        4259,
+        2334,
+        8793
+      ]
+    ],
+    "folds": [
+      {
+        "participant_id": "P03",
+        "held_out_trials": 8,
+        "training_trials": 24,
+        "accuracy": 0.6270650146549427,
+        "hazard_precision": 0.436212504517528,
+        "hazard_recall": 0.5276502732240437,
+        "confusion": [
+          [
+            2105,
+            391,
+            1789,
+            974
+          ],
+          [
+            556,
+            11518,
+            1392,
+            1489
+          ],
+          [
+            784,
+            1004,
+            2790,
+            657
+          ],
+          [
+            410,
+            1394,
+            357,
+            2414
+          ]
+        ]
+      },
+      {
+        "participant_id": "P04",
+        "held_out_trials": 12,
+        "training_trials": 20,
+        "accuracy": 0.7006161652772743,
+        "hazard_precision": 0.6517735334242838,
+        "hazard_recall": 0.5545560069645966,
+        "confusion": [
+          [
+            3297,
+            1552,
+            150,
+            349
+          ],
+          [
+            1256,
+            18200,
+            374,
+            1209
+          ],
+          [
+            1523,
+            2423,
+            3676,
+            484
+          ],
+          [
+            381,
+            1869,
+            820,
+            3822
+          ]
+        ]
+      },
+      {
+        "participant_id": "P05",
+        "held_out_trials": 12,
+        "training_trials": 20,
+        "accuracy": 0.6678395889186773,
+        "hazard_precision": 0.3899649229830715,
+        "hazard_recall": 0.4858445753372601,
+        "confusion": [
+          [
+            4459,
+            582,
+            1324,
+            295
+          ],
+          [
+            428,
+            13848,
+            322,
+            3017
+          ],
+          [
+            1383,
+            1149,
+            3050,
+            688
+          ],
+          [
+            553,
+            996,
+            1157,
+            2557
+          ]
+        ]
+      }
+    ],
+    "role": "development estimate; if this configuration was selected using these folds, confirm it once on a newly recruited untouched participant"
+  }
+}

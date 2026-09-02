@@ -22,14 +22,13 @@
 
 ## Archive policy
 
-The GitHub repository is public. Raw participant motion recordings, the participant
-name registry, calibration captures, and fitted model artifacts are therefore not
-committed to GitHub. The public repository contains the reproducible code, tests,
-aggregate results, and this manifest. The complete source-plus-data ZIP is stored
-privately in the connected cloud account and retained locally for the project team.
-
-Before any public release of raw recordings, confirm that the approved ethics and
-participant-consent documents explicitly permit public distribution of motion data.
+The project owner confirmed on 2026-09-02 that the approved ethics and participant
+consent permit public distribution of the collected motion data. The raw recordings,
+participant registry, calibration captures, derived analysis, and fitted model
+artifacts are therefore included in the public GitHub repository. The local dashboard
+authorization secret remains excluded. The complete source-plus-data ZIP is also
+stored privately in the connected cloud account and retained locally for the project
+team.
 
 ## Verified archive receipt
 

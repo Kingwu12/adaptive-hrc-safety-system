@@ -1,0 +1,24 @@
+{
+  "participants": [
+    {
+      "id": "P01",
+      "name": "trial",
+      "created_at": "2026-09-02T11:41:56"
+    },
+    {
+      "id": "P03",
+      "name": "King",
+      "created_at": "2026-09-02T11:42:19"
+    },
+    {
+      "id": "P04",
+      "name": "Mic",
+      "created_at": "2026-09-02T12:10:01"
+    },
+    {
+      "id": "P05",
+      "name": "Luke",
+      "created_at": "2026-09-02T13:46:27"
+    }
+  ]
+}

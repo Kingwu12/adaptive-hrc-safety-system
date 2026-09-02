@@ -1,0 +1,46 @@
+# Raw MVN pelvis coordinates paired with data/calib/robot_points.yaml.
+# Facing reference supplied during capture: right foot facing W 287.
+coordinate_frame: xsens_mvn_raw
+segment_id: 1
+segment_name: pelvis
+units: metres
+facing_reference: "W 287"
+xsens_points:
+  point_1:
+    physical_mark: D
+    pelvis_xyz_m: [-0.73111409, 0.24057625, 0.88776291]
+    samples: 181
+    duration_s: 3.0
+    range_xyz_m: [0.01468986, 0.02040459, 0.00372821]
+    std_xyz_m: [0.00371847, 0.00554780, 0.00128885]
+  point_2:
+    physical_mark: C
+    pelvis_xyz_m: [0.22630894, -0.35099406, 0.88896995]
+    samples: 154
+    duration_s: 3.0
+    range_xyz_m: [0.00843872, 0.00363708, 0.00290930]
+    std_xyz_m: [0.00207978, 0.00113311, 0.00071041]
+  point_3:
+    physical_mark: A
+    pelvis_xyz_m: [-0.38056910, -1.70109395, 0.89134350]
+    samples: 182
+    duration_s: 3.0
+    range_xyz_m: [0.00589973, 0.00552702, 0.00128877]
+    std_xyz_m: [0.00221706, 0.00168653, 0.00042040]
+  point_4:
+    physical_mark: B
+    pelvis_xyz_m: [-1.65750970, -1.24008061, 0.88853552]
+    samples: 175
+    duration_s: 3.0
+    range_xyz_m: [0.00307846, 0.00896466, 0.00132066]
+    std_xyz_m: [0.00104172, 0.00223311, 0.00043207]
+calibration_attempt:
+  accepted: false
+  rejection_reason: "2D rigid fit residuals are too large for safety use; likely MVN positional drift/anchoring or inconsistent foot placement."
+  rotation_2d:
+    - [0.92558187, 0.37854748]
+    - [-0.37854748, 0.92558187]
+  translation_2d_m: [0.97146997, 0.58775907]
+  residuals_m: [0.17117587, 0.09526578, 0.18412683, 0.31044378]
+  rmse_m: 0.20533800
+  max_residual_m: 0.31044378
