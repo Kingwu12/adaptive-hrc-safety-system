@@ -6,6 +6,7 @@ import os
 import sys
 import threading
 import time
+import types
 
 import pytest
 
@@ -92,3 +93,72 @@ def test_rig_status_poll_returns_cached_value_while_probe_is_slow():
         time.sleep(0.01)
     second = rig.status_snapshot({"connected": False}, max_age_s=60.0)
     assert second["robot"]["error"] == "offline"
+
+
+def test_goto_pose_uses_rtde_and_disconnects(monkeypatch):
+    calls = []
+
+    class FakeControl:
+        def __init__(self, host):
+            calls.append(("connect", host))
+
+        def moveJ(self, q, speed, acceleration):
+            calls.append(("moveJ", q, speed, acceleration))
+            return True
+
+        def stopJ(self, deceleration):
+            calls.append(("stopJ", deceleration))
+
+        def disconnect(self):
+            calls.append(("disconnect",))
+
+    monkeypatch.setitem(sys.modules, "rtde_control", types.SimpleNamespace(
+        RTDEControlInterface=FakeControl))
+    rig = RigControl.__new__(RigControl)
+    rig.robot_host = "192.0.2.10"
+    rig._poses = {"pose2_top": {"q": [1, 2, 3, 4, 5, 6]}}
+    rig.close_program_socket = lambda: calls.append(("close_socket",))
+    rig.robot_status = lambda: {
+        "reachable": True,
+        "robotmode": "Robotmode: RUNNING",
+        "safety": "Safetystatus: NORMAL",
+    }
+    rig.gripper_stats = lambda max_age_s=0.0: {
+        "vacuum_A_permille": 600,
+        "vacuum_B_permille": 650,
+    }
+
+    result = rig.goto_pose("pose2_top")
+
+    assert result["completed"] is True
+    assert ("moveJ", [1.0, 2.0, 3.0, 4.0, 5.0, 6.0], 0.1, 0.15) in calls
+    assert calls[-2:] == [("stopJ", 0.5), ("disconnect",)]
+
+
+def test_goto_pose_rejects_low_vacuum_before_connecting(monkeypatch):
+    connected = False
+
+    class FakeControl:
+        def __init__(self, host):
+            nonlocal connected
+            connected = True
+
+    monkeypatch.setitem(sys.modules, "rtde_control", types.SimpleNamespace(
+        RTDEControlInterface=FakeControl))
+    rig = RigControl.__new__(RigControl)
+    rig.robot_host = "192.0.2.10"
+    rig._poses = {"pose2_top": {"q": [1, 2, 3, 4, 5, 6]}}
+    rig.close_program_socket = lambda: None
+    rig.robot_status = lambda: {
+        "reachable": True,
+        "robotmode": "Robotmode: RUNNING",
+        "safety": "Safetystatus: NORMAL",
+    }
+    rig.gripper_stats = lambda max_age_s=0.0: {
+        "vacuum_A_permille": 490,
+        "vacuum_B_permille": 650,
+    }
+
+    with pytest.raises(ValueError, match="vacuum below motion threshold"):
+        rig.goto_pose("pose2_top")
+    assert connected is False

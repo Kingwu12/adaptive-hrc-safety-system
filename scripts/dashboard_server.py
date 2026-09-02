@@ -510,36 +510,55 @@ class RigControl:
 
     # ------------------------------------------------------- discrete moves
 
-    def goto_pose(self, name: str, speed: float = 0.35) -> dict:
-        """Move to a taught joint pose with movej.
+    def goto_pose(self, name: str, speed: float = 0.10) -> dict:
+        """Move slowly to a taught joint pose through the RTDE controller.
 
-        movej, never movel. Learned on the real arm 2026-08-12: a linear move
-        from or near full extension trips a protective stop at the singularity.
-        movej goes through joint space and cannot hit that.
-
-        Same def-only injection protocol as the panel cycle: the def block
-        auto-starts, a trailing call line is a parse error, the socket must
-        stay open or the controller kills the program, and set_payload must be
-        the first statement or the shoulder trips C157A1 on first acceleration.
+        Discrete moves deliberately do not use the primary-interface socket.
+        If a URScript injection is rejected before it starts, keeping that
+        socket open can still occupy the robot's control channel indefinitely.
+        RTDE gives us a synchronous success result and is always disconnected
+        in ``finally``, so a failed move cannot wedge later controls.
         """
         pose = self._poses.get(name)
         if not pose or "q" not in pose:
             raise ValueError(f"Unknown taught pose: {name}. "
                              f"Have: {sorted(self._poses)}")
-        q = ", ".join(f"{float(v):.5f}" for v in pose["q"])
-        spd = max(0.05, min(1.0, float(speed)))
+        spd = max(0.05, min(0.25, float(speed)))
         self.close_program_socket()
-        prog = ("def goto_%s():\n"
-                "  set_payload(1.7, [0.0, 0.0, 0.06])\n"
-                "  movej([%s], a=0.8, v=%.3f)\n"
-                "end\n") % (name.replace("-", "_"), q, spd)
-        self._prog_sock = socket.create_connection(
-            (self.robot_host, 30001), timeout=5)
-        self._prog_sock.sendall(prog.encode("utf-8"))
-        time.sleep(0.8)
-        state = self._dash("programState", "running")
+
+        robot = self.robot_status()
+        if not robot.get("reachable"):
+            raise ValueError("robot is unreachable")
+        if "RUNNING" not in robot.get("robotmode", ""):
+            raise ValueError("robot is not powered and brake-released")
+        if "NORMAL" not in robot.get("safety", ""):
+            raise ValueError(f"robot safety is not normal: {robot.get('safety')}")
+
+        stats = self.gripper_stats(max_age_s=0.0)
+        vacuum = (int(stats.get("vacuum_A_permille", 0)),
+                  int(stats.get("vacuum_B_permille", 0)))
+        if min(vacuum) < 500:
+            raise ValueError(f"vacuum below motion threshold: {vacuum}")
+
+        try:
+            from rtde_control import RTDEControlInterface
+        except ImportError as exc:
+            raise ValueError("ur_rtde control module is unavailable") from exc
+
+        control = None
+        try:
+            control = RTDEControlInterface(self.robot_host)
+            moved = control.moveJ([float(v) for v in pose["q"]], spd, 0.15)
+            if not moved:
+                raise ValueError(f"move to {name} failed")
+        finally:
+            if control is not None:
+                try:
+                    control.stopJ(0.5)
+                finally:
+                    control.disconnect()
         return {"pose": name, "q": pose["q"], "speed": spd,
-                "program_state": state[0], "running": state[1]}
+                "vacuum": vacuum, "completed": True}
 
     def freedrive(self, on: bool) -> dict:
         """Hand-guiding on or off, so poses can be re-taught without the pendant."""
