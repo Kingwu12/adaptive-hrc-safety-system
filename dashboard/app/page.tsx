@@ -48,53 +48,53 @@ const STATES = ["approaching", "working", "retreating", "hazard"];
 const GUIDED_PROTOCOL = [
   {
     label: "unlabelled", title: "GET READY",
-    cue: "Pick up the panel at the loading point and stand on the marked start position. Do not approach the robot yet.",
-    next: "READY — begin approach",
+    cue: "Check the arm is low and suction is off. Pick up the panel and stand on the marked start position. Do not approach yet.",
+    next: "READY — START APPROACH",
   },
   {
     label: "approaching", title: "APPROACH WITH THE PANEL",
-    cue: "Walk normally from the start marker toward the robot while carrying the panel.",
-    next: "AT WORK POSITION — begin placement",
+    cue: "Walk normally from the start marker to the low gripper while carrying the panel.",
+    next: "PANEL AT GRIPPER — START ALIGNING",
   },
   {
-    label: "working", title: "PLACE, ALIGN, AND WORK",
-    cue: "Place and align the panel, then perform the normal fastening task at the work position.",
-    next: "TASK COMPLETE — retreat",
+    label: "working", title: "PLACE AND ALIGN ON THE GRIPPER",
+    cue: "Hold the panel flat against the suction cups. When it is aligned, the next button turns suction on and verifies both cups before continuing.",
+    next: "PANEL ALIGNED — SUCTION ON & VERIFY",
   },
   {
     label: "retreating", title: "RETREAT TO THE START MARKER",
-    cue: "Walk away from the robot and return fully to the marked start position.",
-    next: "AT START — prepare hazard loop",
+    cue: "The panel is now gripped. Let go, walk away, and return fully to the marked start position.",
+    next: "CELL CLEAR — LIFT ROBOT",
   },
   {
-    label: "unlabelled", title: "RESET FOR THE CUED-HAZARD LOOP",
-    cue: "Pause at the start marker. Reset the panel and wait for the experimenter's instruction.",
-    next: "READY — begin second approach",
+    label: "unlabelled", title: "ROBOT UP — PREPARE THE WORK APPROACH",
+    cue: "The arm has completed the slow lift and is holding the panel. Pause at the start marker until ready.",
+    next: "ROBOT UP — BEGIN APPROACH",
   },
   {
-    label: "approaching", title: "SECOND APPROACH",
-    cue: "Approach the robot normally with the panel for the cued-hazard training loop.",
-    next: "AT WORK POSITION — resume task",
+    label: "approaching", title: "APPROACH THE RAISED PANEL",
+    cue: "Approach the raised panel normally from the marked start position.",
+    next: "AT RAISED PANEL — START WORK",
   },
   {
     label: "working", title: "WORK AND WAIT FOR THE CUE",
     cue: "Perform the panel task normally. Only the experimenter decides when the approved hazard cue begins.",
-    next: "EXPERIMENTER — give hazard cue now",
+    next: "EXPERIMENTER — GIVE HAZARD CUE NOW",
   },
   {
     label: "hazard", title: "PERFORM THE APPROVED CUED HAZARD",
     cue: "Participant performs only the brief, pre-briefed simulated slip or near-approach. Keep the E-stop in reach.",
-    next: "HAZARD OVER — recover and retreat",
+    next: "HAZARD OVER — RECOVER AND RETREAT",
   },
   {
     label: "retreating", title: "CONTROLLED RECOVERY AND RETREAT",
     cue: "Recover, turn away from the robot, and return to the marked start position.",
-    next: "AT START — complete run",
+    next: "CELL CLEAR — LOWER ROBOT",
   },
   {
-    label: "unlabelled", title: "RUN COMPLETE",
-    cue: "Hold at the start marker. The labelled sequence is complete and ready to save.",
-    next: "STOP & SAVE THIS RUN",
+    label: "unlabelled", title: "ROBOT LOW — READY TO RELEASE",
+    cue: "The arm is at the verified low pose. Make sure the panel is supported and everyone is clear; the final button releases suction and saves the run.",
+    next: "PANEL SUPPORTED & CLEAR — RELEASE & SAVE",
   },
 ] as const;
 
@@ -196,6 +196,7 @@ export default function Home() {
   const [vacuum, setVacuum] = useState(60);
   const [rigMsg, setRigMsg] = useState("");
   const [tab, setTab] = useState<"operate" | "monitor">("operate");
+  const [protocolWorking, setProtocolWorking] = useState(false);
   const protocolBusy = useRef(false);
 
   useEffect(() => {
@@ -267,7 +268,9 @@ export default function Home() {
   const post = async (path: string, body: object = {}) => {
     try {
       const res = await fetch(`${apiBase()}${path}`, {
-        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Control-Key": controlKey() },
+        body: JSON.stringify(body),
       });
       const result = await res.json();
       if (!res.ok) throw new Error(result.error || "Request failed");
@@ -280,20 +283,18 @@ export default function Home() {
   };
 
   const startRecording = async () => {
-    await post("/api/session/start", { participant_id: participant, trial_id: trial });
+    await post("/api/protocol/start", { participant_id: participant, trial_id: trial });
   };
 
   const advanceProtocol = async () => {
     if (!status.recording || status.guided_step == null || protocolBusy.current) return;
     protocolBusy.current = true;
+    setProtocolWorking(true);
     try {
-      if (status.guided_step >= GUIDED_PROTOCOL.length - 1) {
-        await post("/api/session/stop");
-      } else {
-        await post("/api/protocol/advance");
-      }
+      await post("/api/protocol/complete", { vacuum });
     } finally {
       protocolBusy.current = false;
+      setProtocolWorking(false);
     }
   };
 
@@ -358,11 +359,11 @@ export default function Home() {
         <section className={`runDirector label-${guided.label}`} aria-live="polite">
           <div className="runDirectorHead">
             <span>LIVE RUN DIRECTOR · STEP {guidedIndex + 1}/{GUIDED_PROTOCOL.length}</span>
-            <strong>RECORDING LABEL: {guided.label.toUpperCase()}</strong>
+            <strong>RECORDING LABEL: {status.label.toUpperCase()}</strong>
           </div>
           <h2>{guided.title}</h2>
           <p>{guided.cue}</p>
-          <button onClick={advanceProtocol}>{guided.next}</button>
+          <button onClick={advanceProtocol} disabled={protocolWorking}>{protocolWorking ? "CHECKING / WORKING…" : guided.next}</button>
           <small>Press this button or Enter exactly when the next physical phase begins. Hold each labelled phase for at least 2 seconds.</small>
         </section>
       )}
@@ -395,12 +396,12 @@ export default function Home() {
           <div className="panelHead"><div><p className="kicker">03 · GROUND TRUTH</p><h2>What is actually happening?</h2></div><span className="currentLabel">{status.label}</span></div>
           <p className="help">The experimenter advances the protocol at each real phase onset. The active label then persists on every frame until the next cue; the participant never touches this console.</p>
           <div className="guidedRun">
-            <span>GUIDED RUN · STEP {guidedIndex + 1}/{GUIDED_PROTOCOL.length} · {guided.label.toUpperCase()}</span>
+            <span>GUIDED RUN · STEP {guidedIndex + 1}/{GUIDED_PROTOCOL.length} · {status.label.toUpperCase()}</span>
             <strong>{guided.title}</strong>
             <p>{guided.cue}</p>
             <small>Hold each labelled state for at least 2 seconds. Press Enter or use the button.</small>
-            <button className="protocolNext" disabled={!status.recording || status.guided_step == null} onClick={advanceProtocol}>
-              {guided.next}
+            <button className="protocolNext" disabled={!status.recording || status.guided_step == null || protocolWorking} onClick={advanceProtocol}>
+              {protocolWorking ? "CHECKING / WORKING…" : guided.next}
             </button>
           </div>
           <p className="manualLabelTitle">Manual label override — recovery/debugging only</p>
@@ -437,40 +438,41 @@ export default function Home() {
               <p className="poseWarn">Separation would be measured to a stationary phantom. Do not trust any safety number logged in this state.</p>
             )}
           </div>
-          {!controlKey() && (
-            <p className="keyWarn">No control key in this URL. Every rig command will be rejected with 403 and the arm will not move. Reopen this page as <code>?k=&lt;your key&gt;</code>.</p>
-          )}
+          <p className="stepIntro">Normal trial actions are controlled by the guided run above. The controls below are for stopping, setup, or recovery.</p>
 
-          <p className="stepIntro">Each step is one action. Nothing moves until you press the next one.</p>
-          <ol className="stepList">
-            <li>
-              <span className="stepNum">1</span>
-              <RigButton tag="grip" label="Suction on" busy={rigBusy} result={rigResult}
-                onPress={() => rigPost("/api/gripper", { action: "grip", channel: "BOTH", vacuum }, "grip")} />
-              <span className="stepNote">Grips the panel. The arm does not move.</span>
-            </li>
-            <li>
-              <span className="stepNum">2</span>
-              <RigButton tag="go_up" label="Go up" kind="primary" busy={rigBusy} result={rigResult}
-                onPress={() => rigPost("/api/robot", { action: "go_up" }, "go_up")} />
-              <span className="stepNote">Lifts to the ceiling pose, then holds. Press when the operator is ready.</span>
-            </li>
-            <li>
-              <span className="stepNum">3</span>
-              <RigButton tag="go_down" label="Go down" kind="primary" busy={rigBusy} result={rigResult}
-                onPress={() => rigPost("/api/robot", { action: "go_down" }, "go_down")} />
-              <span className="stepNote">Lowers back to the loading pose. Press after the bolting is simulated.</span>
-            </li>
-            <li>
-              <span className="stepNum">4</span>
-              <RigButton tag="release" label="Suction off" busy={rigBusy} result={rigResult}
-                onPress={() => rigPost("/api/gripper", { action: "release", channel: "BOTH" }, "release")} />
-              <span className="stepNote">Releases the panel. The arm does not move.</span>
-            </li>
-          </ol>
+          <RigButton tag="stop_motion" label="STOP ARM MOTION — suction stays on" kind="stop" busy={rigBusy} result={rigResult}
+            onPress={() => rigPost("/api/robot", { action: "stop" }, "stop_motion")} />
 
-          <RigButton tag="stop_all" label="STOP — halt program and release" kind="stop" busy={rigBusy} result={rigResult}
-            onPress={() => rigPost("/api/demo", { action: "stop" }, "stop_all")} />
+          <details className="autoBlock">
+            <summary>Manual rig recovery controls</summary>
+            <p className="autoWarn">Use these only for setup or recovery. During a recording, follow the live run director so hardware actions and labels stay synchronized.</p>
+            <ol className="stepList">
+              <li>
+                <span className="stepNum">1</span>
+                <RigButton tag="grip" label="Suction on" busy={rigBusy} result={rigResult}
+                  onPress={() => rigPost("/api/gripper", { action: "grip", channel: "BOTH", vacuum }, "grip")} />
+                <span className="stepNote">Grips the panel. The arm does not move.</span>
+              </li>
+              <li>
+                <span className="stepNum">2</span>
+                <RigButton tag="go_up" label="Go up" kind="primary" busy={rigBusy} result={rigResult}
+                  onPress={() => rigPost("/api/robot", { action: "go_up" }, "go_up")} />
+                <span className="stepNote">Lifts to the taught top pose, then holds.</span>
+              </li>
+              <li>
+                <span className="stepNum">3</span>
+                <RigButton tag="go_down" label="Go down" kind="primary" busy={rigBusy} result={rigResult}
+                  onPress={() => rigPost("/api/robot", { action: "go_down" }, "go_down")} />
+                <span className="stepNote">Lowers to the taught loading pose.</span>
+              </li>
+              <li>
+                <span className="stepNum">4</span>
+                <RigButton tag="release" label="Suction off" busy={rigBusy} result={rigResult}
+                  onPress={() => rigPost("/api/gripper", { action: "release", channel: "BOTH" }, "release")} />
+                <span className="stepNote">Releases the panel. Confirm it is supported first.</span>
+              </li>
+            </ol>
+          </details>
 
           <details className="autoBlock">
             <summary>Automatic loop (bring-up only, not for trials)</summary>
@@ -479,6 +481,8 @@ export default function Home() {
               onPress={() => rigPost("/api/demo", { action: "start", vacuum }, "demo_start")} />
           </details>
 
+          <details className="autoBlock">
+            <summary>Advanced maintenance controls</summary>
           <div className="actions">
             <RigButton tag="fd_on" label="Freedrive on" busy={rigBusy} result={rigResult}
               onPress={() => rigPost("/api/robot", { action: "freedrive_on" }, "fd_on")} />
@@ -502,6 +506,7 @@ export default function Home() {
             <button onClick={() => rigPost("/api/robot", { action: "pause" })}>Pause</button>
           </div>
           <button className="unlabel" onClick={() => rigPost("/api/robot", { action: "stop" })}>STOP PROGRAM</button>
+          </details>
           <dl className="sessionFacts">
             <div><dt>Vacuum A</dt><dd>{rig.gripper?.vacuum_A_permille ?? "—"}‰</dd></div>
             <div><dt>Vacuum B</dt><dd>{rig.gripper?.vacuum_B_permille ?? "—"}‰</dd></div>

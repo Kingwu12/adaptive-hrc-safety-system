@@ -623,6 +623,155 @@ class RigControl:
         return {"freedrive": False, "replies": replies}
 
 
+class GuidedRunController:
+    """Coordinate labels and explicitly-confirmed rig actions for one run.
+
+    A button press may perform a physical action, but no timer, inferred HMM
+    state, or sensor classification can advance this state machine. Motion is
+    permitted only after fresh tracking confirms the operator is beyond the
+    configured yellow zone, the robot is RUNNING/NORMAL, and the panel grip is
+    verified. The panel is released only at the taught low pose.
+    """
+
+    GRIP_MIN_PERMILLE = 500
+    RELEASED_MAX_PERMILLE = 100
+    POSE_TOLERANCE_RAD = 0.08
+
+    def __init__(self, state: DashboardState, rig: RigControl) -> None:
+        self.state = state
+        self.rig = rig
+        self.lock = threading.Lock()
+        zones = state.config["zones"]
+        red = zones["K"] * zones["T"] + zones["C"] + zones["Sa"]
+        self.motion_clearance_m = (
+            zones["yellow_margin"] * red + zones.get("hysteresis", 0.0)
+        )
+
+    def _require_robot_ready(self) -> dict:
+        robot = self.rig.robot_status()
+        if not robot.get("reachable"):
+            raise ValueError("Robot is unreachable")
+        if "RUNNING" not in robot.get("robotmode", ""):
+            raise ValueError("Robot is not powered and brake-released")
+        if "NORMAL" not in robot.get("safety", ""):
+            raise ValueError(f"Robot safety is not normal: {robot.get('safety')}")
+        return robot
+
+    def _require_operator_clear(self) -> float:
+        snap = self.state.snapshot()
+        if not snap.get("connected") or snap.get("stale"):
+            raise ValueError("Xsens is not fresh; robot motion is blocked")
+        if not snap.get("optitrack_connected"):
+            raise ValueError("OptiTrack is not fresh; robot motion is blocked")
+        feature = snap.get("feature") or {}
+        distance = feature.get("d")
+        if distance is None:
+            raise ValueError("Operator separation is unavailable; robot motion is blocked")
+        distance = float(distance)
+        if distance < self.motion_clearance_m:
+            raise ValueError(
+                f"Operator is {distance:.2f} m from the robot; move beyond "
+                f"{self.motion_clearance_m:.2f} m before confirming cell clear"
+            )
+        return distance
+
+    def _require_pose(self, name: str) -> dict:
+        target = self.rig._poses.get(name, {}).get("q")
+        pose = self.rig.pose_status()
+        current = pose.get("q")
+        if not target or not pose.get("available") or not current:
+            raise ValueError(f"Cannot verify the robot is at {name}")
+        error = max(abs(float(a) - float(b)) for a, b in zip(current, target))
+        if error > self.POSE_TOLERANCE_RAD:
+            raise ValueError(
+                f"Robot is not at the required {name} pose "
+                f"(joint error {error:.3f} rad)"
+            )
+        return pose
+
+    def start(self, participant: object, trial: object) -> dict:
+        """Preflight the low, released rig before opening a guided recording."""
+        with self.lock:
+            self._require_robot_ready()
+            self._require_operator_clear()
+            self._require_pose("pose1_low")
+            stats = self.rig.gripper_stats(max_age_s=0.0)
+            vacuum = (int(stats.get("vacuum_A_permille", 0)),
+                      int(stats.get("vacuum_B_permille", 0)))
+            pump = int(stats.get("pump_rpm", 0))
+            if max(vacuum) > self.RELEASED_MAX_PERMILLE or pump > 100:
+                raise ValueError(
+                    "Guided run requires the arm low with suction off; "
+                    "use the manual recovery controls to release the current panel first"
+                )
+            result = self.state.start_session(participant, trial)
+            return {**result, "preflight": {
+                "pose": "pose1_low", "vacuum": vacuum,
+                "operator_clearance_m": self.motion_clearance_m,
+            }}
+
+    def complete_step(self, vacuum: int = 60) -> dict:
+        """Complete the visible instruction, perform its action, then advance."""
+        with self.lock:
+            snap = self.state.snapshot()
+            if not snap.get("recording") or snap.get("guided_step") is None:
+                raise ValueError("No guided recording is active")
+            step = int(snap["guided_step"])
+            action: dict | None = None
+
+            if step == 2:  # panel aligned at the low gripper
+                action = self.rig.gripper_action("grip", "BOTH", int(vacuum))
+                stats = action.get("stats", {})
+                seal = (int(stats.get("vacuum_A_permille", 0)),
+                        int(stats.get("vacuum_B_permille", 0)))
+                if not action.get("ok") or min(seal) < self.GRIP_MIN_PERMILLE:
+                    # Never leave a half-sealed panel looking ready to lift.
+                    self.rig.gripper_action("release", "BOTH", 0)
+                    raise ValueError(f"Panel grip was not verified: vacuum {seal}")
+            elif step == 3:  # participant has retreated; lift the panel
+                distance = self._require_operator_clear()
+                self._require_robot_ready()
+                # Robot travel is not a human-motion training state. Exclude
+                # the blocking motion interval rather than recording a long
+                # stationary segment as "retreating".
+                self.state.set_label("unlabelled")
+                try:
+                    action = self.rig.goto_pose("pose2_top")
+                except Exception:
+                    self.state.set_label("retreating")
+                    raise
+                action["operator_distance_m"] = round(distance, 3)
+            elif step == 8:  # participant has retreated after the overhead task
+                distance = self._require_operator_clear()
+                self._require_robot_ready()
+                self.state.set_label("unlabelled")
+                try:
+                    action = self.rig.goto_pose("pose1_low")
+                except Exception:
+                    self.state.set_label("retreating")
+                    raise
+                action["operator_distance_m"] = round(distance, 3)
+            elif step == 9:  # arm is low and participant is clear; release and save
+                distance = self._require_operator_clear()
+                self._require_robot_ready()
+                self._require_pose("pose1_low")
+                action = self.rig.gripper_action("release", "BOTH", 0)
+                if not action.get("ok"):
+                    raise ValueError(
+                        f"Panel release failed: {action.get('error', 'unknown error')}"
+                    )
+                saved = self.state.stop_session()
+                return {
+                    **saved,
+                    "completed": True,
+                    "action": action,
+                    "operator_distance_m": round(distance, 3),
+                }
+
+            advanced = self.state.advance_guided_protocol()
+            return {**advanced, "action": action}
+
+
 CONTROL_PAGE = """<!doctype html><html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>HRC Rig Control</title><style>
@@ -693,6 +842,7 @@ setInterval(poll,1200);poll();
 class ApiHandler(BaseHTTPRequestHandler):
     state: DashboardState
     rig: RigControl
+    guided: GuidedRunController
     allow_remote_control = False
     control_key = ""
 
@@ -754,7 +904,10 @@ class ApiHandler(BaseHTTPRequestHandler):
             remote = self.client_address[0] not in {"127.0.0.1", "::1"}
             length = int(self.headers.get("Content-Length", "0"))
             body = json.loads(self.rfile.read(length) or b"{}")
-            rig_paths = {"/api/gripper", "/api/robot", "/api/demo", "/api/cycle", "/api/xsens/reset"}
+            rig_paths = {
+                "/api/gripper", "/api/robot", "/api/demo", "/api/cycle",
+                "/api/xsens/reset", "/api/protocol/start", "/api/protocol/complete",
+            }
             if self.path in rig_paths:
                 # rig control needs the key from any remote browser
                 if remote and self.headers.get("X-Control-Key", "") != self.control_key:
@@ -769,6 +922,11 @@ class ApiHandler(BaseHTTPRequestHandler):
                     result = self._xsens_reset(str(body.get("type", "grid")))
                 elif self.path == "/api/cycle":
                     result = self.rig.cycle_event(str(body.get("action")))
+                elif self.path == "/api/protocol/start":
+                    result = self.guided.start(
+                        body.get("participant_id"), body.get("trial_id"))
+                elif self.path == "/api/protocol/complete":
+                    result = self.guided.complete_step(int(body.get("vacuum", 60)))
                 else:
                     if body.get("action") == "start":
                         result = self.rig.demo_start(int(body.get("vacuum", 60)))
@@ -829,6 +987,7 @@ def main() -> int:
     stop = threading.Event()
     rig = RigControl(state.config["robot"]["host"],
                      state.config["robot"].get("dashboard_port", 29999))
+    guided = GuidedRunController(state, rig)
     key_file = Path(args.out) / ".control_key"
     if key_file.exists():
         control_key = key_file.read_text().strip()
@@ -847,6 +1006,7 @@ def main() -> int:
     tick_thread.start()
     ApiHandler.state = state
     ApiHandler.rig = rig
+    ApiHandler.guided = guided
     ApiHandler.control_key = control_key
     ApiHandler.allow_remote_control = args.allow_remote_control
     host = "0.0.0.0" if args.share else "127.0.0.1"

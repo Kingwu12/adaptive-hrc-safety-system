@@ -108,11 +108,11 @@ footer{display:flex;justify-content:space-between;border-top:1px solid var(--lin
 .tabBtn.on .tabHint { color:#6fd39b; opacity:1; }
 .tabBtn:focus-visible { outline:2px solid #4fbe86; outline-offset:2px; border-radius:6px; }
 
-/* Operate: rig first, it is the thing with a physical consequence. */
+/* Operate: start the guided run first; manual rig controls are recovery only. */
 .grid.tab-operate .signals,
 .grid.tab-operate .probabilities { display:none; }
-.grid.tab-operate .rig     { order:-2; }
-.grid.tab-operate .capture { order:-1; }
+.grid.tab-operate .capture { order:-2; }
+.grid.tab-operate .labels  { order:-1; }
 
 /* Monitor: read-only. Nothing here moves the arm. */
 .grid.tab-monitor .capture,

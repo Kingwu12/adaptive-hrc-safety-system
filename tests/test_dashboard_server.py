@@ -12,7 +12,8 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from scripts.dashboard_server import DashboardState, RigControl, safe_id
+from scripts.dashboard_server import (DashboardState, GuidedRunController,
+                                      RigControl, safe_id)
 
 
 def test_safe_id_removes_path_characters():
@@ -199,3 +200,166 @@ def test_goto_pose_rejects_low_vacuum_before_connecting(monkeypatch):
     with pytest.raises(ValueError, match="vacuum below motion threshold"):
         rig.goto_pose("pose2_top")
     assert connected is False
+
+
+class FakeGuidedState:
+    def __init__(self, step=0, distance=2.0):
+        self.config = {"zones": {
+            "K": 1.6, "T": 0.4, "C": 0.2, "Sa": 0.1,
+            "yellow_margin": 1.6, "hysteresis": 0.05,
+        }}
+        self.recording = step is not None
+        self.step = step
+        self.distance = distance
+        self.stopped = False
+        self.label = "unlabelled" if step in (None, 0, 4, 9) else "retreating"
+
+    def snapshot(self):
+        return {
+            "recording": self.recording,
+            "guided_step": self.step,
+            "connected": True,
+            "stale": False,
+            "optitrack_connected": True,
+            "feature": {"d": self.distance},
+        }
+
+    def start_session(self, participant, trial):
+        self.recording = True
+        self.step = 0
+        return {"message": "recording", "path": "fake.jsonl"}
+
+    def advance_guided_protocol(self):
+        self.step += 1
+        return {"message": "advanced", "guided_step": self.step}
+
+    def set_label(self, label):
+        self.label = label
+        return {"message": f"Ground truth: {label}"}
+
+    def stop_session(self):
+        self.recording = False
+        self.step = None
+        self.stopped = True
+        return {"message": "saved", "path": "fake.jsonl"}
+
+
+class FakeGuidedRig:
+    def __init__(self, vacuum=(0, 0), pump=0):
+        self.vacuum = vacuum
+        self.pump = pump
+        self.actions = []
+        self._poses = {
+            "pose1_low": {"q": [1, 2, 3, 4, 5, 6]},
+            "pose2_top": {"q": [6, 5, 4, 3, 2, 1]},
+        }
+        self.current_q = list(self._poses["pose1_low"]["q"])
+
+    def robot_status(self):
+        return {
+            "reachable": True,
+            "robotmode": "Robotmode: RUNNING",
+            "safety": "Safetystatus: NORMAL",
+        }
+
+    def pose_status(self):
+        return {"available": True, "q": list(self.current_q), "tcp": [0, 0, 0.4]}
+
+    def gripper_stats(self, max_age_s=0.0):
+        return {
+            "vacuum_A_permille": self.vacuum[0],
+            "vacuum_B_permille": self.vacuum[1],
+            "pump_rpm": self.pump,
+        }
+
+    def gripper_action(self, action, channel, vacuum):
+        self.actions.append((action, channel, vacuum))
+        if action == "grip":
+            self.vacuum = (600, 650)
+        else:
+            self.vacuum = (0, 0)
+        return {
+            "ok": True,
+            "stats": {
+                "vacuum_A_permille": self.vacuum[0],
+                "vacuum_B_permille": self.vacuum[1],
+            },
+        }
+
+    def goto_pose(self, name):
+        self.actions.append(("goto", name))
+        self.current_q = list(self._poses[name]["q"])
+        return {"pose": name, "completed": True}
+
+
+def test_integrated_guided_actions_grip_lift_lower_release_and_save():
+    state = FakeGuidedState(step=2, distance=2.0)
+    rig = FakeGuidedRig()
+    guided = GuidedRunController(state, rig)
+
+    guided.complete_step(60)
+    assert state.step == 3
+    assert rig.actions[-1] == ("grip", "BOTH", 60)
+
+    guided.complete_step(60)
+    assert state.step == 4
+    assert rig.actions[-1] == ("goto", "pose2_top")
+
+    state.step = 8
+    guided.complete_step(60)
+    assert state.step == 9
+    assert rig.actions[-1] == ("goto", "pose1_low")
+
+    result = guided.complete_step(60)
+    assert result["completed"] is True
+    assert state.stopped is True
+    assert rig.actions[-1] == ("release", "BOTH", 0)
+
+
+def test_integrated_guided_motion_is_blocked_inside_clearance_zone():
+    state = FakeGuidedState(step=3, distance=1.0)
+    rig = FakeGuidedRig(vacuum=(600, 650))
+    guided = GuidedRunController(state, rig)
+
+    with pytest.raises(ValueError, match="move beyond"):
+        guided.complete_step(60)
+    assert state.step == 3
+    assert not rig.actions
+
+
+def test_integrated_guided_failed_grip_is_released_and_does_not_advance():
+    state = FakeGuidedState(step=2, distance=2.0)
+    rig = FakeGuidedRig()
+
+    def weak_grip(action, channel, vacuum):
+        rig.actions.append((action, channel, vacuum))
+        if action == "grip":
+            return {"ok": True, "stats": {
+                "vacuum_A_permille": 600, "vacuum_B_permille": 200,
+            }}
+        return {"ok": True, "stats": {
+            "vacuum_A_permille": 0, "vacuum_B_permille": 0,
+        }}
+
+    rig.gripper_action = weak_grip
+    guided = GuidedRunController(state, rig)
+
+    with pytest.raises(ValueError, match="not verified"):
+        guided.complete_step(60)
+    assert state.step == 2
+    assert rig.actions[-1] == ("release", "BOTH", 0)
+
+
+def test_integrated_guided_start_requires_released_low_rig():
+    state = FakeGuidedState(step=None, distance=2.0)
+    rig = FakeGuidedRig(vacuum=(600, 650))
+    guided = GuidedRunController(state, rig)
+
+    with pytest.raises(ValueError, match="suction off"):
+        guided.start("P01", "T01")
+    assert state.recording is False
+
+    rig.vacuum = (0, 0)
+    result = guided.start("P01", "T01")
+    assert result["message"] == "recording"
+    assert state.recording is True
