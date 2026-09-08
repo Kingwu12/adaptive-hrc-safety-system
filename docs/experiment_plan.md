@@ -1,5 +1,12 @@
 # Experiment Plan — Adaptive vs Static HRC Safety
 
+> **Historical design note:** this file contains the earlier two-condition/slip
+> framing and is not the current participant protocol. Use
+> [`team-experiment-guide.md`](team-experiment-guide.md),
+> [`participant-measurement-plan.md`](participant-measurement-plan.md) and
+> `../configs/analysis_plan.yaml` for the current three-controller, three-scenario
+> study. Do not run participants from this historical note.
+
 Companion to the paper *"Comparing Static and Adaptive Safety Logic in Human-Robot Ceiling
 Panel Installation"* (Wu, Siniakov, Magila, Monash 2026). This document covers the physical
 setup, the pilot calibration that produces the REPORTED numbers, the ethics constraints on

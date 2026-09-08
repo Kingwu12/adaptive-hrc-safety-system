@@ -4,6 +4,9 @@
 **Applies to:** final participant study on the UR10 ceiling-panel surrogate cell
 **Status:** this document defines the measurement contract, but collection remains blocked until every collection-stage gate in `configs/research_readiness.yaml` has evidence.
 
+For a plain-language explanation of the full study and lab workflow, read
+[`team-experiment-guide.md`](team-experiment-guide.md) first.
+
 ## 1. Research question and unit of inference
 
 > During one fixed, approved panel-handling task, does the predictive SSM policy reduce unnecessary robot interruption relative to fixed-zone and reactive-SSM references, without worsening response to a predefined rapid intrusion?

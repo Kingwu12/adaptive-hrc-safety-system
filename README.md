@@ -23,6 +23,11 @@ The current scope and real-run gates are in
 Older design notes use “certified floor” as architecture shorthand; that wording is not
 a certification claim and has been superseded by the readiness audit.
 
+For the complete participant workflow in team-readable language, start with
+[`docs/team-experiment-guide.md`](docs/team-experiment-guide.md). It explains the
+three controllers, three scenarios, nine-trial schedule, five questionnaire handoffs,
+operator roles, measurements, analysis logic and no-go boundaries in one place.
+
 ## Quickstart
 
 ```bash
