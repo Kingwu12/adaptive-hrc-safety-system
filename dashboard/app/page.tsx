@@ -12,6 +12,12 @@ type Status = {
   automation?: {
     enabled: boolean; active: boolean; qualification_only: boolean;
     version: string; phase: string; reason: string; fault: boolean;
+    task_sha256?: string | null;
+    presentation?: {
+      stage: number | null; stages_total: number; title: string;
+      instruction: string; action_label: string | null;
+      sync_required: boolean; automatic_wait: boolean;
+    };
   };
   connected: boolean;
   packets: number;
@@ -772,23 +778,17 @@ export default function Home() {
   const activePlannedEvent = status.recording ? (status.planned_event || plannedEvent) : plannedEvent;
   const automaticActive = status.automation?.active === true;
   const automaticWaiting = automaticActive && (status.automation?.fault === true || ![7, 9].includes(guidedIndex));
-  const automaticTitles: Record<string, string> = {
-    ready: "READY TO LOAD", loading: status.sync_marker_count < 1 ? "SUCTION ON — RECORD SHARED SYNC" : "PLACE THE PANEL ON BOTH CUPS",
-    retreat_lift: "GRIP VERIFIED — LET GO AND STEP BACK",
-    lifting: "ROBOT LIFTING — EVENT WINDOW OPEN",
-    task: "APPROACH AND COMPLETE THE PANEL TASK",
-    retreat_lower: "STEP BACK — ROBOT WILL LOWER",
-    lowering: "ROBOT LOWERING — STAY CLEAR",
-    supported_release: "SUPPORT THE PANEL BEFORE RELEASE",
-    fault: "TRIAL STOPPED — DO NOT RESTART",
-  };
-  const guidedTitle = automaticActive ? automaticTitles[status.automation?.phase || ""] || "AUTOMATIC TRIAL"
+  const automaticPresentation = status.automation?.presentation;
+  const guidedProgress = automaticActive
+    ? automaticPresentation?.stage != null ? `STAGE ${automaticPresentation.stage}/${automaticPresentation.stages_total}` : "AUTOMATIC TRIAL"
+    : `STEP ${guidedIndex + 1}/${GUIDED_PROTOCOL.length}`;
+  const guidedTitle = automaticActive ? automaticPresentation?.title || "Automatic trial — waiting for instruction"
     : guidedIndex === 3
     ? activePlannedEvent === "rapid intrusion" ? "PERFORM THE APPROVED RAPID INTRUSION"
       : activePlannedEvent === "distractor" ? "PERFORM THE APPROVED DISTRACTOR"
         : "CLEAN CONTROL WINDOW — CONTINUE NORMALLY"
     : guided.title;
-  const guidedCue = automaticActive ? status.automation?.reason || "Waiting for trial state"
+  const guidedCue = automaticActive ? automaticPresentation?.instruction || status.automation?.reason || "Waiting for trial state"
     : guidedIndex === 3
     ? activePlannedEvent === "rapid intrusion"
       ? "After the second confirmation starts the robot lift, give the synchronized cue. The pre-briefed operator performs only the approved rapid movement toward the validated protected volume, then immediately retreats. Keep the E-stop in reach."
@@ -798,7 +798,7 @@ export default function Home() {
     : guided.cue;
   const guidedNext = automaticActive
     ? automaticWaiting ? "AUTOMATIC — FOLLOW THE INSTRUCTION ABOVE"
-      : guidedIndex === 7 ? "TASK COMPLETE — BEGIN RETREAT" : "PANEL SUPPORTED — RELEASE & SAVE"
+      : automaticPresentation?.action_label || "Waiting for instruction"
     : guided.next;
   const activePhoneStage = dueStudyForm?.stage ?? phoneStage;
   const activePhoneBlock = dueStudyForm?.block ?? blockLabel;
@@ -953,7 +953,7 @@ export default function Home() {
           {status.recording && (
             <section className={`runDirector label-${status.event_label === "hazard" ? "hazard" : guided.label}`} aria-live="polite">
               <div className="runDirectorHead">
-                <span>LIVE {isQualification ? "QUALIFICATION" : "PARTICIPANT"} RUN · BLOCK {status.block_label} · TRIAL {status.within_block_trial} · STEP {guidedIndex + 1}/{GUIDED_PROTOCOL.length}</span>
+                <span>LIVE {isQualification ? "QUALIFICATION" : "PARTICIPANT"} RUN · BLOCK {status.block_label} · TRIAL {status.within_block_trial} · {guidedProgress}</span>
                 <strong>PHASE: {status.label.toUpperCase()} · EVENT: {status.event_label.toUpperCase()}</strong>
               </div>
               <h2>{guidedTitle}</h2>
@@ -962,7 +962,7 @@ export default function Home() {
                 {status.sync_marker_count > 0 ? `✓ Sync marker ${status.sync_marker_count} recorded` : "Record visible shared sync marker"}
               </button>}
               {guidedIndex >= 3 && guidedIndex <= 8 && <div className="simPanelNote">No top fixture: suction stays ON while the panel is overhead. Never release an unsupported panel.</div>}
-              <button onClick={confirmGuidedAction} disabled={protocolWorking || automaticWaiting}>{protocolWorking ? "CHECKING / WORKING…" : armedStep === guidedIndex ? `PRESS AGAIN NOW — ${guidedNext}` : guidedNext}</button>
+              {!automaticWaiting && <button onClick={confirmGuidedAction} disabled={protocolWorking}>{protocolWorking ? "CHECKING / WORKING…" : armedStep === guidedIndex ? `PRESS AGAIN NOW — ${guidedNext}` : guidedNext}</button>}
               <button className="runAbort" onClick={() => void abortRecording()}>Abort safely &amp; preserve attempt</button>
               <small>{automaticActive ? "Automatic qualification: grip and retreat advance the robot. Task completion and supported release remain explicit. Faults require abort and inspection." : "Operator-confirmed mode: advance only at the real phase boundary. Robot motion and suction actions require a deliberate second press."}</small>
             </section>

@@ -524,6 +524,7 @@ class DashboardState:
         self.event_label = "none"
         self.guided_step: int | None = None
         self.execution_mode = "operator_confirmed"
+        self.automation_contract: dict | None = None
         self.controller_updated_at = 0.0
         self.recording_path: str | None = None
         self.samples_written = 0
@@ -858,6 +859,7 @@ class DashboardState:
             self.planned_event = event or None
             self.collection_mode = mode
             self.execution_mode = execution_mode
+            self.automation_contract = None
             stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
             self.session_id = f"{self.participant_id}-{self.trial_id}-{stamp}-{uuid.uuid4().hex[:6]}"
             self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -922,6 +924,7 @@ class DashboardState:
                 "planned_event": self.planned_event,
                 "outcome": outcome,
                 "execution_mode": self.execution_mode,
+                "automation_contract": self.automation_contract,
                 "samples": self.samples_written,
                 "dashboard_jsonl": self.recording_path,
                 "event_jsonl": self.event_path,
@@ -1900,7 +1903,7 @@ class AutomaticRunController(GuidedRunController):
     model belief chooses a task transition or becomes ground-truth labels.
     """
 
-    VERSION = "automatic-panel-v2"
+    VERSION = "automatic-panel-v3"
     SEAL_DWELL_S = 1.0
     CLEAR_DWELL_S = 2.0
     HEALTH_MAX_AGE_S = 2.0
@@ -1919,12 +1922,63 @@ class AutomaticRunController(GuidedRunController):
         self.health = None
         self.health_lock = threading.Lock()
         self.lock = threading.RLock()
+        self.contract = None
+
+    def _build_contract(self, vacuum):
+        poses = {}
+        for name in ("pose1_low", "pose2_top"):
+            q = [float(v) for v in self.rig._poses.get(name, {}).get("q", [])]
+            if len(q) != 6 or not all(math.isfinite(v) for v in q):
+                raise ValueError(f"A valid taught {name} pose is required")
+            poses[name] = q
+        body = {"version": self.VERSION, "poses_q_rad": poses,
+                "vacuum_percent": int(vacuum), "joint_speed_rad_s": 0.10,
+                "grip_min_permille": self.GRIP_MIN_PERMILLE,
+                "seal_dwell_s": self.SEAL_DWELL_S,
+                "clearance_m": self.motion_clearance_m,
+                "clear_dwell_s": self.CLEAR_DWELL_S,
+                "health_max_age_s": self.HEALTH_MAX_AGE_S,
+                "wait_timeout_s": self.WAIT_TIMEOUT_S,
+                "sequence": ["loading", "retreat_lift", "lifting", "task",
+                             "retreat_lower", "lowering", "supported_release"]}
+        signature = hashlib.sha256(json.dumps(body, sort_keys=True, allow_nan=False).encode()).hexdigest()
+        return {**body, "sha256": signature}
+
+    def _require_unchanged_contract(self):
+        if self.contract is None or self._build_contract(self.contract["vacuum_percent"]) != self.contract:
+            raise ValueError("Task poses/settings changed during trial; abort and requalify")
+
+    def presentation(self):
+        """One server-owned instruction; no guessed sensor or motion state."""
+        phase = self.phase
+        cues = {
+            "ready": (1, "Get ready", None),
+            "loading": (1, "Place the panel against both cups", None),
+            "retreat_lift": (2, "Let go and step back", None),
+            "lifting": (3, "Lift requested — stay clear", None),
+            "task": (4, "Approach and complete the panel task", "Task complete — begin retreat"),
+            "retreat_lower": (5, "Step back for lowering", None),
+            "lowering": (6, "Lowering requested — stay clear", None),
+            "supported_release": (7, "Support the panel before release", "Panel supported — release & save"),
+            "fault": (None, "Trial stopped — do not restart", None),
+            "complete": (7, "Trial saved", None),
+        }
+        number, title, action = cues.get(phase, (None, "Automatic qualification", None))
+        sync_required = (self.automatic and phase == "loading"
+                         and self.state.snapshot().get("sync_marker_count", 0) < 1)
+        if sync_required:
+            title = "Suction on — record shared sync"
+        return {"stage": number, "stages_total": 7, "title": title,
+                "instruction": self.reason, "action_label": action,
+                "sync_required": sync_required,
+                "automatic_wait": self.automatic and action is None}
 
     def status(self):
         return {"enabled": self.enabled, "active": self.automatic,
                 "qualification_only": True, "version": self.VERSION,
                 "phase": self.phase, "reason": self.reason,
-                "fault": self.phase == "fault"}
+                "fault": self.phase == "fault", "presentation": self.presentation(),
+                "task_sha256": None if self.contract is None else self.contract["sha256"]}
 
     def _phase(self, phase, reason):
         if self.cancel.is_set() and phase != "fault":
@@ -1948,17 +2002,22 @@ class AutomaticRunController(GuidedRunController):
             if not 10 <= int(vacuum) <= 80:
                 raise ValueError("Loading vacuum must be between 10 and 80 percent")
             self._require_stationary()
+            contract = self._build_contract(vacuum)
         self.automatic = False
         self.automatic_requested = automatic
         self.cancel.clear()
         result = super().start(*args, **kwargs)
         self.automatic = automatic
+        self.contract = contract if automatic else None
+        self.state.automation_contract = self.contract
         self.health = None
         self._phase("ready", "Operator-confirmed run")
         if automatic:
             # Start trial is the explicit actuation command. No later suction
             # click, inferred-state trigger or service-start side effect.
             try:
+                self._journal("automation_task_contract", **self.contract)
+                self._require_unchanged_contract()
                 self._require_stationary()
                 self._journal("automation_loading_suction_requested", vacuum_percent=int(vacuum))
                 if self.cancel.is_set():
@@ -2038,6 +2097,7 @@ class AutomaticRunController(GuidedRunController):
     def _motion_guard(self):
         if self.cancel.is_set():
             raise ValueError("Automatic trial stopped")
+        self._require_unchanged_contract()
         snap, _ = self._tracking()
         self._health()
         # Distance does NOT veto the assigned event here: the selected safety
@@ -2081,6 +2141,7 @@ class AutomaticRunController(GuidedRunController):
         # Reject duplicate/stale clicks; the background worker owns auto steps.
         if self.cancel.is_set():
             raise ValueError("Trial is faulted; abort and inspect before a new run")
+        self._require_unchanged_contract()
         step = self.state.snapshot().get("guided_step")
         if step == 9:
             self._require_stationary()
@@ -2109,6 +2170,7 @@ class AutomaticRunController(GuidedRunController):
         if not self.lock.acquire(blocking=False):
             return
         try:
+            self._require_unchanged_contract()
             snap, distance = self._tracking()
             sealed = self._health(require_grip=self.phase != "loading")
             if self.phase == "loading":
@@ -2124,16 +2186,20 @@ class AutomaticRunController(GuidedRunController):
                 if self._stable(distance >= self.motion_clearance_m, self.CLEAR_DWELL_S):
                     lifting = self.phase == "retreat_lift"
                     self._motion_guard()
-                    self._phase("lifting" if lifting else "lowering", "Robot moving; follow the pre-briefed event cue" if lifting else "Robot lowering; stay clear")
+                    self._phase("lifting" if lifting else "lowering",
+                                "Lift command pending/running. Stay clear; the experimenter gives only the pre-briefed event cue after observing motion."
+                                if lifting else "Lower command pending/running. Stay at the start marker until the next instruction.")
                     if lifting:
                         self.state.begin_planned_event_window(source="automatic_lift")
                     try:
                         self.rig.goto_pose("pose2_top" if lifting else "pose1_low",
+                                           speed=self.contract["joint_speed_rad_s"],
                                            guard=self._motion_guard, cancel=self.cancel)
                     finally:
                         if lifting and self.state.snapshot().get("recording"):
                             self.state.end_planned_event_window(source="automatic_lift")
                     self._advance_to(7 if lifting else 9)
+                    self._require_stationary()
                     self._phase("task" if lifting else "supported_release",
                                 "Robot up. Approach and perform the task; confirm task complete when finished" if lifting else "Robot low. Support panel, then confirm release")
             if self.phase in ("loading", "retreat_lift", "retreat_lower") and self.clock() - self.since > self.WAIT_TIMEOUT_S:

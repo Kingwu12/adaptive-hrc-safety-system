@@ -9,6 +9,9 @@ those timings with future automatic runs without addressing the protocol change.
 
 One server-owned cycle, independent of which of the three safety controllers is
 assigned. Browser refresh does not restart or advance the cycle.
+The current runner is `automatic-panel-v3`: the server supplies the seven-stage
+instruction and the dashboard shows a button only when confirmation is needed.
+It no longer presents the old ten-step manual sequence as the automatic workflow.
 
 1. Press **Start trial — suction turns on** with its assigned controller/event
    and unique native files. After verifying the robot is stationary at the low
@@ -34,6 +37,20 @@ assigned. Browser refresh does not restart or advance the cycle.
 
 Only supported release retains the deliberate two-press suction confirmation.
 The safety comparison still exercises controller response during motion.
+
+## Short spoken script for the rehearsal
+
+Explain before starting: “The suction will already be on when you place the
+panel. Once the grip is confirmed, let go and step back to the start marker.
+The robot will lift automatically. Stay there until we invite you to approach.
+After the task, step back again; it will lower automatically. At the end, support
+the panel and wait for us to release it. Only perform the agreed movement when
+we give its cue. You can ask us to stop at any time.”
+
+During the run, use the current dashboard instruction. Do not add another grip,
+lift or lower command. “Task complete” is an actual observation, not a timer.
+The arrival instruction is withheld until stationary telemetry is confirmed.
+A pending lift/lower command is not described as proof of physical motion.
 
 ## Run software checks without hardware
 
@@ -94,6 +111,15 @@ observed. The event journal records automation transitions and the commanded lif
 window. That window is not measured intrusion onset or proof the robot moved;
 derive actual motion/event timing from synchronized robot telemetry and video.
 
+Every automatic run also records an `automation_task_contract` event and embeds
+the contract in its saved manifest. It contains the protocol version, copied
+taught joint poses, nominal task speed, vacuum setting, sequencing thresholds
+and sequence, with a SHA-256 fingerprint. Controller and scenario identities are
+separate experimental metadata, not inputs that alter this task contract. Compare
+the task fingerprints across trials; do not silently pool different task setups.
+If a taught pose or a captured setting changes during a run, the runner latches a
+fault rather than adapting its task to make the attempt succeed.
+
 Automatic capture grading checks completion, recording quality and the assigned
 event-window labels, not model accuracy or safety. Missing/aborted manifests fail
 completion. Preserve native MVN, Motive and video alongside the dashboard trace.
@@ -112,6 +138,9 @@ the existing research-readiness gates complete from software tests.
 - v2 adds trial-start suction without another confirmation, plus regressions for
   missing sync, duplicate starts, startup cancellation, failed suction/telemetry,
   and moving/wrong-pose startup. Full suite: 160 passed (37 automatic-trial cases).
+- v3 adds the seven-stage server-owned instructions, frozen task contract,
+  cross-condition task-sequence tests and verified-stationary arrival prompts.
+  Full suite: 165 passed, including 42 automatic-trial cases. Lint/build passed.
 - Dashboard lint and production build passed. Browser inspection confirmed the
   study/qualification separation, one current action, and offline robot status.
 - Standalone `tsc --noEmit` remains blocked by missing Cloudflare worker type

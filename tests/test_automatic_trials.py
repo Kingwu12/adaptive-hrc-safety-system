@@ -35,7 +35,8 @@ class Rig(FakeGuidedRig):
     def telemetry_snapshot(self):
         return {"available": True, "actual_qd": [0.0] * 6, "source_age_s": 0.0}
 
-    def goto_pose(self, name, *, guard, cancel):
+    def goto_pose(self, name, *, guard, cancel, speed=0.10):
+        assert speed == 0.10
         guard()
         assert not cancel.is_set()
         return super().goto_pose(name)
@@ -333,6 +334,8 @@ def test_recorded_automatic_steps_never_become_hmm_ground_truth(tmp_path):
     state.tick()
     state.mark_calibrated()
     state.start_session("Q01", "T01", True, "auto-test.mvn", execution_mode="automatic")
+    contract = AutomaticRunController(state, Rig())._build_contract(60)
+    state.automation_contract = contract
     state.mark_sync_event()
     state.advance_guided_protocol()
     assert state.snapshot()["label"] == "unlabelled"
@@ -340,6 +343,7 @@ def test_recorded_automatic_steps_never_become_hmm_ground_truth(tmp_path):
     result = state.stop_session()
     manifest = json.loads(Path(result["manifest_path"]).read_text())
     assert manifest["execution_mode"] == "automatic"
+    assert manifest["automation_contract"] == contract
     rows = [json.loads(line) for line in Path(result["path"]).read_text().splitlines()]
     assert rows and all(r["ground_truth_phase"] == "unlabelled" for r in rows)
     assert all(r["execution_mode"] == "automatic" for r in rows)
@@ -447,3 +451,71 @@ def test_automatic_suction_start_failures_do_not_trigger_motion_or_vent(failure)
     else:
         assert runner.phase == "fault" and runner.cancel.is_set()
         assert state.recording  # failed attempt retained for abort/save
+
+
+def test_script_contract_is_independent_of_controller_and_event():
+    contracts, traces = [], []
+    for condition in ("fixed zone", "reactive SSM", "predictive SSM"):
+        for event in ("clean", "distractor", "rapid intrusion"):
+            clock = FakeClock()
+            state, rig = State(clock), Rig()
+            runner = AutomaticRunController(state, rig, clock, enabled=True)
+            runner.start("Q01", "T01", True, "test.mvn", automatic=True,
+                         collection_mode="qualification", block_label="A",
+                         controller_condition=condition, planned_event=event)
+            contracts.append(runner.contract)
+            begin(clock, runner)
+            for seconds in (0, 1, 0, 2):
+                tick(clock, state, runner, seconds)
+            assert runner.phase == "task"
+            runner.complete_step()
+            tick(clock, state, runner)
+            tick(clock, state, runner, 2)
+            runner.arm_step()
+            clock.advance(1)
+            runner.complete_step()
+            traces.append(list(rig.actions))
+            assert any(e["event"] == "automation_task_contract" for e in state.events)
+    assert all(c == contracts[0] for c in contracts)
+    assert all(t == traces[0] for t in traces)
+
+
+@pytest.mark.parametrize("change", ["pose", "threshold"])
+def test_changing_frozen_task_settings_latches_fault_before_motion(change):
+    clock, state, rig, runner = setup()
+    before = runner.contract["poses_q_rad"]["pose2_top"][0]
+    if change == "pose":
+        rig._poses["pose2_top"]["q"][0] += 0.3
+        assert runner.contract["poses_q_rad"]["pose2_top"][0] == before
+    else:
+        runner.CLEAR_DWELL_S = 0.1
+    tick(clock, state, runner)
+    assert runner.phase == "fault"
+    assert "poses/settings changed" in runner.reason
+    assert not any(a[0] in ("goto", "release") for a in rig.actions)
+
+
+def test_instructions_are_read_only_and_only_request_real_manual_confirmations():
+    clock, state, rig, runner = setup()
+    before = list(rig.actions)
+    assert runner.status()["presentation"]["sync_required"]
+    for phase in ("loading", "retreat_lift", "lifting", "retreat_lower", "lowering", "fault"):
+        runner.phase = phase
+        cue = runner.status()["presentation"]
+        assert cue["action_label"] is None and cue["automatic_wait"]
+    for phase in ("task", "supported_release"):
+        runner.phase = phase
+        cue = runner.status()["presentation"]
+        assert cue["action_label"] and not cue["automatic_wait"]
+    assert rig.actions == before
+
+
+def test_target_arrival_does_not_invite_approach_until_stationary():
+    clock, state, rig, runner = setup()
+    begin(clock, runner)
+    for seconds in (0, 1, 0):
+        tick(clock, state, runner, seconds)
+    rig.telemetry_snapshot = lambda: {"available": True, "source_age_s": 0, "actual_qd": [0.1] * 6}
+    tick(clock, state, runner, 2)
+    assert runner.phase == "fault"
+    assert runner.presentation()["action_label"] is None

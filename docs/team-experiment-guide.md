@@ -8,6 +8,8 @@
 **Automation update:** an automatic grip/retreat/lift/lower cycle is now available
 for Q-code qualification, not yet participant release. Use the
 [automatic-trial handoff](automatic-trial-qualification.md) for that rehearsal.
+That handoff includes a short spoken briefing and the scripted seven-stage flow;
+its task fingerprint lets the team verify the same task across controller blocks.
 The operator-confirmed participant instructions below have not been silently
 replaced; qualify and freeze the changed execution protocol before collecting it.
 

@@ -104,9 +104,11 @@ def test_dashboard_does_not_describe_an_unreachable_robot_as_live_tcp():
 def test_automatic_qualification_does_not_offer_manual_movement_advances():
     page = (ROOT / "dashboard/app/page.tsx").read_text(encoding="utf-8")
     assert 'automatic: workspaceMode === "qualification" && status.automation?.enabled === true' in page
-    assert 'disabled={protocolWorking || automaticWaiting}' in page
+    assert '{!automaticWaiting && <button onClick={confirmGuidedAction}' in page
     assert 'status.automation.fault || ![7, 9].includes(step)' in page
     assert 'START LOADING SUCTION' not in page
     assert ' — suction turns on' in page
-    assert 'TASK COMPLETE — BEGIN RETREAT' in page
+    assert 'automaticPresentation?.action_label' in page
+    assert 'automaticPresentation?.title' in page
+    assert '{guidedProgress}' in page
     assert 'Automatic participant release remains unqualified.' in page
