@@ -135,6 +135,32 @@ This is a minimal **within-participant factorial design**: every participant act
 5. Open the participant dashboard and confirm the public form routes work on a signed-out phone.
 6. Prepare the next unused anonymous participant code. Never reuse a pilot or participant code.
 
+### Verbatim participant opening script
+
+The study lead reads the following after the approved consent process and before fitting the suit. Do not paraphrase the study structure differently for different participants.
+
+> Thank you for taking part. Today you will complete the same panel-handling task nine times: three trials in each of three blocks called A, B and C. The letters represent different robot behaviours, but we will not tell you which is which until the study is finished.
+>
+> In every trial, you will carry the panel to the robot, align it on the suction gripper, let go and return to the marked start position. The robot will then lift the panel. During that lift, you will either remain at the marker, perform the safe movement we have rehearsed, or perform the controlled closing movement we have rehearsed and immediately retreat. Only perform a movement when the experimenter gives the cue. Do not improvise, run, fall or try to surprise the system.
+>
+> After the lift, you will approach the raised panel, complete the same task, retreat to the marker and wait while the robot lowers the panel. Follow the operator's instruction before approaching or touching the panel at any point.
+>
+> You will answer a short form before the suit goes on, after each three-trial block, and once at the end. There is no form after every individual trial. We are recording synchronized motion-capture, robot and video data under your anonymous participant code.
+>
+> You can pause or stop at any time without giving a reason. If you feel uncomfortable, unsure or notice anything unexpected, say “STOP” immediately and remain where you are unless the safety operator directs you to retreat. Do you have any questions before we demonstrate and rehearse the two approved movements?
+
+After reading the script, demonstrate the final supervisor-approved safe-motion and controlled-closing actions away from active robot motion. The participant rehearses each action only under the approved procedure. Do not begin the study if they cannot perform both actions comfortably and repeatably.
+
+### Verbatim pre-trial scenario cues
+
+Use only the cue matching the dashboard-assigned scenario. The words in square brackets must be replaced by the exact terms in the signed-off physical movement script before Q01.
+
+- **Baseline:** “The robot lift will start after the second confirmation. Remain at the start marker until I tell you to approach the raised panel. There will be no movement cue in this trial.”
+- **Safe-motion challenge:** “When the lift starts, wait for me to say NOW. On NOW, perform the rehearsed [safe-motion action] once, return to the start marker and wait.”
+- **Controlled closing challenge:** “When the lift starts, wait for me to say NOW. On NOW, perform the rehearsed [controlled-closing action] once, stop at the approved endpoint, immediately retreat to the start marker and wait.”
+
+Immediately before each block, say: “This is Block [A, B or C]. It contains three trials under the same robot behaviour. The movement order is assigned by the dashboard. Perform only the action I cue, once.”
+
 ### Intake and instrumentation
 
 1. Explain the approved study, answer questions and complete consent before collecting data.
