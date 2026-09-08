@@ -3,22 +3,38 @@
     {
       "id": "P01",
       "name": "trial",
-      "created_at": "2026-09-02T11:41:56"
+      "created_at": "2026-09-02T11:41:56",
+      "collection_mode": "model_development"
     },
     {
       "id": "P03",
       "name": "King",
-      "created_at": "2026-09-02T11:42:19"
+      "created_at": "2026-09-02T11:42:19",
+      "collection_mode": "model_development"
     },
     {
       "id": "P04",
       "name": "Mic",
-      "created_at": "2026-09-02T12:10:01"
+      "created_at": "2026-09-02T12:10:01",
+      "collection_mode": "model_development"
     },
     {
       "id": "P05",
       "name": "Luke",
-      "created_at": "2026-09-02T13:46:27"
+      "created_at": "2026-09-02T13:46:27",
+      "collection_mode": "model_development"
+    },
+    {
+      "id": "P06",
+      "name": "",
+      "created_at": "2026-09-03T18:49:11",
+      "collection_mode": "participant_study"
+    },
+    {
+      "id": "P07",
+      "name": "",
+      "created_at": "2026-09-03T20:38:46",
+      "collection_mode": "participant_study"
     }
   ]
 }

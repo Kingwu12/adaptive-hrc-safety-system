@@ -14,7 +14,11 @@ from pathlib import Path
 FROZEN_PATHS = (
     "data/models/pilot_hmm.json",
     "configs/default.yaml",
-    "docs/experiment_plan.md",
+    "configs/analysis_plan.yaml",
+    "docs/participant-measurement-plan.md",
+    "docs/ethics-reconciliation-delta.md",
+    "docs/wednesday-participant-readiness-checklist.md",
+    "dashboard/app/page.tsx",
     "src/hrc_safety/features.py",
     "src/hrc_safety/horizon.py",
     "src/hrc_safety/controllers/controllers.py",

@@ -3,25 +3,26 @@
 :root { --ink:#e9f2ed; --muted:#8fa29a; --line:#25352f; --panel:#111b17; --bg:#09100d; --mint:#5ce1a6; --blue:#8db5ff; --amber:#ffb86b; --red:#ff726f; }
 * { box-sizing:border-box; }
 html { background:var(--bg); }
-body { margin:0; color:var(--ink); background:radial-gradient(circle at 80% -10%,#173129 0,transparent 33%),var(--bg); font-family:Arial,Helvetica,sans-serif; }
+body { margin:0; color:var(--ink); background:var(--bg); font-family:Arial,Helvetica,sans-serif; }
 button,input { font:inherit; }
-main { min-height:100vh; max-width:1500px; margin:auto; padding:0 32px; }
-.topbar { height:82px; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid var(--line); }
+main { min-height:100vh; max-width:1240px; margin:auto; padding:0 24px; }
+.topbar { height:64px; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid var(--line); }
 .brand,.statusCluster { display:flex; align-items:center; gap:14px; }
-.brandMark { width:42px; height:42px; display:grid; place-items:center; background:var(--mint); color:#07110c; font:800 13px/1 Arial; border-radius:4px; letter-spacing:.04em; }
+.brandMark { width:36px; height:36px; display:grid; place-items:center; background:var(--mint); color:#07110c; font:800 12px/1 Arial; border-radius:4px; letter-spacing:.04em; }
 .brand strong,.brand small { display:block; }.brand strong{font-size:15px}.brand small{color:var(--muted);font-size:11px;margin-top:3px;letter-spacing:.06em;text-transform:uppercase}
-.pill { border:1px solid var(--line); border-radius:20px; padding:8px 11px; font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.08em; }
+.pill { border:0; padding:6px 2px; font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:.08em; }
 .pill i { display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--red);margin-right:7px}.pill.ok i{background:var(--mint);box-shadow:0 0 10px #5ce1a688}.pill.ok{color:var(--ink)}
 .clock { font:12px var(--font-geist-mono),monospace;color:var(--muted);min-width:55px;text-align:right; }
-.hero { min-height:238px; display:flex; align-items:center; justify-content:space-between; gap:40px; }
-.eyebrow,.kicker { color:var(--mint);font:700 10px var(--font-geist-mono),monospace;letter-spacing:.16em;margin:0 0 10px; }
-h1 { font-size:clamp(32px,4vw,58px);line-height:1;margin:0;letter-spacing:-.045em;max-width:720px; } .sub{color:var(--muted);font-size:15px;max-width:660px;line-height:1.6;margin:18px 0 0}
-.stateReadout { width:230px;padding:22px;border-left:3px solid var(--muted);background:#101a16;}.stateReadout span,.stateReadout small{display:block;color:var(--muted);font:10px var(--font-geist-mono),monospace;text-transform:uppercase;letter-spacing:.1em}.stateReadout strong{display:block;font-size:25px;text-transform:capitalize;margin:8px 0}.state-hazard{border-color:var(--red)}.state-approaching{border-color:var(--amber)}.state-working{border-color:var(--blue)}.state-retreating{border-color:var(--mint)}
+.hero { min-height:0; padding:20px 0 14px; display:flex; align-items:center; justify-content:space-between; gap:28px; }
+.eyebrow,.kicker { color:var(--mint);font:700 9px var(--font-geist-mono),monospace;letter-spacing:.14em;margin:0 0 7px; }
+h1 { font-size:clamp(28px,3vw,40px);line-height:1;margin:0;letter-spacing:-.04em;max-width:760px; } .sub{color:var(--muted);font-size:12.5px;max-width:760px;line-height:1.45;margin:8px 0 0}
+.stateReadout { width:205px;padding:13px 16px;border-left:3px solid var(--muted);background:#101a16;}.stateReadout span,.stateReadout small{display:block;color:var(--muted);font:9px var(--font-geist-mono),monospace;text-transform:uppercase;letter-spacing:.09em}.stateReadout strong{display:block;font-size:21px;text-transform:capitalize;margin:5px 0}.state-hazard{border-color:var(--red)}.state-approaching{border-color:var(--amber)}.state-working{border-color:var(--blue)}.state-retreating{border-color:var(--mint)}
 .grid { display:grid; grid-template-columns:1fr 1.45fr; gap:14px; padding-bottom:18px; }
-.panel { background:linear-gradient(145deg,#121d18,#0f1714);border:1px solid var(--line);padding:24px;min-width:0; }
-.panelHead { display:flex;justify-content:space-between;align-items:flex-start;gap:20px;margin-bottom:22px}.panelHead h2{font-size:18px;margin:0;letter-spacing:-.02em}.quiet,.warnText,.recordLamp,.currentLabel{font:700 10px var(--font-geist-mono),monospace;text-transform:uppercase;letter-spacing:.1em;color:var(--muted)}.warnText{color:var(--red)}
+.panel { background:#111b17;border:1px solid var(--line);padding:18px;min-width:0; }
+.panelHead { display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:14px}.panelHead h2{font-size:17px;margin:0;letter-spacing:-.02em}.quiet,.warnText,.recordLamp,.currentLabel{font:700 9px var(--font-geist-mono),monospace;text-transform:uppercase;letter-spacing:.09em;color:var(--muted)}.warnText{color:var(--red)}
 .recordLamp{border:1px solid var(--line);padding:7px 9px}.recordLamp.active{color:var(--red);border-color:#ff726f55}.recordLamp.active:before{content:"";display:inline-block;width:6px;height:6px;background:var(--red);border-radius:50%;margin-right:7px}
 .fields { display:grid;grid-template-columns:1fr 1fr;gap:10px}.fields label{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.07em}.fields input,.fields select{width:100%;margin-top:7px;background:#09110e;border:1px solid var(--line);color:var(--ink);padding:12px;outline:none}.fields input:focus,.fields select:focus{border-color:var(--mint)}
+.studyFields{margin-top:12px;padding-top:12px;border-top:1px solid var(--line)}
 .actions{margin-top:14px}.actions button{width:100%;border:0;padding:14px;font-weight:800;cursor:pointer}.primary{background:var(--mint);color:#07110c}.stop{background:var(--red);color:#190808}button:disabled{opacity:.35;cursor:not-allowed}.feedback{min-height:34px;color:var(--muted);font-size:12px;line-height:1.45}
 .preflightCheck{display:flex;align-items:flex-start;gap:9px;margin-top:12px;padding:11px;border:1px solid var(--line);color:var(--muted);font-size:11px;line-height:1.45;cursor:pointer}.preflightCheck input{margin-top:2px;accent-color:var(--mint)}
 .nativeReference{display:grid;gap:7px;margin-top:12px;padding:11px;border:1px solid var(--line);color:var(--muted);font-size:11px;line-height:1.45}.nativeReference input{width:100%;background:#09110e;border:1px solid var(--line);color:var(--ink);padding:10px;outline:none}.nativeReference input:focus{border-color:var(--mint)}
@@ -49,8 +50,8 @@ footer{display:flex;justify-content:space-between;border-top:1px solid var(--lin
    renders as a confident but false TCP. Green here means the reading has been
    earned: receive interface up, joints non-zero, brakes released.          */
 .poseBox { border-radius:10px; padding:14px 16px; margin:14px 0; border:1px solid var(--line); }
-.poseOk  { background:linear-gradient(145deg,#10241a,#0d1b14); border-color:#2f7a4f; }
-.poseBad { background:linear-gradient(145deg,#2a1414,#1d0f0f); border-color:#8a3b3b; }
+.poseOk  { background:#10241a; border-color:#2f7a4f; }
+.poseBad { background:#2a1414; border-color:#8a3b3b; }
 .poseHead { display:flex; flex-wrap:wrap; align-items:baseline; gap:10px; }
 .poseHead strong { letter-spacing:.08em; font-size:13px; }
 .poseOk  .poseHead strong { color:#6fd39b; }
@@ -97,18 +98,66 @@ footer{display:flex;justify-content:space-between;border-top:1px solid var(--lin
   line-height:1.55; color:#ffd9a0; background:#2e2413; border:1px solid #7a5a17; }
 .keyWarn code { color:#ffe9c2; }
 
+/* --- Participant handoff --------------------------------------------------
+   The operator owns sequencing and safety. The participant sees only the one
+   questionnaire due now, never the controller condition or rig controls. */
+.participantPhone { grid-column:1/-1; }
+.phoneReady { font:700 10px var(--font-geist-mono),monospace; letter-spacing:.1em; color:var(--mint); }
+.phoneRule,.phoneDataNote { color:var(--muted); font-size:12px; line-height:1.55; }
+.phoneRule { margin:-4px 0 16px; }
+.phoneDataNote { margin:14px 0 0; }
+.phoneStages { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:12px; }
+.phoneStages button { display:flex; justify-content:space-between; align-items:center; gap:8px;
+  padding:11px 12px; border:1px solid var(--line); background:#0a120f; color:var(--ink);
+  cursor:pointer; text-align:left; }
+.phoneStages button.selected { border-color:var(--mint); background:#10271e; color:var(--mint); }
+.phoneStages small { color:var(--muted); font:9px var(--font-geist-mono),monospace; text-transform:uppercase; }
+.phoneHandoff { display:grid; grid-template-columns:1fr auto; gap:22px; align-items:center;
+  min-height:206px; padding:18px; border:1px solid #3d6b56; background:#0c1712; }
+.phoneHandoff.locked { border-color:var(--line); background:#0a100d; }
+.phoneCopy { display:flex; flex-direction:column; align-items:flex-start; gap:8px; }
+.phoneCopy>span { color:var(--mint); font:700 10px var(--font-geist-mono),monospace; letter-spacing:.1em; }
+.phoneCopy strong { font-size:20px; line-height:1.25; }
+.phoneCopy p { max-width:620px; margin:0; color:#d7e8df; font-size:13px; line-height:1.55; }
+.phoneCopy em { color:var(--muted); font-size:11px; font-style:normal; }
+.qrButton { display:grid; gap:7px; justify-items:center; padding:8px; border:1px solid var(--line);
+  background:#fff; color:#07110c; cursor:pointer; }
+.qrButton span { font:700 9px var(--font-geist-mono),monospace; text-transform:uppercase; }
+.qrLocked { display:grid; place-items:center; align-content:center; width:170px; height:170px;
+  border:1px dashed #8a3b3b; background:#221010; text-align:center; }
+.qrLocked strong { color:#ff9a9a; font:800 12px var(--font-geist-mono),monospace; letter-spacing:.1em; }
+.qrLocked span { margin-top:7px; max-width:120px; color:var(--muted); font-size:10px; line-height:1.4; }
+.formPreflight { display:grid; grid-template-columns:auto 1fr; gap:12px; align-items:center; margin-top:12px; }
+.formPreflight>a { padding:10px 12px; border:1px solid var(--line); color:var(--ink);
+  font-size:11px; text-decoration:none; }
+.formPreflight>a:hover { border-color:var(--mint); color:var(--mint); }
+.formPreflight label { display:flex; align-items:flex-start; gap:8px; color:var(--muted);
+  font-size:11px; line-height:1.45; }
+.formPreflight input { margin-top:2px; accent-color:var(--mint); }
+.participantOverlay { position:fixed; inset:0; z-index:1000; display:grid; place-items:center;
+  padding:30px; background:rgba(4,9,7,.96); backdrop-filter:blur(10px); }
+.overlayClose { position:absolute; top:24px; right:28px; padding:10px 14px; border:1px solid #496356;
+  background:#101b16; color:var(--ink); cursor:pointer; }
+.participantCard { display:flex; flex-direction:column; align-items:center; max-width:650px; text-align:center; }
+.participantCard>span { color:var(--mint); font:800 12px var(--font-geist-mono),monospace; letter-spacing:.16em; }
+.participantCard h2 { margin:14px 0 9px; font-size:clamp(28px,5vw,50px); line-height:1.05; }
+.participantCard p { max-width:550px; margin:0 0 22px; color:#cfe2d8; font-size:17px; line-height:1.5; }
+.participantQr { padding:14px; background:#fff; }
+.participantCard>strong { margin-top:18px; font-size:18px; }
+.participantCard>small { margin-top:7px; color:var(--muted); font-size:12px; }
+
 /* --- Two views ------------------------------------------------------------
    Operate is what you touch while a participant is in the cell: the arm, the
    session, the ground-truth labels. Monitor is what you read afterwards or
    glance at between trials. Splitting them keeps the operating surface short
    enough to use without scrolling past things that cannot be pressed.       */
-.tabs { display:flex; gap:8px; margin:28px 0 18px; border-bottom:1px solid var(--line); }
+.tabs { display:flex; gap:6px; margin:4px 0 12px; border-bottom:1px solid var(--line); }
 .tabBtn { display:flex; flex-direction:column; align-items:flex-start; gap:2px;
-  background:none; border:0; border-bottom:2px solid transparent; padding:10px 16px 12px;
+  background:none; border:0; border-bottom:2px solid transparent; padding:7px 14px 8px;
   cursor:pointer; color:var(--muted); text-align:left; transition:color .18s, border-color .18s; }
 .tabBtn:hover { color:#cfe8dc; }
-.tabName { font-size:16px; font-weight:600; letter-spacing:-.01em; }
-.tabHint { font-size:11.5px; letter-spacing:.02em; opacity:.75; }
+.tabName { font-size:14px; font-weight:600; letter-spacing:-.01em; }
+.tabHint { font-size:10px; letter-spacing:.02em; opacity:.75; }
 .tabBtn.on { color:#eaf7f0; border-bottom-color:#4fbe86; }
 .tabBtn.on .tabHint { color:#6fd39b; opacity:1; }
 .tabBtn:focus-visible { outline:2px solid #4fbe86; outline-offset:2px; border-radius:6px; }
@@ -151,4 +200,255 @@ footer{display:flex;justify-content:space-between;border-top:1px solid var(--lin
 .autoBlock summary { cursor:pointer; font-size:13px; font-weight:600; color:#ffd9a0; }
 .autoBlock summary:focus-visible { outline:2px solid #ffd9a0; outline-offset:3px; }
 .autoWarn { margin:10px 0; font-size:12px; line-height:1.55; color:#ffcf8f; }
+@media(max-width:700px){.phoneStages,.formPreflight{grid-template-columns:1fr}.phoneHandoff{grid-template-columns:1fr}.qrButton,.qrLocked{justify-self:center}.participantQr svg{width:min(72vw,340px);height:auto}}
 @media(max-width:560px){.participantActions{flex-direction:column}.participantEditor{grid-template-columns:1fr}.runCardHead{flex-direction:column}}
+
+/* --- Collection-mode firewall --------------------------------------------
+   Reported participant data and model-development samples are different
+   datasets. The mode switch is deliberately prominent and cannot be changed
+   during a recording. */
+.modeChooser{display:flex;gap:26px;margin:10px 0 0;border-bottom:1px solid var(--line)}
+.modeCard{display:flex;align-items:center;gap:8px;min-height:44px;padding:0 2px;border:0;border-bottom:2px solid transparent;background:transparent;color:var(--muted);text-align:left;cursor:pointer}
+.modeCard span{grid-area:tag;color:var(--muted);font:800 8px var(--font-geist-mono),monospace;letter-spacing:.12em;white-space:nowrap}
+.modeCard strong{grid-area:title;font-size:13px}.modeCard small{display:none}
+.modeCard.selected{border:0;border-bottom:2px solid var(--mint);padding:0 2px;background:transparent;box-shadow:none;color:var(--ink)}
+.modeCard.selected span{color:var(--mint)}
+.modeCard.development.selected{border-color:var(--amber);background:transparent;box-shadow:none}
+.modeCard.development.selected span{color:var(--amber)}
+.grid .participantPhone{display:none}
+
+.studyHero{display:flex;align-items:center;justify-content:space-between;gap:24px;padding:22px 0 14px}
+.studyCounter{min-width:158px;padding:12px 16px;border-left:3px solid var(--mint);background:#101a16}
+.studyCounter strong{display:block;font:25px var(--font-geist-mono),monospace}.studyCounter span{display:block;margin-top:3px;color:var(--muted);font-size:9px;text-transform:uppercase;letter-spacing:.09em}
+.studyFlow{display:grid;grid-template-columns:repeat(9,1fr);gap:5px;margin-bottom:12px}
+.flowStep{display:flex;align-items:center;gap:5px;min-height:34px;padding:6px;border:1px solid var(--line);color:var(--muted);font-size:8px;line-height:1.2}
+.flowStep i{flex:0 0 auto;width:7px;height:7px;border-radius:50%;background:#42534c}.flowStep.complete{color:#cce7d9;border-color:#315b47}.flowStep.complete i{background:var(--mint)}
+.flowStep.current{color:#fff0d8;border-color:var(--amber);background:#2a2012}.flowStep.current i{background:var(--amber)}
+.studyLayout{display:grid;grid-template-columns:1.2fr .8fr;gap:14px;padding-bottom:18px}
+.studyRunCard{grid-row:span 2}.studyPhone{grid-column:1/-1}.studyOnlyBadge{padding:7px 9px;border:1px solid #2f7a4f;color:var(--mint);font:800 9px var(--font-geist-mono),monospace;letter-spacing:.1em}
+.studyParticipantSelect{display:grid;gap:7px;color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.08em}.studyParticipantSelect select{width:100%;padding:12px;border:1px solid var(--line);background:#09110e;color:var(--ink)}
+.newStudyParticipant{width:100%;margin-top:9px;padding:11px;border:1px solid var(--line);background:#14221c;color:var(--ink);cursor:pointer}
+.nextAction{margin:12px 0;padding:14px;border:2px solid var(--mint);background:#0c1712}.nextAction>span{color:var(--mint);font:800 9px var(--font-geist-mono),monospace;letter-spacing:.1em}.nextAction>strong{display:block;margin:6px 0 0;font-size:19px}.nextAction>p{margin:7px 0 0;color:var(--muted);font-size:11px;line-height:1.4}.emptyAction{border-color:var(--amber)}.emptyAction>span{color:var(--amber)}.completeAction{border-color:var(--blue)}.completeAction>span{color:var(--blue)}
+.formAction{border-color:var(--amber)}.formAction>span{color:var(--amber)}.formAction>button{width:100%;margin-top:14px;padding:11px;border:1px solid var(--amber);background:#2a2012;color:#fff0d8;font-weight:800;cursor:pointer}
+.assignmentTags{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}.assignmentTags b{padding:7px 9px;background:#183026;color:#d9f3e6;font:700 10px var(--font-geist-mono),monospace;text-transform:uppercase}
+.preflightList{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:14px}.preflightList>div{display:flex;align-items:center;gap:8px;padding:10px;border:1px solid var(--line);color:var(--muted);font-size:11px}.preflightList i{width:8px;height:8px;border-radius:50%;background:var(--red)}.preflightList .ready{border-color:#315b47;color:#cce7d9}.preflightList .ready i{background:var(--mint)}
+.studyCalibrate{margin-top:9px}.startStudyRun{width:100%;margin-top:12px;padding:16px;border:0;background:var(--mint);color:#07110c;font-size:15px;font-weight:900;cursor:pointer}.studyAbort{width:100%;margin-top:14px;padding:15px;border:0;font-weight:900;cursor:pointer}
+.trialMatrix{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}.trialSlot{display:flex;flex-direction:column;gap:3px;min-height:62px;padding:8px;border:1px solid var(--line);background:#0a120f}.trialSlot>span{color:var(--muted);font:800 9px var(--font-geist-mono),monospace}.trialSlot>strong{font-size:10px;text-transform:capitalize}.trialSlot>small{margin-top:auto;color:var(--muted);font-size:8px;text-transform:uppercase}.trialSlot.accepted{border-color:#2f7a4f;background:#10241a}.trialSlot.accepted>small{color:var(--mint)}.trialSlot.repeat{border-color:#8a3b3b;background:#2a1414}.trialSlot.repeat>small{color:#ff9a9a}
+.fiveStages{grid-template-columns:repeat(5,1fr)}.studyRigOk{color:var(--mint);font-size:12px}.studyRecovery{display:grid;gap:8px;margin-top:10px}
+.formCompletion{display:flex;align-items:center;gap:10px;margin-top:14px;padding:10px 0;border:0;background:transparent;color:#d9f3e6;font-size:12px}.formCompletion input{accent-color:var(--mint)}
+
+@media(max-width:1050px){.studyFlow{grid-template-columns:repeat(3,1fr)}.studyLayout{grid-template-columns:1fr}.studyRunCard{grid-row:auto}.studyPhone{grid-column:auto}}
+@media(max-width:900px){.modeChooser{grid-template-columns:1fr}.modeCard{min-height:0}.studyHero{align-items:flex-start;flex-direction:column;padding:24px 0 16px}.studyCounter{width:100%}}
+@media(max-width:700px){.studyFlow{grid-template-columns:1fr 1fr}.fiveStages{grid-template-columns:1fr 1fr}.preflightList{grid-template-columns:1fr}}
+
+/* --- One-step participant console ---------------------------------------
+   Only the action that can advance the study is expanded. Session history
+   and recovery remain available, but cannot compete with the current step. */
+.topbar{position:sticky;top:0;z-index:40;background:#09100d;backdrop-filter:none}
+.headerStop{padding:7px 10px;border:1px solid #a94747;background:#421919;color:#ffb0ae;font:800 9px var(--font-geist-mono),monospace;letter-spacing:.08em;cursor:pointer}
+.studyContextBar{display:grid;grid-template-columns:1fr minmax(220px,.8fr) auto;align-items:center;gap:12px;margin:22px 0 18px;padding:0;background:transparent}
+.studyContextIdentity span,.currentStepChip span,.studyCounter span{display:block;color:var(--muted);font:800 8px var(--font-geist-mono),monospace;letter-spacing:.11em;text-transform:uppercase}
+.contextParticipantControl{display:flex;align-items:center;gap:8px;margin-top:4px}
+.contextParticipantControl select,.contextParticipantControl button{height:30px;padding:0;border:0;background:transparent;color:var(--ink);font-size:13px;font-weight:750}
+.contextParticipantControl select{min-width:54px;border-bottom:1px solid #486256}
+.contextParticipantControl button{color:var(--muted);font-size:10px;cursor:pointer}
+.contextParticipantControl button:hover{color:var(--mint)}
+.currentStepChip{padding-left:12px;border-left:2px solid var(--amber)}
+.currentStepChip strong{display:block;margin-top:3px;font-size:14px}
+.studyContextBar .studyCounter{min-width:110px;padding:0 0 0 12px;border-left:1px solid var(--line);background:transparent}
+.studyContextBar .studyCounter strong{font-size:19px}
+.studyLayout{display:grid;grid-template-columns:1fr;gap:0;max-width:980px;margin:0 auto;padding-bottom:14px}
+.oneStepCard{padding:0;border:0;background:transparent}
+.oneStepHead{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+.oneStepHead h2{margin:0;font-size:18px}
+.participantStrip{display:flex;align-items:flex-end;gap:8px;margin:0 0 20px;padding:0;background:transparent;border:0}
+.participantStrip label{display:grid;gap:4px;min-width:130px;color:var(--muted);font-size:9px;text-transform:uppercase;letter-spacing:.08em}
+.participantStrip select,.participantStrip button{height:32px;padding:0 10px;border:0;border-bottom:1px solid #486256;background:transparent;color:var(--ink);font-size:11px}
+.participantStrip button{cursor:pointer}
+.oneStepAction{margin:0;padding:4px 0 6px 24px;border:0;border-left:2px solid var(--mint);background:transparent}
+.oneStepAction>span,.stepStatus>span{color:var(--mint);font:800 9px var(--font-geist-mono),monospace;letter-spacing:.1em}
+.oneStepAction h2{margin:5px 0 0;font-size:22px;letter-spacing:-.03em}
+.oneStepAction p{margin:7px 0 0;max-width:760px;color:var(--muted);font-size:12px;line-height:1.45}
+.stepStatus{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.stepStatus>b{font:800 9px var(--font-geist-mono),monospace;letter-spacing:.08em;color:var(--muted)}
+.readyText{color:var(--mint)!important}
+.stepFormActions{display:grid;grid-template-columns:minmax(220px,1fr) auto;gap:8px;max-width:560px;margin-top:18px}
+.stepPrimary,.stepSecondary{display:grid;place-items:center;min-height:44px;padding:10px 14px;border:0;font-weight:850;text-decoration:none;cursor:pointer}
+.stepPrimary{width:100%;margin-top:14px;background:var(--mint);color:#07110c}
+.stepFormActions .stepPrimary{margin:0}
+.stepSecondary{min-width:140px;border:1px solid #426857;background:transparent;color:var(--mint)}
+.disabledLink{opacity:.35;pointer-events:none}
+.qualificationNote{display:block;margin-top:9px;color:var(--amber);font-size:10px;line-height:1.4}
+.recordingFiles{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-top:10px}
+.recordingFiles label{display:grid;gap:5px;padding:0;color:var(--muted);font-size:9px}
+.recordingFiles input{width:100%;min-width:0;padding:9px 0;border:0;border-bottom:1px solid #486256;background:transparent;color:var(--ink);font-size:11px}
+.compactFeedback{min-height:0;margin:9px 0 0}
+.trialStep .preflightCheck{padding:8px 0;border:0;background:transparent}
+.studyDetails{padding:0;border:0;border-top:1px solid var(--line);background:transparent}
+.studyDetails>summary{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 16px;cursor:pointer;list-style:none}
+.studyDetails>summary::-webkit-details-marker{display:none}
+.studyDetails>summary span{font-weight:750;font-size:12px}
+.studyDetails>summary b{color:var(--muted);font:800 9px var(--font-geist-mono),monospace;letter-spacing:.07em}
+.studyDetails[open]>summary{border-bottom:1px solid var(--line)}
+.studyDetails>.trialMatrix,.studyDetails>.poseWarn,.studyDetails>.studyRigOk,.studyDetails>.rigBtn,.studyDetails>.studyRecovery{margin:12px 16px}
+.runAbort{margin-top:8px!important;padding:10px!important;background:#421919!important;color:#ffb0ae!important;border:1px solid #a94747!important;font-size:11px!important}
+
+@media(min-width:901px){
+  .trialStep .assignmentTags{margin-top:8px}
+  .trialStep .preflightList{grid-template-columns:repeat(5,minmax(0,1fr));gap:5px;margin-top:10px}
+  .trialStep .preflightList>div{justify-content:center;padding:8px 6px;border:0;font-size:10px;white-space:nowrap}
+  .trialStep .preflightList>div+div{border-left:1px solid var(--line)}
+  .trialStep .recordingFiles{margin-top:8px}
+}
+
+@media(max-width:900px){
+  main{padding:0 12px}
+  .topbar{height:54px}
+  .brand{gap:8px}.brandMark{width:30px;height:30px;font-size:10px}.brand small{display:none}.brand strong{font-size:12px}
+  .statusCluster{gap:4px;flex-wrap:nowrap}.pill{padding:5px 6px;font-size:8px}.clock{display:none}.headerStop{padding:6px;font-size:8px}
+  .modeChooser{display:grid;grid-template-columns:repeat(3,1fr);gap:0;margin-top:8px}
+  .modeCard{display:flex;min-height:42px;padding:0 6px;align-items:center;justify-content:center;text-align:center}
+  .modeCard.selected{padding:0 6px;box-shadow:none}.modeCard span,.modeCard small{display:none}.modeCard strong{font-size:10px;line-height:1.15}
+  .studyContextBar{grid-template-columns:1fr auto;margin:8px 0 6px;padding:8px}
+  .studyContextIdentity{display:block}.currentStepChip{grid-column:1/-1;padding:8px 0 0;border-left:0;border-top:1px solid var(--line)}.currentStepChip strong{font-size:13px}
+  .studyContextBar .studyCounter{min-width:82px}.studyContextBar .studyCounter strong{font-size:16px}
+  .oneStepCard{padding:12px}.oneStepHead h2{font-size:16px}.participantStrip{margin-top:8px}
+  .oneStepAction{margin-top:8px;padding:12px}.oneStepAction h2{font-size:21px}
+  .recordingFiles{grid-template-columns:1fr}.preflightList{grid-template-columns:1fr 1fr}
+  .formCompletion{padding:10px}.studyDetails>summary{padding:10px 12px}
+}
+
+@media(max-width:520px){
+  .statusCluster .pill{font-size:0;width:24px;height:24px;padding:0;display:grid;place-items:center}.statusCluster .pill i{margin:0}
+  .headerStop{font-size:7px}.studyOnlyBadge{padding:5px}
+  .participantStrip{align-items:stretch}.participantStrip label{flex:1;min-width:0}.participantStrip button{align-self:end}
+  .stepFormActions{grid-template-columns:1fr}.preflightList{grid-template-columns:1fr}
+  .oneStepAction h2{font-size:19px}
+}
+
+/* --- Research-led participant workspace ---------------------------------
+   The study surface is a procedural interface, not a monitoring dashboard.
+   It therefore presents one decision at a time, reveals prerequisites only
+   on request, and reserves high-salience colour for the current state.     */
+.studyShell{
+  --ink:#17211c;--muted:#617068;--line:#d8dfdb;--panel:#fff;--bg:#f4f6f4;
+  --mint:#087a50;--blue:#315bb5;--amber:#9b6500;--red:#b42318;
+  width:100%;max-width:none;padding:0 max(24px,calc((100vw - 1240px)/2));
+  color:var(--ink);background:#f4f6f4;
+}
+.developmentShell{background:#09100d}
+.studyShell .topbar{height:64px;background:#fff;border-color:#dfe5e1;box-shadow:none}
+.studyShell .brandMark{border-radius:9px;background:#0a7f54;color:#fff}
+.studyShell .brand strong{font-size:16px}.studyShell .brand small{color:#6c7972}
+.studyShell .pill{color:#5e6b64;font-weight:700}
+.studyShell .pill i{background:#c68a1b;box-shadow:none}
+.studyShell .pill.ok{color:#2d4639}.studyShell .pill.ok i{background:#11865a;box-shadow:none}
+.studyShell .headerStop{min-height:40px;padding:0 15px;border-radius:7px;border-color:#c9362b;background:#fff;color:#a71d15;font-size:10px}
+.studyShell .headerStop:hover:not(:disabled){background:#fff1f0}
+.studyShell .clock{color:#6c7972}
+
+.studyShell .modeChooser{gap:28px;margin-top:0;min-height:52px;align-items:stretch;border-color:#d8dfdb}
+.studyShell .modeCard{min-height:52px;color:#6d7973}
+.studyShell .modeCard strong{font-size:14px}.studyShell .modeCard span{color:#7b8780}
+.studyShell .modeCard.selected{color:#15231c;border-bottom-width:3px;border-bottom-color:#087a50}
+.studyShell .modeCard.selected span{color:#087a50}
+.studyShell .modeCard.development.selected{border-color:#9b6500}
+
+.studyShell .studyContextBar{max-width:1040px;margin:16px auto 12px;grid-template-columns:1fr auto auto}
+.studyShell .studyContextIdentity span,.studyShell .currentStepChip span,.studyShell .studyCounter span{color:#738078;font-size:9px}
+.studyShell .contextParticipantControl select,.studyShell .contextParticipantControl button{color:#17211c;min-height:36px}
+.studyShell .contextParticipantControl select{border-color:#aeb9b3;background:transparent}
+.studyShell .contextParticipantControl button{color:#526159}
+.studyShell .currentStepChip{min-width:210px;padding-left:18px;border-color:#be7d00}
+.studyShell .currentStepChip strong{font-size:15px}
+.studyShell .studyContextBar .studyCounter{padding-left:18px;border-color:#cbd4cf}
+.studyShell .studyContextBar .studyCounter strong{font-size:21px;color:#17211c}
+
+.studyShell .studyLayout{max-width:1040px}
+.studyShell .oneStepCard{overflow:visible;background:transparent}
+.studyShell .oneStepAction{position:relative;margin:0;padding:24px 26px;border:1px solid #dfe5e1;border-left:4px solid #be7d00;border-radius:0;background:#fff;box-shadow:none}
+.studyShell .oneStepAction.action-ready,.studyShell .oneStepAction.completeAction{border-left-color:#087a50}
+.studyShell .oneStepAction.action-service{border-left-color:#b42318}
+.studyShell .oneStepAction>span,.studyShell .stepStatus>span{color:#966000;font-size:10px;letter-spacing:.13em}
+.studyShell .oneStepAction.action-ready .stepStatus>span,.studyShell .completeAction>span{color:#087a50}
+.studyShell .oneStepAction.action-service .stepStatus>span{color:#b42318}
+.studyShell .stepStatus>b{color:#6b7871;font-size:10px}
+.studyShell .oneStepAction h2{margin-top:9px;font-size:clamp(25px,2.7vw,34px);line-height:1.08;letter-spacing:-.035em}
+.studyShell .oneStepAction p{max-width:650px;margin-top:9px;color:#58665f;font-size:14px;line-height:1.5}
+.studyShell .emptyAction{display:grid;grid-template-columns:minmax(0,1fr) 250px;grid-template-rows:auto auto auto;column-gap:36px;align-items:center}
+.studyShell .emptyAction>span,.studyShell .emptyAction>h2,.studyShell .emptyAction>p{grid-column:1}
+.studyShell .emptyAction .stepPrimary{grid-column:2;grid-row:1/4;width:250px;margin:0}
+.studyShell .trialIdentity{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:22px;color:#536159}
+.studyShell .trialIdentity strong{margin-right:8px;color:#1b2821;font-size:14px}
+.studyShell .trialIdentity span{padding:7px 10px;border-radius:999px;background:#eef3f0;color:#425148;font-size:11px;font-weight:700;text-transform:capitalize}
+.studyShell .stepPrimary{min-height:48px;margin-top:20px;border-radius:5px;background:#087a50;color:#fff;font-size:14px;box-shadow:none}
+.studyShell .stepPrimary:hover{background:#076b47}
+.studyShell .stepSecondary{min-height:48px;border-radius:8px;border-color:#9eaaa3;color:#176745;background:#fff}
+.studyShell .stepFormActions{max-width:600px;margin-top:24px}
+.studyShell .formCompletion{color:#44534b;font-size:13px}
+.studyShell .qualificationNote{color:#815600}
+.studyShell .inlineFormHandoff{display:grid;grid-template-columns:auto 1fr;align-items:center;gap:32px;margin-top:18px}
+.studyShell .inlineQr{display:grid;place-items:center;padding:10px;border:1px solid #d7dfda;border-radius:4px;background:#fff;box-shadow:none}
+.studyShell .inlineQr svg{display:block;width:min(196px,22vw);height:auto}
+.studyShell .inlineQr.qrUnavailable{width:274px;min-height:274px;background:#fff7f6;color:#a9271f;text-align:center}
+.studyShell .inlineFormCopy>span{color:#087a50;font:800 10px var(--font-geist-mono),monospace;letter-spacing:.11em}
+.studyShell .inlineFormCopy h2{margin-top:10px}
+.studyShell .inlineFormCopy p{max-width:520px}
+.studyShell .submissionWaiting{display:grid;grid-template-columns:12px 1fr;gap:3px 10px;align-items:center;margin-top:24px;padding:14px 0;border-top:1px solid #e3e8e5;border-bottom:1px solid #e3e8e5;color:#27352e}
+.studyShell .submissionWaiting i{grid-row:1/3;width:10px;height:10px;border:2px solid #9bc7b2;border-top-color:#087a50;border-radius:50%;animation:submissionSpin 1s linear infinite}
+.studyShell .submissionWaiting strong{font-size:14px}.studyShell .submissionWaiting small{color:#68756e;font-size:11px}
+@keyframes submissionSpin{to{transform:rotate(360deg)}}
+.studyShell .manualSubmission{width:100%;min-height:50px;margin-top:24px;padding:10px 16px;border:0;border-radius:8px;background:#087a50;color:#fff;font-weight:800;cursor:pointer;box-shadow:0 2px 0 #075d3f}
+.studyShell .manualSubmission:hover{background:#076b47}
+.studyShell .formFallback{margin-top:14px;color:#69766f;font-size:11px}
+.studyShell .formFallback summary{cursor:pointer}.studyShell .formFallback a{display:inline-block;margin-top:9px;color:#087a50}
+
+.studyShell .recordingFiles{grid-template-columns:repeat(3,1fr);gap:12px;margin-top:24px}
+.studyShell .recordingFiles label{gap:7px;color:#69766f;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.08em}
+.studyShell .recordingFiles input{min-height:44px;padding:9px 11px;border:1px solid #cbd4cf;border-radius:7px;background:#fafcfb;color:#17211c;font-size:12px}
+.studyShell .recordingFiles input:focus{outline:3px solid rgba(8,122,80,.18);border-color:#087a50}
+.studyShell .preflightDetails{margin-top:26px;padding-top:17px;border-top:1px solid #e3e8e5;color:#5c6a62}
+.studyShell .preflightDetails summary{display:flex;justify-content:space-between;gap:18px;min-height:24px;cursor:pointer;font-size:12px;font-weight:750;list-style:none}
+.studyShell .preflightDetails summary::-webkit-details-marker{display:none}
+.studyShell .preflightDetails summary span{color:#087a50}
+.studyShell .preflightList{display:grid;grid-template-columns:1fr;margin-top:12px;gap:0}
+.studyShell .preflightList>div{display:grid;grid-template-columns:12px 1fr auto;align-items:center;gap:10px;min-height:38px;padding:7px 2px;border:0;border-bottom:1px solid #edf0ee;color:#855d10;font-size:12px}
+.studyShell .preflightList>div:last-child{border-bottom:0}
+.studyShell .preflightList i{width:8px;height:8px;background:#c68a1b}
+.studyShell .preflightList b{color:inherit;font-size:11px;font-weight:650}
+.studyShell .preflightList .ready{color:#237251}.studyShell .preflightList .ready i{background:#11865a}
+.studyShell .compactFeedback{min-height:0;margin:12px 6px 0;color:#66746c}
+
+.studyShell .studyDetails{max-width:1040px;margin:8px auto 0;border:0;border-top:1px solid #d9e0dc;background:transparent}
+.studyShell .studyDetails>summary{min-height:44px;padding:0 6px;color:#27342d}
+.studyShell .studyDetails>summary b{color:#6a7770}
+.studyShell .studyDetails[open]>summary{border-color:#d9e0dc}
+.studyShell .trialSlot{border-color:#dce3df;background:#fff;color:#17211c}
+.studyShell .trialSlot.accepted{border-color:#93c7ad;background:#edf8f2}
+.studyShell .trialSlot.repeat{border-color:#e7aaa5;background:#fff1f0}
+.studyShell .poseWarn{color:#a9271f}.studyShell .studyRigOk,.studyShell .readyText{color:#087a50!important}.studyShell .warnText{color:#b42318}
+.studyShell .rigBtn{border-color:#ccd5d0;background:#fff;color:#17211c}.studyShell .rigBtn.stop{border-color:#d65a51;background:#fff2f1;color:#991b14}
+.studyShell footer{max-width:1040px;margin:8px auto 0;border-color:#d9e0dc;color:#6a7770}
+
+@media(max-width:900px){
+  .studyShell{padding:0 16px}
+  .studyShell .topbar{height:60px;padding:0}
+  .studyShell .modeChooser{gap:0}
+  .studyShell .studyContextBar{margin:14px 0 10px;padding:0;background:transparent}
+  .studyShell .oneStepCard{padding:0}
+  .studyShell .oneStepAction{margin:0;padding:26px 24px 24px}
+  .studyShell .emptyAction{grid-template-columns:1fr;grid-template-rows:auto}
+  .studyShell .emptyAction .stepPrimary{grid-column:1;grid-row:auto;width:100%;margin-top:18px}
+}
+@media(max-width:620px){
+  .studyShell{padding:0 12px}
+  .studyShell .statusCluster .pill{display:none}
+  .studyShell .modeCard strong{font-size:11px}
+  .studyShell .studyContextBar{grid-template-columns:1fr auto}
+  .studyShell .currentStepChip{grid-column:1/-1;min-width:0;padding:10px 0 0}
+  .studyShell .oneStepAction h2{font-size:28px}
+  .studyShell .recordingFiles{grid-template-columns:1fr}
+  .studyShell .trialIdentity strong{flex-basis:100%}
+  .studyShell .inlineFormHandoff{grid-template-columns:1fr;gap:24px}
+  .studyShell .inlineQr{justify-self:center}.studyShell .inlineQr svg{width:min(70vw,260px)}
+}

@@ -1,0 +1,146 @@
+schema_version: 1
+status: preregistration_candidate
+frozen_before_first_reported_participant: false
+study_title: >-
+  Adaptive Human-Robot Collaboration Safety Through Motion-State Recognition
+  and Predictive Speed-and-Separation Monitoring
+
+research_question: >-
+  During one fixed, approved panel-handling task, does predictive SSM reduce
+  unnecessary robot interruption relative to fixed-zone and reactive-SSM
+  references without worsening response to a predefined rapid intrusion?
+
+design:
+  unit_of_inference: participant
+  design: within_participant
+  conditions:
+    - fixed zone
+    - reactive SSM
+    - predictive SSM
+  blocks_per_participant: 3
+  trials_per_block: 3
+  trials_per_participant: 9
+  blinded_participant_labels: [A, B, C]
+  controller_orders:
+    - [fixed zone, reactive SSM, predictive SSM]
+    - [fixed zone, predictive SSM, reactive SSM]
+    - [reactive SSM, fixed zone, predictive SSM]
+    - [reactive SSM, predictive SSM, fixed zone]
+    - [predictive SSM, fixed zone, reactive SSM]
+    - [predictive SSM, reactive SSM, fixed zone]
+  event_orders:
+    - [clean, distractor, rapid intrusion]
+    - [clean, rapid intrusion, distractor]
+    - [distractor, clean, rapid intrusion]
+    - [distractor, rapid intrusion, clean]
+    - [rapid intrusion, clean, distractor]
+    - [rapid intrusion, distractor, clean]
+  assignment_rule: >-
+    Participant number minus one indexes controller order modulo six. For each
+    block, participant number minus one plus block index indexes event order
+    modulo six. The server rejects a mismatched assignment.
+
+operational_definitions:
+  task_phases: [approaching, working, retreating]
+  events: [clean, distractor, rapid intrusion]
+  rapid_intrusion: >-
+    A brief, pre-briefed, ethics-approved fast closing movement toward the
+    validated protected volume. It is an event exposure, not an HMM state and
+    not a claim of universal fall, trip, or hazard detection.
+  distractor: >-
+    A pre-briefed movement that does not enter or rapidly close on the protected
+    volume.
+  clean: No inserted event.
+  scored_event_window:
+    start: synchronized robot-lift command and operator event cue
+    end: first of event-window end, participant retreat, or robot lift completion
+  autonomous_motion_window:
+    start: first robot telemetry sample with speed above the frozen motion threshold
+    end: first sustained verified zero-motion interval after that movement
+  zero_motion: >-
+    Robot TCP and joint speed remain below thresholds established by the
+    qualification batch for at least the frozen dwell duration.
+  boundary_crossing: >-
+    First sample at which validated separation minus required separation is
+    less than or equal to zero.
+
+primary_outcomes:
+  - intrusion_response_success
+  - minimum_protective_distance_margin_m
+  - duration_below_required_separation_s
+  - end_to_end_response_time_s
+  - false_stops_per_safe_minute
+  - stop_and_slowdown_duration_s
+  - task_time_s
+
+secondary_outcomes:
+  - anticipation_lead_time_s
+  - minimum_validated_separation_m
+  - integrated_speed_deficit_s
+  - human_idle_time_s
+  - robot_idle_time_s
+  - concurrent_activity_time_s
+  - functional_delay_s
+  - task_success
+  - task_errors_and_rework
+  - tracking_valid_proportion
+  - stale_or_occluded_duration_s
+  - calibration_and_extrinsic_residual
+  - perceived_safety
+  - trust
+  - workload
+  - perceived_unnecessary_stopping
+
+exploratory_outcomes:
+  head_direction_proxy:
+    scope: autonomous_motion_window_only
+    measures:
+      - proportion_directed_toward_robot
+      - off_to_on_revisits
+      - first_head_turn_latency_s
+      - longest_continuous_off_robot_interval_s
+    interpretation: >-
+      Head direction is not eye gaze or trust. Interpret only with performance,
+      questionnaires, missingness, and consented-video validation.
+
+exclusion_and_repeat:
+  preserve_every_attempt: true
+  repeat_same_assigned_slot_when:
+    - missing_native_mvn_recording
+    - incomplete_xsens_body_stream
+    - stale_or_swapped_optitrack_rigid_body
+    - missing_robot_telemetry
+    - failed_sync_marker
+    - operator_or_equipment_abort
+    - protocol_deviation
+  analysis_rule: >-
+    The first complete valid attempt for an assigned slot is primary. Preserve
+    later or earlier invalid attempts, label the predeclared reason, and report
+    counts and sensitivity analyses. Never overwrite an attempt.
+
+statistics:
+  aggregation: trial_then_participant_condition
+  omnibus: Friedman test across the three within-participant conditions
+  planned_pairwise:
+    - predictive SSM vs fixed zone
+    - predictive SSM vs reactive SSM
+    - reactive SSM vs fixed zone
+  pairwise_test: exact paired permutation or Wilcoxon signed-rank as appropriate
+  multiplicity: Holm correction
+  report:
+    - participant-level paired differences
+    - confidence intervals
+    - effect sizes
+    - raw participant and event counts
+  response_success: binomial estimate with interval
+  prohibited_inference:
+    - treating adjacent frames as independent participants
+    - using HMM frame accuracy as the safety outcome
+    - claiming universal fall or hazard detection
+    - claiming a software speed-slider command is safety-rated
+
+freeze_rule: >-
+  After the first reported participant, do not retrain, retune, alter protected
+  geometry, alter event definitions, change analysis rules, or change hashed
+  controller/dashboard code. A necessary change creates a new study release and
+  the affected data are separated under this plan.

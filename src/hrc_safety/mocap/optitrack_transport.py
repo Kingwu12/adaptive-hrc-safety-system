@@ -75,6 +75,7 @@ class RigidBodySample:
     rotation_xyzw: tuple[float, float, float, float]
     source_time_s: float
     age_s: float
+    mean_error_m: float | None
 
 
 class RigidBodyMonitor:
@@ -82,16 +83,20 @@ class RigidBodyMonitor:
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
-        self._poses: dict[int, tuple[np.ndarray, tuple[float, ...], float, float]] = {}
+        self._poses: dict[
+            int, tuple[np.ndarray, tuple[float, ...], float, float, float | None]
+        ] = {}
 
     def update(self, rigid_body_id: int, position, rotation, source_time_s: float,
-               wall_time: float) -> None:
+               wall_time: float, mean_error_m: float | None = None) -> None:
         p = np.asarray(position, dtype=float).reshape(3)
         q = tuple(float(v) for v in rotation)
         if np.all(np.isfinite(p)) and len(q) == 4:
             with self._lock:
                 self._poses[int(rigid_body_id)] = (p.copy(), q, float(source_time_s),
-                                                    float(wall_time))
+                                                    float(wall_time),
+                                                    (None if mean_error_m is None else
+                                                     float(mean_error_m)))
 
     def snapshot(self, now_s: float | None = None) -> dict[int, RigidBodySample]:
         now = time.monotonic() if now_s is None else float(now_s)
@@ -99,8 +104,8 @@ class RigidBodyMonitor:
             values = list(self._poses.items())
         return {
             rb_id: RigidBodySample(rb_id, tuple(map(float, p)), q, source_t,
-                                   max(0.0, now - wall_t))
-            for rb_id, (p, q, source_t, wall_t) in values
+                                   max(0.0, now - wall_t), mean_error)
+            for rb_id, (p, q, source_t, wall_t, mean_error) in values
         }
 
 
@@ -222,9 +227,11 @@ class NatNetV4Listener:
             frame_number, bodies = parsed
             now = time.monotonic()
             source_t = frame_number / self.nominal_rate_hz
-            for rb_id, position, rotation, _error, tracked in bodies:
+            for rb_id, position, rotation, mean_error, tracked in bodies:
                 if not tracked:
                     continue
-                self.monitor.update(rb_id, position, rotation, source_t, now)
+                self.monitor.update(
+                    rb_id, position, rotation, source_t, now,
+                    mean_error_m=mean_error)
                 if rb_id == self.head_id:
                     self.bridge.on_sample(source_t, position, True, now)

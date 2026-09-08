@@ -8,9 +8,10 @@
 
 PYTHON ?= python3
 METRICS := data/analysis/metrics.json
-TABLES  := paper/tables/three_rung.tex paper/tables/ablation.tex
+MODEL   := data/models/pilot_hmm.json
+TABLES  := paper/tables/three_rung.tex paper/tables/ablation.tex paper/tables/model_validation.tex
 
-.PHONY: all sim tables paper test readiness clean
+.PHONY: all sim tables paper test readiness qualification clean
 
 all: paper
 
@@ -19,7 +20,7 @@ sim $(METRICS):
 	$(PYTHON) scripts/run_simulation.py
 
 # 2. Derive the LaTeX result tables from the metrics JSON.
-tables $(TABLES): $(METRICS)
+tables $(TABLES): $(METRICS) $(MODEL)
 	$(PYTHON) scripts/make_paper_tables.py
 
 # 3. Build the PDF. Regenerates tables first. If latexmk is absent, skip GRACEFULLY
@@ -42,6 +43,13 @@ test:
 # Fail-closed audit for a REPORTED moving-participant controller run.
 readiness:
 	$(PYTHON) scripts/research_readiness.py
+
+# Audit the Q-coded nine-run mock participant plus controlled abort rehearsal.
+# This remains red unless controller outputs were acknowledged by the real rig.
+qualification:
+	$(PYTHON) scripts/verify_xsens_capture.py --trial-batch \
+		--qualification-dir data/xsens \
+		--report data/verification/qualification-batch.json
 
 # Remove derived artifacts (everything here regenerates from source).
 clean:

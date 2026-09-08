@@ -1,0 +1,19 @@
+{
+  "generated_at_utc": "2026-09-03T09:05:21.677837+00:00",
+  "result": "fail",
+  "trial_batch": true,
+  "minimum_captures": 10,
+  "captures": [],
+  "failures": [
+    "only 0 captures; require at least 10",
+    "qualification batch must contain only collection_mode=qualification",
+    "only 0 complete qualification trials; require at least 9",
+    "qualification batch contains no controlled aborted recovery run",
+    "first nine complete trials cover 'clean' only 0 times; require 3",
+    "first nine complete trials cover 'distractor' only 0 times; require 3",
+    "first nine complete trials cover 'rapid intrusion' only 0 times; require 3",
+    "complete trials cover 'fixed zone' only 0 times; require 3",
+    "complete trials cover 'predictive SSM' only 0 times; require 3",
+    "complete trials cover 'reactive SSM' only 0 times; require 3"
+  ]
+}

@@ -14,13 +14,17 @@ import math
 import os
 import re
 import socket
+import ssl
 import sys
 import threading
 import time
+import urllib.error
+import urllib.parse
+import urllib.request
 import uuid
 from collections import deque
 from dataclasses import asdict
-from datetime import datetime
+from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -29,7 +33,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from vg10 import VG10  # noqa: E402
 
-from hrc_safety.analysis import fit_hmm  # noqa: E402
+from hrc_safety.analysis import build_controller, fit_hmm  # noqa: E402
 from hrc_safety.config import load_config  # noqa: E402
 from hrc_safety.features import FeatureExtractor  # noqa: E402
 from hrc_safety.lhmm.upper import (STATES, GaussianMixtureEmissions)  # noqa: E402
@@ -41,6 +45,33 @@ from hrc_safety.mocap.xsens_transport import (  # noqa: E402
 
 ALLOWED_PHASE_LABELS = {"unlabelled", "approaching", "working", "retreating"}
 ALLOWED_EVENT_LABELS = {"none", "hazard", "distractor"}
+ALLOWED_BLOCK_LABELS = {"A", "B", "C"}
+ALLOWED_CONTROLLER_CONDITIONS = {"fixed zone", "reactive SSM", "predictive SSM"}
+ALLOWED_PLANNED_EVENTS = {"clean", "distractor", "rapid intrusion"}
+ALLOWED_COLLECTION_MODES = {
+    "participant_study", "qualification", "model_development",
+}
+CONTROLLER_IMPLEMENTATIONS = {
+    "fixed zone": "fixed_zone",
+    "reactive SSM": "dynamic_ssm",
+    "predictive SSM": "adaptive",
+}
+CONTROLLER_ORDERS = (
+    ("fixed zone", "reactive SSM", "predictive SSM"),
+    ("fixed zone", "predictive SSM", "reactive SSM"),
+    ("reactive SSM", "fixed zone", "predictive SSM"),
+    ("reactive SSM", "predictive SSM", "fixed zone"),
+    ("predictive SSM", "fixed zone", "reactive SSM"),
+    ("predictive SSM", "reactive SSM", "fixed zone"),
+)
+EVENT_ORDERS = (
+    ("clean", "distractor", "rapid intrusion"),
+    ("clean", "rapid intrusion", "distractor"),
+    ("distractor", "clean", "rapid intrusion"),
+    ("distractor", "rapid intrusion", "clean"),
+    ("rapid intrusion", "clean", "distractor"),
+    ("rapid intrusion", "distractor", "clean"),
+)
 GUIDED_PROTOCOL_LABELS = (
     ("unlabelled", "none"),  # collect panel and move to the marked start position
     ("approaching", "none"), # normal approach with the panel
@@ -49,22 +80,39 @@ GUIDED_PROTOCOL_LABELS = (
     ("unlabelled", "none"),  # reset before the cued-hazard sequence
     ("approaching", "none"), # second approach
     ("working", "none"),     # resume the panel task
-    ("working", "hazard"),   # same task phase; cued rapid-intrusion event
+    ("working", "none"),     # second task interval; event occurs during lift
     ("retreating", "none"),  # controlled recovery and retreat
     ("unlabelled", "none"),  # sequence complete
 )
 
 PHYSICAL_STEP_WARNINGS = {
     2: "Panel aligned. Suction will turn on and both cups will be verified.",
-    3: "Cell clear. The robot will lift the panel to the taught top pose.",
+    3: "Cell clear. The robot lift and assigned event window will start together.",
     8: "Cell clear. The robot will lower the panel to the taught loading pose.",
     9: "Panel supported at the verified low pose. Suction will release and the run will save.",
+}
+
+PARTICIPANT_FORM_URLS = {
+    "intake": "https://docs.google.com/forms/d/e/1FAIpQLSce3ywyZ9OFginm-8-Kk2GqH5rSl4UxfDqiieAg5iomivF3xA/viewform",
+    "block": "https://docs.google.com/forms/d/e/1FAIpQLSeKgkIe5wdqEuFGnOuGxPpqD8ssQdSAR09oxrnwEQyzCPJviA/viewform",
+    "end": "https://docs.google.com/forms/d/e/1FAIpQLSd4gfX2ljOfRFxyeYq2B-haGNhENzA6dCjnmhYTIXGpVxc87g/viewform",
 }
 
 
 def safe_id(value: object, fallback: str) -> str:
     clean = re.sub(r"[^A-Za-z0-9_-]+", "-", str(value or "").strip()).strip("-")
     return clean[:48] or fallback
+
+
+def assigned_study_slot(participant_id: object, block: str, within: int) -> tuple[str, str]:
+    """Return the counterbalanced controller and event fixed for one study slot."""
+    match = re.search(r"(\d+)", safe_id(participant_id, "P01"))
+    participant_number = max(1, int(match.group(1)) if match else 1)
+    seed = participant_number - 1
+    block_index = ("A", "B", "C").index(block)
+    controller = CONTROLLER_ORDERS[seed % len(CONTROLLER_ORDERS)][block_index]
+    events = EVENT_ORDERS[(seed + block_index) % len(EVENT_ORDERS)]
+    return controller, events[within - 1]
 
 
 class RunCatalog:
@@ -83,9 +131,9 @@ class RunCatalog:
         self._cache: dict[str, tuple[int, int, dict]] = {}
 
     @staticmethod
-    def _clean_name(value: object) -> str:
+    def _clean_name(value: object, collection_mode: str) -> str:
         name = re.sub(r"[\x00-\x1f]+", " ", str(value or "")).strip()
-        if not name:
+        if not name and collection_mode == "model_development":
             raise ValueError("Enter a participant name")
         return name[:80]
 
@@ -100,6 +148,11 @@ class RunCatalog:
                     "id": safe_id(row.get("id"), ""),
                     "name": str(row.get("name", "")).strip()[:80],
                     "created_at": row.get("created_at"),
+                    "collection_mode": (
+                        row.get("collection_mode")
+                        if row.get("collection_mode") in ALLOWED_COLLECTION_MODES
+                        else "model_development"
+                    ),
                 }
                 for row in rows if safe_id(row.get("id"), "")
             }
@@ -127,7 +180,8 @@ class RunCatalog:
     def _quality(cls, samples: int, duration_s: float, rate_hz: float,
                  stale_ratio: float, label_counts: dict[str, int],
                  sequence: list[str], invalid_rows: int,
-                 event_counts: dict[str, int] | None = None) -> dict:
+                 event_counts: dict[str, int] | None = None,
+                 planned_event: str | None = None) -> dict:
         score = 100
         issues: list[str] = []
         missing = [label for label in cls.REQUIRED_LABELS
@@ -136,7 +190,19 @@ class RunCatalog:
             score -= 15 * len(missing)
             issues.append("missing " + ", ".join(missing))
         event_counts = event_counts or {}
-        if event_counts.get("hazard", 0) == 0:
+        if planned_event == "rapid intrusion" and event_counts.get("hazard", 0) == 0:
+            score -= 15
+            issues.append("missing planned rapid-intrusion event")
+        elif planned_event == "distractor" and event_counts.get("distractor", 0) == 0:
+            score -= 15
+            issues.append("missing planned distractor event")
+        elif planned_event == "clean" and (
+            event_counts.get("hazard", 0) or event_counts.get("distractor", 0)
+        ):
+            score -= 15
+            issues.append("unexpected event label in clean trial")
+        elif planned_event is None and event_counts.get("hazard", 0) == 0:
+            # Preserve the legacy quality rule for older guided-run files.
             score -= 15
             issues.append("missing cued hazard event")
         if tuple(sequence) != cls.EXPECTED_SEQUENCE:
@@ -180,6 +246,8 @@ class RunCatalog:
         session_id = path.stem
         participant_id = "P00"
         trial_id = "T00"
+        block_label = controller_condition = planned_event = None
+        collection_mode = "model_development"
         label_counts: dict[str, int] = {}
         event_counts: dict[str, int] = {}
         sequence: list[str] = []
@@ -196,6 +264,14 @@ class RunCatalog:
                     session_id = str(row.get("session_id") or path.stem)
                     participant_id = safe_id(row.get("participant_id"), "P00")
                     trial_id = safe_id(row.get("trial_id"), "T00")
+                    block_label = row.get("block_label")
+                    controller_condition = row.get("controller_condition")
+                    planned_event = row.get("planned_event")
+                    collection_mode = (
+                        row.get("collection_mode")
+                        if row.get("collection_mode") in ALLOWED_COLLECTION_MODES
+                        else "model_development"
+                    )
                 value = row.get("t")
                 if isinstance(value, (int, float)):
                     if first_t is None:
@@ -224,7 +300,8 @@ class RunCatalog:
         rate_hz = samples / duration_s if duration_s > 0 else 0.0
         stale_ratio = stale / samples if samples else 1.0
         quality = self._quality(samples, duration_s, rate_hz, stale_ratio,
-                                label_counts, sequence, invalid, event_counts)
+                                label_counts, sequence, invalid, event_counts,
+                                planned_event)
         label_seconds = {
             label: round(count / rate_hz, 1) if rate_hz > 0 else 0.0
             for label, count in label_counts.items()
@@ -233,6 +310,10 @@ class RunCatalog:
             "session_id": session_id,
             "participant_id": participant_id,
             "trial_id": trial_id,
+            "block_label": block_label,
+            "controller_condition": controller_condition,
+            "planned_event": planned_event,
+            "collection_mode": collection_mode,
             "started_at": self._started_at(session_id, stat.st_mtime),
             "file_name": path.name,
             "samples": samples,
@@ -262,7 +343,8 @@ class RunCatalog:
     def catalog(self) -> dict:
         with self.lock:
             self.output_dir.mkdir(parents=True, exist_ok=True)
-            paths = list(self.output_dir.glob("*.jsonl"))
+            paths = [path for path in self.output_dir.glob("*.jsonl")
+                     if not path.name.endswith(".events.jsonl")]
             live_keys = {str(path.resolve()) for path in paths}
             for key in list(self._cache):
                 if key not in live_keys:
@@ -286,12 +368,22 @@ class RunCatalog:
                                     if run["participant_id"] == participant_id]
                 profile = registered.get(participant_id, {})
                 name = profile.get("name", "")
+                collection_mode = profile.get("collection_mode")
+                if collection_mode not in ALLOWED_COLLECTION_MODES:
+                    run_modes = {run["collection_mode"] for run in participant_runs}
+                    collection_mode = next(
+                        (candidate for candidate in
+                         ("participant_study", "qualification", "model_development")
+                         if candidate in run_modes),
+                        "model_development",
+                    )
                 for run in participant_runs:
                     run["participant_name"] = name
                 participants.append({
                     "id": participant_id,
                     "name": name,
                     "created_at": profile.get("created_at"),
+                    "collection_mode": collection_mode,
                     "run_count": len(participant_runs),
                     "good_run_count": sum(
                         run["quality"]["grade"] == "good" for run in participant_runs),
@@ -307,9 +399,15 @@ class RunCatalog:
                 return participant["next_trial"]
         return "T01"
 
-    def save_participant(self, name: object, participant_id: object = None) -> dict:
+    def save_participant(self, name: object, participant_id: object = None,
+                         collection_mode: object = "model_development") -> dict:
         with self.lock:
-            clean_name = self._clean_name(name)
+            mode = str(collection_mode or "").strip()
+            if mode not in ALLOWED_COLLECTION_MODES:
+                raise ValueError(
+                    "Select participant study, qualification rehearsal, or model development"
+                )
+            clean_name = self._clean_name(name, mode)
             catalog = self.catalog()
             known_ids = {row["id"] for row in catalog["participants"]}
             if participant_id:
@@ -318,17 +416,19 @@ class RunCatalog:
                     raise ValueError("Invalid participant ID")
             else:
                 numbers = []
+                prefix = "Q" if mode == "qualification" else "P"
                 for value in known_ids:
-                    match = re.fullmatch(r"P(\d+)", value, re.I)
+                    match = re.fullmatch(rf"{prefix}(\d+)", value, re.I)
                     if match:
                         numbers.append(int(match.group(1)))
-                value = f"P{max(numbers, default=0) + 1:02d}"
+                value = f"{prefix}{max(numbers, default=0) + 1:02d}"
             registry = self._load_registry()
             registry[value] = {
                 "id": value,
                 "name": clean_name,
                 "created_at": registry.get(value, {}).get("created_at")
                 or datetime.now().isoformat(timespec="seconds"),
+                "collection_mode": mode,
             }
             self._save_registry(registry)
             participant = next(row for row in self.catalog()["participants"]
@@ -339,7 +439,8 @@ class RunCatalog:
 
 class DashboardState:
     def __init__(
-        self, output_dir: Path, segment_id: int, model_path: Path | None = None
+        self, output_dir: Path, segment_id: int, model_path: Path | None = None,
+        enable_research_output: bool = False,
     ) -> None:
         self.lock = threading.RLock()
         self.output_dir = output_dir
@@ -378,10 +479,23 @@ class DashboardState:
         self.feature: dict | None = None
         self.posterior: dict[str, float] = {}
         self.hmm_state: str | None = None
+        self.active_controller = None
+        self.controller_decision: dict | None = None
+        # Research commands are logged but are not allowed to masquerade as a
+        # safety-rated output. Physical application remains a separately
+        # qualified collection-stage gate.
+        self.controller_output_enabled = bool(enable_research_output)
+        self.controller_output_applied = False
+        self._last_controller_output_signature = None
         self.recording = False
         self.session_id: str | None = None
         self.participant_id: str | None = None
         self.trial_id: str | None = None
+        self.block_label: str | None = None
+        self.within_block_trial: int | None = None
+        self.controller_condition: str | None = None
+        self.planned_event: str | None = None
+        self.collection_mode = "model_development"
         self.label = "unlabelled"
         self.event_label = "none"
         self.guided_step: int | None = None
@@ -389,6 +503,14 @@ class DashboardState:
         self.samples_written = 0
         self.mvn_recording_confirmed = False
         self.mvn_recording_reference: str | None = None
+        self.motive_recording_reference: str | None = None
+        self.video_recording_reference: str | None = None
+        self.event_path: str | None = None
+        self.manifest_path: str | None = None
+        self.event_file = None
+        self.sync_marker_count = 0
+        self.optitrack_monitor: RigidBodyMonitor | None = None
+        self.rig = None
         self.calibration_started: float | None = None
         self.file = None
 
@@ -409,6 +531,17 @@ class DashboardState:
         xsens_sample = self.bridge.tick(now)
         optitrack_sample = self.optitrack_bridge.tick(now)
         if xsens_sample is None:
+            with self.lock:
+                if self.recording and self.active_controller is not None:
+                    decision = {
+                        "status": "tracking_unavailable",
+                        "command": "protective_stop",
+                        "speed_fraction": 0.0,
+                        "rule": "FAIL CLOSED: Xsens stream unavailable",
+                        "output_applied": False,
+                    }
+                    self._apply_controller_output_locked(decision)
+                    self.controller_decision = decision
             return
         # Absolute operator position comes from the tracked head rigid body in
         # robot-base coordinates. Xsens remains the articulated-motion source.
@@ -418,12 +551,36 @@ class DashboardState:
         posterior: dict[str, float] = {}
         state = None
         feature = None
+        controller_decision = None
         if frame is not None:
             feature = asdict(frame)
-            beliefs = self.hmm.step(frame.as_vector())
-            posterior = {name: float(beliefs[i]) for i, name in enumerate(STATES)}
-            state = max(posterior, key=posterior.get)
+            if self.active_controller is not None:
+                decision = self.active_controller.decide(frame, robot_mode="ssm")
+                controller_decision = asdict(decision)
+                controller_decision["output_applied"] = False
+                if decision.inferred_state in STATES:
+                    posterior = {
+                        name: float(decision.state_posterior[i])
+                        for i, name in enumerate(STATES)
+                    }
+                    state = decision.inferred_state
+            else:
+                beliefs = self.hmm.step(frame.as_vector())
+                posterior = {
+                    name: float(beliefs[i]) for i, name in enumerate(STATES)
+                }
+                state = max(posterior, key=posterior.get)
+        elif self.active_controller is not None:
+            controller_decision = {
+                "status": "tracking_unavailable",
+                "command": "protective_stop",
+                "speed_fraction": 0.0,
+                "rule": "FAIL CLOSED: no fresh validated OptiTrack feature frame",
+                "output_applied": False,
+            }
         with self.lock:
+            if controller_decision is not None:
+                self._apply_controller_output_locked(controller_decision)
             self.xsens_position = [float(v) for v in xsens_sample.position]
             self.position = (None if sample is None else
                              [float(v) for v in sample.position])
@@ -432,15 +589,41 @@ class DashboardState:
             self.feature = feature
             self.posterior = posterior
             self.hmm_state = state
+            self.controller_decision = controller_decision
             if self.recording and self.file is not None:
+                rigid_bodies = {}
+                if self.optitrack_monitor is not None:
+                    rigid_bodies = {
+                        str(rb_id): {
+                            "position": list(body.position),
+                            "rotation_xyzw": list(body.rotation_xyzw),
+                            "source_time_s": body.source_time_s,
+                            "age_s": round(body.age_s, 5),
+                            "mean_error_m": body.mean_error_m,
+                        }
+                        for rb_id, body in self.optitrack_monitor.snapshot(now).items()
+                    }
+                robot_telemetry = (
+                    self.rig.telemetry_snapshot(allow_connect=False)
+                    if self.rig is not None else
+                    {"available": False, "error": "rig not attached"}
+                )
                 record = {
                     "schema_version": 3,
                     "session_id": self.session_id,
                     "participant_id": self.participant_id,
                     "trial_id": self.trial_id,
+                    "block_label": self.block_label,
+                    "within_block_trial": self.within_block_trial,
+                    "controller_condition": self.controller_condition,
+                    "planned_event": self.planned_event,
+                    "collection_mode": self.collection_mode,
+                    "recorded_monotonic_s": round(now, 6),
+                    "recorded_utc_time": datetime.now(timezone.utc).isoformat(),
                     "t": round(xsens_sample.t, 6),
                     "source_time_s": xsens_sample.motive_timestamp,
                     "position": self.position,
+                    "optitrack_rigid_bodies": rigid_bodies,
                     "xsens_position": self.xsens_position,
                     "xsens_frame": self.xsens_frame,
                     "stale": self.optitrack_stale,
@@ -452,18 +635,66 @@ class DashboardState:
                     "ground_truth_event": self.event_label,
                     "hmm_state": state,
                     "hmm_posterior": posterior,
+                    "controller_decision": controller_decision,
+                    "controller_output_applied": self.controller_output_applied,
+                    "sync_marker_count": self.sync_marker_count,
                     "model_source": self.model_source,
                     "model_sha256": self.model_sha256,
                     "mvn_native_recording_confirmed": self.mvn_recording_confirmed,
                     "mvn_native_recording_reference": self.mvn_recording_reference,
+                    "motive_recording_reference": self.motive_recording_reference,
+                    "video_recording_reference": self.video_recording_reference,
+                    "robot_telemetry": robot_telemetry,
                 }
                 self.file.write(json.dumps(record, separators=(",", ":")) + "\n")
                 self.file.flush()
                 self.samples_written += 1
 
+    def _apply_controller_output_locked(self, decision: dict) -> None:
+        """Apply an opt-in research command and journal every command transition.
+
+        This is deliberately named research output. The UR speed slider is not a
+        safety-rated output and cannot close the independent safety-chain gate.
+        """
+        self.controller_output_applied = False
+        if not self.controller_output_enabled or self.rig is None:
+            decision["output_applied"] = False
+            decision["output_status"] = (
+                "disabled" if not self.controller_output_enabled else "rig_unavailable"
+            )
+            return
+        result = self.rig.apply_research_speed_fraction(
+            float(decision.get("speed_fraction", 0.0))
+        )
+        applied = bool(result.get("applied"))
+        self.controller_output_applied = applied
+        decision["output_applied"] = applied
+        decision["output_status"] = result.get("status", "unknown")
+        signature = (
+            decision.get("command"), decision.get("speed_fraction"),
+            applied, result.get("status"), result.get("error"),
+        )
+        if result.get("changed") or signature != self._last_controller_output_signature:
+            self._journal_event_locked(
+                "research_controller_command",
+                command=decision.get("command"),
+                speed_fraction=decision.get("speed_fraction"),
+                applied=applied,
+                status=result.get("status"),
+                error=result.get("error"),
+            )
+        self._last_controller_output_signature = signature
+
     def start_session(self, participant: object, trial: object,
                       mvn_recording_confirmed: bool = False,
-                      mvn_recording_reference: object = None) -> dict:
+                      mvn_recording_reference: object = None,
+                      block_label: object = None,
+                      within_block_trial: object = None,
+                      controller_condition: object = None,
+                      planned_event: object = None,
+                      collection_mode: object = "model_development",
+                      motive_recording_reference: object = None,
+                      video_recording_reference: object = None) -> dict:
         with self.lock:
             if self.recording:
                 raise ValueError("A recording is already active")
@@ -499,8 +730,12 @@ class DashboardState:
                 raise ValueError(
                     "Enter the visible Windows MVN recording filename or path."
                 )
+            motive_reference = str(motive_recording_reference or "").strip()
+            video_reference = str(video_recording_reference or "").strip()
             reference_key = native_reference.replace("\\", "/").casefold()
             for prior_path in self.output_dir.glob("*.jsonl"):
+                if prior_path.name.endswith(".events.jsonl"):
+                    continue
                 try:
                     with prior_path.open(encoding="utf-8") as prior_file:
                         prior_row = json.loads(next(
@@ -515,6 +750,61 @@ class DashboardState:
                         "That native MVN filename/path was already used by "
                         f"{prior_path.name}; create a unique native recording."
                     )
+            supplied_metadata = any(value is not None for value in (
+                block_label, within_block_trial, controller_condition, planned_event
+            ))
+            block = str(block_label or "").strip().upper()
+            controller = str(controller_condition or "").strip()
+            event = str(planned_event or "").strip().lower()
+            mode = str(collection_mode or "").strip()
+            if mode not in ALLOWED_COLLECTION_MODES:
+                raise ValueError(
+                    "Select participant study, qualification rehearsal, or model development"
+                )
+            try:
+                within = int(within_block_trial)
+            except (TypeError, ValueError):
+                within = 0
+            if mode in {"participant_study", "qualification"} and not supplied_metadata:
+                raise ValueError(
+                    "Structured study and qualification runs require the assigned block, trial, "
+                    "controller and event metadata"
+                )
+            if supplied_metadata:
+                if block not in ALLOWED_BLOCK_LABELS:
+                    raise ValueError("Select participant-facing block A, B or C")
+                if within not in {1, 2, 3}:
+                    raise ValueError("Select within-block trial 1, 2 or 3")
+                if controller not in ALLOWED_CONTROLLER_CONDITIONS:
+                    raise ValueError("Select the controller condition for this block")
+                if event not in ALLOWED_PLANNED_EVENTS:
+                    raise ValueError("Select clean, distractor or rapid intrusion")
+            if mode in {"participant_study", "qualification"}:
+                expected_controller, expected_event = assigned_study_slot(
+                    participant, block, within
+                )
+                if controller != expected_controller or event != expected_event:
+                    raise ValueError(
+                        f"Assigned study slot is {block}{within}: "
+                        f"{expected_controller}, {expected_event}"
+                    )
+                if not self.controller_output_enabled:
+                    raise ValueError(
+                        "Structured controller runs require the server to be launched "
+                        "with --enable-research-speed-output"
+                    )
+                if self.model_sha256 == "synthetic-baseline":
+                    raise ValueError(
+                        "Structured controller runs require a real fitted model artifact"
+                    )
+                if len(motive_reference) < 3:
+                    raise ValueError(
+                        "Enter the visible Motive take filename for this structured run"
+                    )
+                if len(video_reference) < 3:
+                    raise ValueError(
+                        "Enter the visible consented video filename for this structured run"
+                    )
             # Every recorded trial is an independent sequence. Do not let the
             # previous trial's HMM belief or derivative windows leak across it.
             self.hmm.reset()
@@ -522,45 +812,166 @@ class DashboardState:
             self.feature = None
             self.posterior = {}
             self.hmm_state = None
+            self.controller_decision = None
+            self.controller_output_applied = False
+            self._last_controller_output_signature = None
+            implementation = CONTROLLER_IMPLEMENTATIONS.get(controller)
+            self.active_controller = (
+                build_controller(implementation, self.config, self.hmm)
+                if implementation is not None else None
+            )
             self.participant_id = safe_id(participant, "P00")
             self.trial_id = safe_id(trial, "T00")
+            self.block_label = block or None
+            self.within_block_trial = within or None
+            self.controller_condition = controller or None
+            self.planned_event = event or None
+            self.collection_mode = mode
             stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
             self.session_id = f"{self.participant_id}-{self.trial_id}-{stamp}-{uuid.uuid4().hex[:6]}"
             self.output_dir.mkdir(parents=True, exist_ok=True)
             path = self.output_dir / f"{self.session_id}.jsonl"
             self.file = path.open("x", encoding="utf-8")
             self.recording_path = str(path.resolve())
+            event_path = self.output_dir / f"{self.session_id}.events.jsonl"
+            self.event_file = event_path.open("x", encoding="utf-8")
+            self.event_path = str(event_path.resolve())
             self.samples_written = 0
+            self.sync_marker_count = 0
             self.mvn_recording_confirmed = True
             self.mvn_recording_reference = native_reference[:500]
+            self.motive_recording_reference = motive_reference[:500] or None
+            self.video_recording_reference = video_reference[:500] or None
             self.label = "unlabelled"
             self.event_label = "none"
             self.guided_step = 0
             self.recording = True
+            self._journal_event_locked("trial_started")
             return {
                 "message": f"Recording {self.session_id}",
                 "path": self.recording_path,
                 "session_id": self.session_id,
                 "participant_id": self.participant_id,
                 "trial_id": self.trial_id,
+                "block_label": self.block_label,
+                "within_block_trial": self.within_block_trial,
+                "controller_condition": self.controller_condition,
+                "planned_event": self.planned_event,
+                "collection_mode": self.collection_mode,
+                "event_path": self.event_path,
                 "mvn_native_recording_reference": self.mvn_recording_reference,
+                "motive_recording_reference": self.motive_recording_reference,
+                "video_recording_reference": self.video_recording_reference,
                 "model_sha256": self.model_sha256,
+                "controller_implementation": implementation,
+                "controller_output_applied": self.controller_output_applied,
+                "controller_output_enabled": self.controller_output_enabled,
             }
 
-    def stop_session(self) -> dict:
+    def stop_session(self, outcome: str = "aborted") -> dict:
         with self.lock:
             if not self.recording:
                 raise ValueError("No recording is active")
+            if outcome not in {"completed", "aborted"}:
+                raise ValueError("Trial outcome must be completed or aborted")
+            self._journal_event_locked(
+                f"trial_{outcome}", samples=self.samples_written,
+                guided_step=self.guided_step,
+            )
+            manifest_path = Path(self.recording_path or "").with_suffix(".manifest.json")
+            manifest = {
+                "schema_version": 1,
+                "session_id": self.session_id,
+                "participant_id": self.participant_id,
+                "trial_id": self.trial_id,
+                "collection_mode": self.collection_mode,
+                "block_label": self.block_label,
+                "within_block_trial": self.within_block_trial,
+                "controller_condition": self.controller_condition,
+                "planned_event": self.planned_event,
+                "outcome": outcome,
+                "samples": self.samples_written,
+                "dashboard_jsonl": self.recording_path,
+                "event_jsonl": self.event_path,
+                "native_mvn": self.mvn_recording_reference,
+                "native_motive": self.motive_recording_reference,
+                "consented_video": self.video_recording_reference,
+                "robot_trace": "embedded in dashboard_jsonl.robot_telemetry",
+                "model_sha256": self.model_sha256,
+                "sync_marker_count": self.sync_marker_count,
+                "controller_output_enabled": self.controller_output_enabled,
+                "controller_output_last_applied": self.controller_output_applied,
+                "saved_utc": datetime.now(timezone.utc).isoformat(),
+            }
+            manifest_path.write_text(
+                json.dumps(manifest, indent=2) + "\n", encoding="utf-8"
+            )
+            self.manifest_path = str(manifest_path.resolve())
             self.recording = False
             if self.file is not None:
                 self.file.close()
                 self.file = None
+            if self.event_file is not None:
+                self.event_file.close()
+                self.event_file = None
             self.label = "unlabelled"
             self.event_label = "none"
             self.guided_step = None
+            self.active_controller = None
+            self.controller_decision = None
             self.mvn_recording_confirmed = False
             self.mvn_recording_reference = None
-            return {"message": f"Saved {self.samples_written} samples", "path": self.recording_path}
+            self.motive_recording_reference = None
+            self.video_recording_reference = None
+            return {
+                "message": f"Saved {self.samples_written} samples",
+                "path": self.recording_path,
+                "manifest_path": self.manifest_path,
+            }
+
+    def _journal_event_locked(self, kind: str, **payload) -> None:
+        if self.event_file is None:
+            return
+        row = {
+            "schema_version": 1,
+            "session_id": self.session_id,
+            "participant_id": self.participant_id,
+            "trial_id": self.trial_id,
+            "block_label": self.block_label,
+            "within_block_trial": self.within_block_trial,
+            "controller_condition": self.controller_condition,
+            "planned_event": self.planned_event,
+            "collection_mode": self.collection_mode,
+            "event": kind,
+            "monotonic_time_s": round(time.monotonic(), 6),
+            "utc_time": datetime.now(timezone.utc).isoformat(),
+            **payload,
+        }
+        self.event_file.write(json.dumps(row, separators=(",", ":")) + "\n")
+        self.event_file.flush()
+
+    def journal_event(self, kind: str, **payload) -> None:
+        with self.lock:
+            self._journal_event_locked(kind, **payload)
+
+    def mark_sync_event(self) -> dict:
+        with self.lock:
+            if not self.recording:
+                raise ValueError("Start recording before marking synchronization")
+            self.sync_marker_count += 1
+            self._journal_event_locked(
+                "shared_sync_marker",
+                marker_index=self.sync_marker_count,
+                xsens_sample_counter=(
+                    None if self.xsens_frame is None
+                    else self.xsens_frame.get("sample_counter")
+                ),
+                optitrack_age_s=self.optitrack_age_s,
+            )
+            return {
+                "message": f"Shared sync marker {self.sync_marker_count} recorded",
+                "sync_marker_count": self.sync_marker_count,
+            }
 
     def set_label(self, label: object) -> dict:
         value = str(label or "")
@@ -569,6 +980,7 @@ class DashboardState:
                 if not self.recording:
                     raise ValueError("Start recording before applying labels")
                 self.event_label = "hazard"
+                self._journal_event_locked("manual_event_label", event_label="hazard")
             return {"message": "Ground-truth event: hazard"}
         if value not in ALLOWED_PHASE_LABELS:
             raise ValueError(f"Unknown label: {value}")
@@ -577,7 +989,38 @@ class DashboardState:
                 raise ValueError("Start recording before applying labels")
             self.label = value
             self.event_label = "none"
+            self._journal_event_locked("manual_phase_label", phase=value)
         return {"message": f"Ground truth: {value}"}
+
+    def begin_planned_event_window(self, source: str = "robot_lift") -> dict:
+        """Open the assigned event while the robot is actually in motion."""
+        with self.lock:
+            if not self.recording:
+                raise ValueError("Start recording before opening an event window")
+            self.event_label = {
+                "rapid intrusion": "hazard",
+                "distractor": "distractor",
+                "clean": "none",
+            }.get(self.planned_event, "none")
+            self._journal_event_locked(
+                "planned_event_window_started",
+                source=source,
+                event_label=self.event_label,
+            )
+            return {"event_label": self.event_label, "source": source}
+
+    def end_planned_event_window(self, source: str = "robot_lift") -> dict:
+        with self.lock:
+            if not self.recording:
+                raise ValueError("No recording is active")
+            previous = self.event_label
+            self.event_label = "none"
+            self._journal_event_locked(
+                "planned_event_window_ended",
+                source=source,
+                event_label=previous,
+            )
+            return {"event_label": previous, "source": source}
 
     def advance_guided_protocol(self) -> dict:
         """Atomically advance the run instruction and its ground-truth label.
@@ -590,10 +1033,17 @@ class DashboardState:
                 raise ValueError("Start guided recording before advancing the protocol")
             if self.guided_step is None:
                 raise ValueError("This recording has no guided protocol state")
+            if self.guided_step == 0 and self.sync_marker_count < 1:
+                raise ValueError(
+                    "Record the shared sync marker before starting the approach"
+                )
             if self.guided_step >= len(GUIDED_PROTOCOL_LABELS) - 1:
                 raise ValueError("Guided sequence is complete; stop and save the run")
             self.guided_step += 1
             self.label, self.event_label = GUIDED_PROTOCOL_LABELS[self.guided_step]
+            self._journal_event_locked(
+                "guided_step_changed", guided_step=self.guided_step,
+                phase=self.label, event_label=self.event_label)
             return {
                 "message": (
                     f"Guided step {self.guided_step + 1}: {self.label}"
@@ -647,6 +1097,11 @@ class DashboardState:
                 "session_id": self.session_id,
                 "participant_id": self.participant_id,
                 "trial_id": self.trial_id,
+                "block_label": self.block_label,
+                "within_block_trial": self.within_block_trial,
+                "controller_condition": self.controller_condition,
+                "planned_event": self.planned_event,
+                "collection_mode": self.collection_mode,
                 "label": self.label,
                 "event_label": self.event_label,
                 "guided_step": self.guided_step,
@@ -655,6 +1110,14 @@ class DashboardState:
                 "samples_written": self.samples_written,
                 "calibration_elapsed_s": None if calibration_elapsed is None else round(calibration_elapsed, 1),
                 "mvn_native_recording_reference": self.mvn_recording_reference,
+                "motive_recording_reference": self.motive_recording_reference,
+                "video_recording_reference": self.video_recording_reference,
+                "event_path": self.event_path,
+                "manifest_path": self.manifest_path,
+                "controller_decision": self.controller_decision,
+                "controller_output_applied": self.controller_output_applied,
+                "controller_output_enabled": self.controller_output_enabled,
+                "sync_marker_count": self.sync_marker_count,
             }
 
 
@@ -670,6 +1133,11 @@ class RigControl:
         self._last_gripper_t = 0.0
         self._recv = None            # RTDEReceiveInterface, opened lazily
         self._recv_error: str | None = None
+        self._io = None              # RTDEIOInterface, opened only when opted in
+        self._output_lock = threading.Lock()
+        self._last_speed_fraction: float | None = None
+        self._last_output_attempt_at = 0.0
+        self._last_output_failure: dict | None = None
         self._poses = self._load_poses()
         self.fastening_complete = threading.Event()
         self.cycle_active = False
@@ -738,6 +1206,94 @@ class RigControl:
             "q": [round(float(v), 4) for v in (q or [])],
         }
 
+    def telemetry_snapshot(self, *, allow_connect: bool = True) -> dict:
+        """Read the current RTDE sample for trial logging without inventing defaults."""
+        recv = self._receiver() if allow_connect else self._recv
+        if recv is None:
+            return {"available": False, "error": self._recv_error or "RTDE not connected"}
+        getters = {
+            "actual_tcp_pose": "getActualTCPPose",
+            "actual_tcp_speed": "getActualTCPSpeed",
+            "actual_q": "getActualQ",
+            "actual_qd": "getActualQd",
+            "speed_scaling": "getSpeedScaling",
+            "target_speed_fraction": "getTargetSpeedFraction",
+            "robot_mode": "getRobotMode",
+            "safety_mode": "getSafetyMode",
+            "runtime_state": "getRuntimeState",
+        }
+        result = {"available": True, "sampled_monotonic_s": round(time.monotonic(), 6)}
+        try:
+            for key, name in getters.items():
+                fn = getattr(recv, name, None)
+                if fn is None:
+                    continue
+                value = fn()
+                if isinstance(value, (list, tuple)):
+                    result[key] = [round(float(v), 6) for v in value]
+                elif value is not None:
+                    result[key] = float(value) if isinstance(value, float) else value
+        except Exception as exc:
+            self._recv = None
+            return {"available": False, "error": f"{type(exc).__name__}: {exc}"}
+        return result
+
+    def apply_research_speed_fraction(self, speed_fraction: float) -> dict:
+        """Write the UR speed slider for the research controller.
+
+        This output is useful for experimental integration but is not a
+        safety-rated stop channel. Port reachability is checked before importing
+        the native RTDE client so an offline robot cannot freeze the ticker.
+        """
+        fraction = max(0.0, min(1.0, float(speed_fraction)))
+        with self._output_lock:
+            if (self._last_speed_fraction is not None and
+                    abs(self._last_speed_fraction - fraction) < 1e-6):
+                return {
+                    "applied": True, "changed": False,
+                    "status": "already_applied", "speed_fraction": fraction,
+                }
+            if self._io is None:
+                now = time.monotonic()
+                if (self._last_output_failure is not None and
+                        now - self._last_output_attempt_at < 1.0):
+                    return dict(self._last_output_failure)
+                self._last_output_attempt_at = now
+                try:
+                    with socket.create_connection(
+                        (self.robot_host, 30004), timeout=0.25
+                    ):
+                        pass
+                    from rtde_io import RTDEIOInterface
+                    self._io = RTDEIOInterface(self.robot_host)
+                except Exception as exc:
+                    self._io = None
+                    self._last_output_failure = {
+                        "applied": False, "changed": False,
+                        "status": "rtde_io_unavailable",
+                        "error": f"{type(exc).__name__}: {exc}",
+                        "speed_fraction": fraction,
+                    }
+                    return dict(self._last_output_failure)
+            try:
+                applied = bool(self._io.setSpeedSlider(fraction))
+            except Exception as exc:
+                self._io = None
+                return {
+                    "applied": False, "changed": False,
+                    "status": "write_failed",
+                    "error": f"{type(exc).__name__}: {exc}",
+                    "speed_fraction": fraction,
+                }
+            if applied:
+                self._last_speed_fraction = fraction
+                self._last_output_failure = None
+            return {
+                "applied": applied, "changed": applied,
+                "status": "applied" if applied else "robot_rejected",
+                "speed_fraction": fraction,
+            }
+
     def _dash(self, *commands: str) -> list[str]:
         """Send Dashboard-server commands; return one reply line per command."""
         out: list[str] = []
@@ -755,6 +1311,11 @@ class RigControl:
         try:
             r = self._dash("robotmode", "safetystatus", "programState",
                            "get loaded program", "running")
+            if len(r) != 5 or any(not reply.strip() for reply in r):
+                return {
+                    "reachable": False,
+                    "error": "Dashboard port opened but returned incomplete status",
+                }
             return {"reachable": True, "robotmode": r[0], "safety": r[1],
                     "program_state": r[2], "loaded": r[3], "running": r[4]}
         except OSError as exc:
@@ -1041,6 +1602,11 @@ class GuidedRunController:
         self.armed_step = None
         self.armed_at = 0.0
 
+    def _journal(self, kind: str, **payload) -> None:
+        writer = getattr(self.state, "journal_event", None)
+        if callable(writer):
+            writer(kind, **payload)
+
     def arm_step(self) -> dict:
         """Arm one physical action; a later, separate request must execute it."""
         with self.lock:
@@ -1118,7 +1684,14 @@ class GuidedRunController:
 
     def start(self, participant: object, trial: object,
               mvn_recording_confirmed: bool = False,
-              mvn_recording_reference: object = None) -> dict:
+              mvn_recording_reference: object = None,
+              block_label: object = None,
+              within_block_trial: object = None,
+              controller_condition: object = None,
+              planned_event: object = None,
+              collection_mode: object = "model_development",
+              motive_recording_reference: object = None,
+              video_recording_reference: object = None) -> dict:
         """Preflight the low, released rig before opening a guided recording."""
         with self.lock:
             self._clear_arm()
@@ -1134,9 +1707,18 @@ class GuidedRunController:
                     "Guided run requires the arm low with suction off; "
                     "use the manual recovery controls to release the current panel first"
                 )
-            result = self.state.start_session(
-                participant, trial, mvn_recording_confirmed,
-                mvn_recording_reference)
+            metadata = (block_label, within_block_trial,
+                        controller_condition, planned_event)
+            if any(value is not None for value in metadata):
+                result = self.state.start_session(
+                    participant, trial, mvn_recording_confirmed,
+                    mvn_recording_reference, block_label, within_block_trial,
+                    controller_condition, planned_event, collection_mode,
+                    motive_recording_reference, video_recording_reference)
+            else:
+                result = self.state.start_session(
+                    participant, trial, mvn_recording_confirmed,
+                    mvn_recording_reference)
             return {**result, "preflight": {
                 "pose": "pose1_low", "vacuum": vacuum,
                 "operator_clearance_m": self.motion_clearance_m,
@@ -1150,7 +1732,12 @@ class GuidedRunController:
                 raise ValueError("No guided recording is active")
             step = int(snap["guided_step"])
             self._require_armed(step)
+            if step == 0 and int(snap.get("sync_marker_count", 0)) < 1:
+                raise ValueError(
+                    "Record the shared sync marker before starting the approach"
+                )
             action: dict | None = None
+            self._journal("guided_action_requested", guided_step=step)
 
             if step == 2:  # panel aligned at the low gripper
                 action = self.rig.gripper_action("grip", "BOTH", int(vacuum))
@@ -1168,11 +1755,14 @@ class GuidedRunController:
                 # the blocking motion interval rather than recording a long
                 # stationary segment as "retreating".
                 self.state.set_label("unlabelled")
+                self.state.begin_planned_event_window(source="robot_lift")
                 try:
                     action = self.rig.goto_pose("pose2_top")
                 except Exception:
+                    self.state.end_planned_event_window(source="robot_lift")
                     self.state.set_label("retreating")
                     raise
+                self.state.end_planned_event_window(source="robot_lift")
                 action["operator_distance_m"] = round(distance, 3)
             elif step == 8:  # participant has retreated after the overhead task
                 distance = self._require_operator_clear()
@@ -1192,7 +1782,7 @@ class GuidedRunController:
                     raise ValueError(
                         f"Panel release failed: {action.get('error', 'unknown error')}"
                     )
-                saved = self.state.stop_session()
+                saved = self.state.stop_session(outcome="completed")
                 return {
                     **saved,
                     "completed": True,
@@ -1200,6 +1790,10 @@ class GuidedRunController:
                 }
 
             advanced = self.state.advance_guided_protocol()
+            if action is not None:
+                self._journal(
+                    "guided_action_completed", guided_step=step,
+                    action_summary=str(action)[:500])
             return {**advanced, "action": action}
 
 
@@ -1277,6 +1871,7 @@ class ApiHandler(BaseHTTPRequestHandler):
     catalog: RunCatalog
     allow_remote_control = False
     control_key = ""
+    _form_status_cache: tuple[float, dict] | None = None
 
     def _headers(self, status: int = 200) -> None:
         self.send_response(status)
@@ -1294,6 +1889,142 @@ class ApiHandler(BaseHTTPRequestHandler):
     def _json(self, value: dict, status: int = 200) -> None:
         self._headers(status)
         self.wfile.write(json.dumps(value).encode("utf-8"))
+
+    @classmethod
+    def _form_access_status(cls) -> dict:
+        now = time.monotonic()
+        if cls._form_status_cache is not None:
+            checked_at, payload = cls._form_status_cache
+            if now - checked_at < 60.0:
+                return payload
+        forms = {}
+        for stage, url in PARTICIPANT_FORM_URLS.items():
+            request = urllib.request.Request(
+                url, headers={"User-Agent": "Mozilla/5.0 HRC-form-preflight"}
+            )
+            try:
+                cafile = "/etc/ssl/cert.pem"
+                context = ssl.create_default_context(
+                    cafile=cafile if Path(cafile).is_file() else None
+                )
+                with urllib.request.urlopen(
+                    request, timeout=6, context=context
+                ) as response:
+                    status = int(response.status)
+                forms[stage] = {
+                    "accessible_without_login": status == 200,
+                    "responder_route_available": status == 200,
+                    "requires_monash_login": False,
+                    "http_status": status,
+                }
+            except urllib.error.HTTPError as exc:
+                # Monash-owned Forms return 401/403 to this server-side probe
+                # because it has no participant Google session. That is an
+                # authentication requirement, not evidence of a broken form.
+                login_required = int(exc.code) in {401, 403}
+                forms[stage] = {
+                    "accessible_without_login": False,
+                    "responder_route_available": login_required,
+                    "requires_monash_login": login_required,
+                    "http_status": int(exc.code),
+                    "error": str(exc.reason),
+                }
+            except Exception as exc:
+                forms[stage] = {
+                    "accessible_without_login": False,
+                    "responder_route_available": False,
+                    "requires_monash_login": False,
+                    "http_status": None,
+                    "error": f"{type(exc).__name__}: {exc}",
+                }
+        payload = {
+            "checked_utc": datetime.now(timezone.utc).isoformat(),
+            "forms": forms,
+            "all_accessible_without_login": all(
+                item["accessible_without_login"] for item in forms.values()
+            ),
+            "all_responder_routes_available": all(
+                item["responder_route_available"] for item in forms.values()
+            ),
+        }
+        cls._form_status_cache = (now, payload)
+        return payload
+
+    @classmethod
+    def _form_completion_status(cls, query: dict[str, list[str]]) -> dict:
+        """Check the privacy-minimal Apps Script bridge for one form handoff.
+
+        The bridge returns only whether an anonymous participant code exists in
+        the relevant response tab. Questionnaire answers never pass through the
+        dashboard service.
+        """
+        endpoint = os.environ.get("HRC_FORM_COMPLETION_URL", "").strip()
+        if not endpoint:
+            endpoint_file = Path("data/xsens/.form_completion_url")
+            if endpoint_file.is_file():
+                endpoint = endpoint_file.read_text(encoding="utf-8").strip()
+        token = os.environ.get("HRC_FORM_COMPLETION_TOKEN", "").strip()
+        if not token:
+            token_file = Path("data/xsens/.control_key")
+            if token_file.is_file():
+                token = token_file.read_text(encoding="utf-8").strip()
+        participant_id = safe_id((query.get("participant_id") or [""])[0], "")
+        stage = (query.get("stage") or [""])[0]
+        block = (query.get("block") or [""])[0].upper()
+        if stage not in PARTICIPANT_FORM_URLS or not participant_id:
+            raise ValueError("participant_id and a valid form stage are required")
+        if stage == "block" and block not in ALLOWED_BLOCK_LABELS:
+            raise ValueError("block must be A, B or C for block feedback")
+        if not endpoint or not token:
+            return {
+                "tracking_configured": False,
+                "tracking_available": False,
+                "submitted": False,
+                "participant_id": participant_id,
+                "stage": stage,
+                "block": block or None,
+            }
+        if not endpoint.startswith("https://"):
+            raise ValueError("HRC_FORM_COMPLETION_URL must use HTTPS")
+        params = urllib.parse.urlencode({
+            "participant_id": participant_id,
+            "stage": stage,
+            "block": block,
+            "token": token,
+        })
+        separator = "&" if "?" in endpoint else "?"
+        request = urllib.request.Request(
+            f"{endpoint}{separator}{params}",
+            headers={"User-Agent": "HRC-dashboard-form-completion/1.0"},
+        )
+        try:
+            cafile = "/etc/ssl/cert.pem"
+            context = ssl.create_default_context(
+                cafile=cafile if Path(cafile).is_file() else None
+            )
+            with urllib.request.urlopen(request, timeout=6, context=context) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+            if payload.get("ok") is not True:
+                raise ValueError(str(payload.get("error") or "completion bridge rejected request"))
+            return {
+                "tracking_configured": True,
+                "tracking_available": True,
+                "submitted": payload.get("submitted") is True,
+                "participant_id": participant_id,
+                "stage": stage,
+                "block": block or None,
+                "checked_utc": datetime.now(timezone.utc).isoformat(),
+            }
+        except Exception as exc:
+            return {
+                "tracking_configured": True,
+                "tracking_available": False,
+                "submitted": False,
+                "participant_id": participant_id,
+                "stage": stage,
+                "block": block or None,
+                "error": f"{type(exc).__name__}: {exc}",
+            }
 
     def _xsens_reset(self, reset_type: str) -> dict:
         """Forward a reset to the Windows MVN laptop's keystroke listener.
@@ -1317,13 +2048,19 @@ class ApiHandler(BaseHTTPRequestHandler):
         self._headers(204)
 
     def do_GET(self) -> None:
-        path = self.path.split("?")[0]
+        parsed = urllib.parse.urlsplit(self.path)
+        path = parsed.path
+        query = urllib.parse.parse_qs(parsed.query)
         if path == "/api/status":
             self._json(self.state.snapshot())
         elif path == "/api/rig":
             self._json(self.rig.status_snapshot(self.state.snapshot()))
         elif path == "/api/catalog":
             self._json(self.catalog.catalog())
+        elif path == "/api/forms/status":
+            self._json(self._form_access_status())
+        elif path == "/api/forms/completion":
+            self._json(self._form_completion_status(query))
         elif path in ("/control", "/control/"):
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
@@ -1341,7 +2078,7 @@ class ApiHandler(BaseHTTPRequestHandler):
             rig_paths = {
                 "/api/gripper", "/api/robot", "/api/demo", "/api/cycle",
                 "/api/xsens/reset", "/api/protocol/start", "/api/protocol/arm",
-                "/api/protocol/complete",
+                "/api/protocol/complete", "/api/sync",
             }
             if self.path in rig_paths:
                 # rig control needs the key from any remote browser
@@ -1362,11 +2099,18 @@ class ApiHandler(BaseHTTPRequestHandler):
                     result = self.guided.start(
                         participant_id, self.catalog.next_trial(participant_id),
                         body.get("mvn_recording_confirmed") is True,
-                        body.get("mvn_recording_reference"))
+                        body.get("mvn_recording_reference"),
+                        body.get("block_label"), body.get("within_block_trial"),
+                        body.get("controller_condition"), body.get("planned_event"),
+                        body.get("collection_mode", "model_development"),
+                        body.get("motive_recording_reference"),
+                        body.get("video_recording_reference"))
                 elif self.path == "/api/protocol/arm":
                     result = self.guided.arm_step()
                 elif self.path == "/api/protocol/complete":
                     result = self.guided.complete_step(int(body.get("vacuum", 60)))
+                elif self.path == "/api/sync":
+                    result = self.state.mark_sync_event()
                 else:
                     if body.get("action") == "start":
                         result = self.rig.demo_start(int(body.get("vacuum", 60)))
@@ -1381,7 +2125,7 @@ class ApiHandler(BaseHTTPRequestHandler):
                     body.get("mvn_recording_confirmed") is True,
                     body.get("mvn_recording_reference"))
             elif self.path == "/api/session/stop":
-                result = self.state.stop_session()
+                result = self.state.stop_session(outcome="aborted")
             elif self.path == "/api/label":
                 result = self.state.set_label(body.get("label"))
             elif self.path == "/api/protocol/advance":
@@ -1390,7 +2134,8 @@ class ApiHandler(BaseHTTPRequestHandler):
                 result = self.state.mark_calibrated()
             elif self.path == "/api/participants":
                 result = self.catalog.save_participant(
-                    body.get("name"), body.get("participant_id"))
+                    body.get("name"), body.get("participant_id"),
+                    body.get("collection_mode", "model_development"))
             else:
                 return self._json({"error": "Not found"}, 404)
             self._json(result)
@@ -1412,13 +2157,23 @@ def main() -> int:
     parser.add_argument("--segment", type=int, default=PELVIS)
     parser.add_argument("--out", default="data/xsens")
     parser.add_argument(
+        "--enable-research-speed-output", action="store_true",
+        help=(
+            "apply controller speed fractions through the UR RTDE speed slider; "
+            "this is research integration, not a safety-rated stop channel"
+        ),
+    )
+    parser.add_argument(
         "--model",
         default="data/models/pilot_hmm.json",
         help="pilot-fitted HMM JSON (synthetic cold start when absent)",
     )
     args = parser.parse_args()
 
-    state = DashboardState(Path(args.out), args.segment, Path(args.model))
+    state = DashboardState(
+        Path(args.out), args.segment, Path(args.model),
+        enable_research_output=args.enable_research_speed_output,
+    )
     catalog = RunCatalog(Path(args.out))
     listener = XsensListener(
         state, port=args.udp_port, segment_id=args.segment,
@@ -1436,6 +2191,8 @@ def main() -> int:
     stop = threading.Event()
     rig = RigControl(state.config["robot"]["host"],
                      state.config["robot"].get("dashboard_port", 29999))
+    state.optitrack_monitor = optitrack_monitor
+    state.rig = rig
     guided = GuidedRunController(state, rig)
     key_file = Path(args.out) / ".control_key"
     if key_file.exists():
@@ -1468,6 +2225,10 @@ def main() -> int:
     print(f"Xsens MVN target: UDP {args.udp_port} · Position + Quaternion · segment {args.segment}")
     print(f"Recordings: {Path(args.out).resolve()}")
     print(f"Model: {state.model_source}")
+    print(
+        "Research speed output: "
+        + ("ENABLED (not safety-rated)" if state.controller_output_enabled else "disabled")
+    )
     try:
         server.serve_forever()
     except KeyboardInterrupt:

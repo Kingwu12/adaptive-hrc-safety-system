@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { QRCodeSVG } from "qrcode.react";
 
 type Feature = {
   d: number; d_dot: number; speed: number; v_proj: number;
@@ -26,6 +27,11 @@ type Status = {
   session_id: string | null;
   participant_id: string | null;
   trial_id: string | null;
+  block_label: string | null;
+  within_block_trial: number | null;
+  controller_condition: string | null;
+  planned_event: string | null;
+  collection_mode: CollectionMode;
   label: string;
   event_label: string;
   guided_step: number | null;
@@ -34,6 +40,10 @@ type Status = {
   samples_written: number;
   calibration_elapsed_s: number | null;
   mvn_native_recording_reference: string | null;
+  motive_recording_reference: string | null;
+  video_recording_reference: string | null;
+  manifest_path: string | null;
+  sync_marker_count: number;
   error?: string;
 };
 
@@ -41,6 +51,7 @@ type ParticipantSummary = {
   id: string;
   name: string;
   created_at: string | null;
+  collection_mode: CollectionMode;
   run_count: number;
   good_run_count: number;
   next_trial: string;
@@ -51,6 +62,10 @@ type RunSummary = {
   participant_id: string;
   participant_name: string;
   trial_id: string;
+  block_label?: string | null;
+  controller_condition?: string | null;
+  planned_event?: string | null;
+  collection_mode: CollectionMode;
   started_at: string;
   file_name: string;
   samples: number;
@@ -65,6 +80,14 @@ type RunSummary = {
 
 type Catalog = { participants: ParticipantSummary[]; runs: RunSummary[] };
 
+type CollectionMode = "participant_study" | "qualification" | "model_development";
+type StudySlot = {
+  block: "A" | "B" | "C";
+  withinBlockTrial: 1 | 2 | 3;
+  controller: "fixed zone" | "reactive SSM" | "predictive SSM";
+  event: "clean" | "distractor" | "rapid intrusion";
+};
+
 const EMPTY: Status = {
   connected: false, packets: 0, packet_rate_hz: 0, stale: true, age_s: null,
   position: null, xsens_segment_count: 0,
@@ -73,12 +96,52 @@ const EMPTY: Status = {
   model_source: "synthetic baseline", recording: false, session_id: null,
   model_sha256: "synthetic-baseline",
   participant_id: null, trial_id: null, label: "unlabelled", event_label: "none",
+  block_label: null, within_block_trial: null, controller_condition: null, planned_event: null,
+  collection_mode: "model_development",
   guided_step: null, guided_steps_total: 10,
   recording_path: null, samples_written: 0, calibration_elapsed_s: null,
   mvn_native_recording_reference: null,
+  motive_recording_reference: null, video_recording_reference: null,
+  manifest_path: null,
+  sync_marker_count: 0,
 };
 
 const STATES = ["approaching", "working", "retreating"];
+const CONTROLLER_ORDERS = [
+  ["fixed zone", "reactive SSM", "predictive SSM"],
+  ["fixed zone", "predictive SSM", "reactive SSM"],
+  ["reactive SSM", "fixed zone", "predictive SSM"],
+  ["reactive SSM", "predictive SSM", "fixed zone"],
+  ["predictive SSM", "fixed zone", "reactive SSM"],
+  ["predictive SSM", "reactive SSM", "fixed zone"],
+] as const;
+const EVENT_ORDERS = [
+  ["clean", "distractor", "rapid intrusion"],
+  ["clean", "rapid intrusion", "distractor"],
+  ["distractor", "clean", "rapid intrusion"],
+  ["distractor", "rapid intrusion", "clean"],
+  ["rapid intrusion", "clean", "distractor"],
+  ["rapid intrusion", "distractor", "clean"],
+] as const;
+
+function participantNumber(id: string) {
+  const match = id.match(/(\d+)/);
+  return Math.max(1, Number(match?.[1] || 1));
+}
+
+function studySchedule(participantId: string): StudySlot[] {
+  const seed = participantNumber(participantId) - 1;
+  const controllerOrder = CONTROLLER_ORDERS[seed % CONTROLLER_ORDERS.length];
+  return (["A", "B", "C"] as const).flatMap((block, blockIndex) => {
+    const events = EVENT_ORDERS[(seed + blockIndex) % EVENT_ORDERS.length];
+    return events.map((event, trialIndex) => ({
+      block,
+      withinBlockTrial: (trialIndex + 1) as 1 | 2 | 3,
+      controller: controllerOrder[blockIndex],
+      event,
+    }));
+  });
+}
 
 const GUIDED_PROTOCOL = [
   {
@@ -98,8 +161,8 @@ const GUIDED_PROTOCOL = [
   },
   {
     label: "retreating", title: "RETREAT TO THE START MARKER",
-    cue: "PARTICIPANT: let go, walk away, and return fully to the start marker. EXPERIMENTER: after the cell is clear, press once to arm and again to lift. Suction stays ON.",
-    next: "CELL CLEAR — LIFT ROBOT",
+    cue: "PARTICIPANT: let go and return fully to the marked start position. EXPERIMENTER: once tracking confirms the cell is clear, press twice to start the robot lift and the assigned event window together.",
+    next: "CELL CLEAR — START LIFT + EVENT WINDOW",
   },
   {
     label: "unlabelled", title: "SIMULATED INSTALLED PANEL — PREPARE",
@@ -112,14 +175,14 @@ const GUIDED_PROTOCOL = [
     next: "AT RAISED PANEL — START WORK",
   },
   {
-    label: "working", title: "WORK AND WAIT FOR THE CUE",
-    cue: "PARTICIPANT: perform the panel task normally on the panel held at the top. EXPERIMENTER: press the button at the exact instant you say the approved hazard cue.",
-    next: "PRESS & SAY ‘HAZARD’ TOGETHER",
+    label: "working", title: "WORK ON THE RAISED PANEL",
+    cue: "PARTICIPANT: perform the panel task normally on the panel held at the top. The assigned motion event already occurred during the robot lift.",
+    next: "WORK INTERVAL COMPLETE",
   },
   {
-    label: "working", event: "hazard", title: "PERFORM THE APPROVED CUED HAZARD",
-    cue: "Participant performs only the brief, pre-briefed simulated slip or near-approach. Keep the E-stop in reach.",
-    next: "PRESS THE INSTANT THE HAZARD MOTION ENDS",
+    label: "working", title: "COMPLETE THE PANEL TASK",
+    cue: "Continue the same task normally. Do not insert another hazard or distractor event.",
+    next: "TASK COMPLETE — RETREAT",
   },
   {
     label: "retreating", title: "CONTROLLED RECOVERY AND RETREAT",
@@ -134,6 +197,60 @@ const GUIDED_PROTOCOL = [
 ] as const;
 
 const PHYSICAL_STEPS = new Set([2, 3, 8, 9]);
+
+type ParticipantFormStage = "intake" | "block" | "end";
+type FormAccess = Record<ParticipantFormStage, {
+  accessible_without_login: boolean;
+  responder_route_available: boolean;
+  requires_monash_login: boolean;
+  http_status: number | null;
+  error?: string;
+}>;
+type FormCompletion = {
+  tracking_configured: boolean;
+  tracking_available: boolean;
+  submitted: boolean;
+  participant_id: string;
+  stage: ParticipantFormStage;
+  block?: string | null;
+  checked_utc?: string;
+  error?: string;
+};
+
+const PARTICIPANT_FORMS: Record<ParticipantFormStage, {
+  label: string;
+  baseUrl: string;
+  participantEntry: string;
+}> = {
+  intake: {
+    label: "Intake",
+    baseUrl: "https://docs.google.com/forms/d/e/1FAIpQLSce3ywyZ9OFginm-8-Kk2GqH5rSl4UxfDqiieAg5iomivF3xA/viewform",
+    participantEntry: "entry.266356234",
+  },
+  block: {
+    label: "Block feedback",
+    baseUrl: "https://docs.google.com/forms/d/e/1FAIpQLSeKgkIe5wdqEuFGnOuGxPpqD8ssQdSAR09oxrnwEQyzCPJviA/viewform",
+    participantEntry: "entry.528851826",
+  },
+  end: {
+    label: "End survey",
+    baseUrl: "https://docs.google.com/forms/d/e/1FAIpQLSd4gfX2ljOfRFxyeYq2B-haGNhENzA6dCjnmhYTIXGpVxc87g/viewform",
+    participantEntry: "entry.377617610",
+  },
+};
+
+function participantFormUrl(stage: ParticipantFormStage, participantId: string) {
+  const form = PARTICIPANT_FORMS[stage];
+  const params = new URLSearchParams({
+    usp: "pp_url",
+    [form.participantEntry]: participantId,
+  });
+  return `${form.baseUrl}?${params.toString()}`;
+}
+
+function studyFormKey(participantId: string, stage: ParticipantFormStage, block?: string) {
+  return `${participantId}:${stage === "block" ? `block-${block || "A"}` : stage}`;
+}
 
 function apiBase() {
   // Keep browser requests same-origin. Next proxies /api/* to the local
@@ -181,6 +298,9 @@ type Rig = {
  *  Treat that signature as "no pose", never as a reading. */
 function poseTrust(rig: Rig): { ok: boolean; label: string; detail: string } {
   const p = rig.pose;
+  if (rig.robot?.reachable === false) {
+    return { ok: false, label: "ROBOT OFFLINE", detail: rig.robot.error ?? "robot Dashboard status unavailable" };
+  }
   if (!p?.available) return { ok: false, label: "TCP UNREADABLE", detail: p?.error ?? "no receive interface" };
   const q = p.q ?? [];
   if (q.length && q.every((v) => Math.abs(v) < 1e-9)) {
@@ -225,20 +345,35 @@ export default function Home() {
   const [status, setStatus] = useState<Status>(EMPTY);
   const [reachable, setReachable] = useState(false);
   const [history, setHistory] = useState<Record<string, number[]>>({ distance: [], speed: [], acceleration: [] });
-  const [participant, setParticipant] = useState("P01");
+  const [workspaceMode, setWorkspaceMode] = useState<CollectionMode>("participant_study");
+  const [participant, setParticipant] = useState("");
   const [catalog, setCatalog] = useState<Catalog>({ participants: [], runs: [] });
   const [catalogRefresh, setCatalogRefresh] = useState(0);
   const [participantEditor, setParticipantEditor] = useState<"new" | "rename" | null>(null);
   const [participantName, setParticipantName] = useState("");
   const [mvnRecordingConfirmed, setMvnRecordingConfirmed] = useState(false);
   const [mvnRecordingReference, setMvnRecordingReference] = useState("");
-  const [message, setMessage] = useState("Start the local sensor service, then enable MVN Network Streamer.");
+  const [motiveRecordingReference, setMotiveRecordingReference] = useState("");
+  const [videoRecordingReference, setVideoRecordingReference] = useState("");
+  const blockLabel = "A";
+  const [withinBlockTrial] = useState("1");
+  const [controllerCondition] = useState("fixed zone");
+  const [plannedEvent] = useState("clean");
+  const [message, setMessage] = useState("");
   const [rig, setRig] = useState<Rig>({});
   const [rigBusy, setRigBusy] = useState<string | null>(null);
   const [rigResult, setRigResult] = useState<{ tag: string; ok: boolean; text: string; at: number } | null>(null);
   const [vacuum, setVacuum] = useState(60);
   const [rigMsg, setRigMsg] = useState("");
   const [tab, setTab] = useState<"operate" | "monitor">("operate");
+  const [phoneStage, setPhoneStage] = useState<ParticipantFormStage>("intake");
+  const [phoneFullscreen, setPhoneFullscreen] = useState(false);
+  const [verifiedForms, setVerifiedForms] = useState<Record<ParticipantFormStage, boolean>>({
+    intake: false, block: false, end: false,
+  });
+  const [formAccess, setFormAccess] = useState<FormAccess | null>(null);
+  const [formCompletion, setFormCompletion] = useState<FormCompletion | null>(null);
+  const [completedStudyForms, setCompletedStudyForms] = useState<Record<string, boolean>>({});
   const [protocolWorking, setProtocolWorking] = useState(false);
   const [armedStep, setArmedStep] = useState<number | null>(null);
   const protocolBusy = useRef(false);
@@ -256,6 +391,10 @@ export default function Home() {
         const next = await res.json() as Status;
         if (!live) return;
         setStatus(next); setReachable(true);
+        if (!next.connected || next.xsens_segment_count < 23 || !next.optitrack_connected
+          || next.calibration_elapsed_s == null || next.calibration_elapsed_s > 300) {
+          setMvnRecordingConfirmed(false);
+        }
         if (next.feature) {
           setHistory(old => ({
             distance: [...old.distance, next.feature!.d].slice(-90),
@@ -263,7 +402,12 @@ export default function Home() {
             acceleration: [...old.acceleration, next.feature!.a_proj].slice(-90),
           }));
         }
-      } catch { if (live) setReachable(false); }
+      } catch {
+        if (live) {
+          setReachable(false);
+          setMvnRecordingConfirmed(false);
+        }
+      }
     };
     poll(); const timer = setInterval(poll, 250);
     return () => { live = false; clearInterval(timer); };
@@ -276,7 +420,10 @@ export default function Home() {
         const res = await fetch(`${apiBase()}/api/rig`, { cache: "no-store" });
         if (!res.ok) return;
         const next = await res.json() as Rig;
-        if (live) setRig(next);
+        if (live) {
+          setRig(next);
+          if (!poseTrust(next).ok) setMvnRecordingConfirmed(false);
+        }
       } catch { /* rig offline is non-fatal */ }
     };
     pollRig(); const timer = setInterval(pollRig, 1500);
@@ -291,13 +438,67 @@ export default function Home() {
         const res = await fetch(`${apiBase()}/api/catalog`, { cache: "no-store" });
         if (!res.ok) return;
         const next = await res.json() as Catalog;
-        if (live) setCatalog(next);
+        if (live) {
+          setCatalog(next);
+          setParticipant(current => {
+            const available = next.participants.filter(row => row.collection_mode === workspaceMode);
+            return available.some(row => row.id === current) ? current : available[0]?.id ?? "";
+          });
+        }
       } catch { /* run history is non-critical to live safety control */ }
     };
     void pollCatalog();
     const timer = setInterval(pollCatalog, 10000);
     return () => { live = false; clearInterval(timer); };
-  }, [status.recording, catalogRefresh]);
+  }, [status.recording, catalogRefresh, workspaceMode]);
+
+  useEffect(() => {
+    let live = true;
+    const checkForms = async () => {
+      try {
+        const response = await fetch(`${apiBase()}/api/forms/status`, { cache: "no-store" });
+        if (!response.ok) return;
+        const payload = await response.json() as { forms: FormAccess };
+        if (live) setFormAccess(payload.forms);
+      } catch { /* Manual participant-device verification is still required. */ }
+    };
+    void checkForms();
+    const timer = setInterval(checkForms, 60000);
+    return () => { live = false; clearInterval(timer); };
+  }, []);
+
+  useEffect(() => {
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setPhoneFullscreen(false);
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, []);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      try {
+        const saved = window.localStorage.getItem("hrc-study-form-handoffs-v1");
+        if (saved) setCompletedStudyForms(JSON.parse(saved));
+      } catch { /* A form handoff can still be marked in this browser session. */ }
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  const setStudyFormComplete = (stage: ParticipantFormStage, block: string | undefined, complete: boolean) => {
+    if (!participant) return;
+    setCompletedStudyForms(old => {
+      const next = { ...old, [studyFormKey(participant, stage, block)]: complete };
+      try { window.localStorage.setItem("hrc-study-form-handoffs-v1", JSON.stringify(next)); } catch { /* non-fatal */ }
+      return next;
+    });
+  };
+
+  const chooseWorkspaceMode = (mode: CollectionMode) => {
+    setWorkspaceMode(mode);
+    const available = catalog.participants.filter(row => row.collection_mode === mode);
+    setParticipant(current => available.some(row => row.id === current) ? current : available[0]?.id ?? "");
+  };
 
   const rigPost = async (path: string, body: object, id?: string) => {
     const tag = id ?? path;
@@ -351,15 +552,29 @@ export default function Home() {
     }
   };
 
-  const startRecording = async () => {
+  const startRecording = async (slot?: StudySlot, references?: {
+    mvn: string;
+    motive: string;
+    video: string;
+  }) => {
+    const isStructuredRun = workspaceMode !== "model_development";
     const result = await post("/api/protocol/start", {
       participant_id: participant,
       mvn_recording_confirmed: mvnRecordingConfirmed,
-      mvn_recording_reference: mvnRecordingReference.trim(),
+      mvn_recording_reference: references?.mvn ?? mvnRecordingReference.trim(),
+      block_label: isStructuredRun ? (slot?.block ?? blockLabel) : undefined,
+      within_block_trial: isStructuredRun ? (slot?.withinBlockTrial ?? Number(withinBlockTrial)) : undefined,
+      controller_condition: isStructuredRun ? (slot?.controller ?? controllerCondition) : undefined,
+      planned_event: isStructuredRun ? (slot?.event ?? plannedEvent) : undefined,
+      collection_mode: workspaceMode,
+      motive_recording_reference: isStructuredRun ? (references?.motive ?? motiveRecordingReference.trim()) : undefined,
+      video_recording_reference: isStructuredRun ? (references?.video ?? videoRecordingReference.trim()) : undefined,
     });
     if (result) {
       setMvnRecordingConfirmed(false);
       setMvnRecordingReference("");
+      setMotiveRecordingReference("");
+      setVideoRecordingReference("");
     }
   };
 
@@ -372,6 +587,7 @@ export default function Home() {
     const result = await post("/api/participants", {
       name: participantName,
       participant_id: participantEditor === "rename" ? participant : undefined,
+      collection_mode: workspaceMode,
     });
     if (!result?.participant) return;
     const saved = result.participant;
@@ -383,6 +599,22 @@ export default function Home() {
     setParticipant(saved.id);
     setParticipantEditor(null);
     setParticipantName("");
+    setCatalogRefresh(value => value + 1);
+  };
+
+  const createStructuredParticipant = async () => {
+    const result = await post("/api/participants", {
+      name: "",
+      collection_mode: workspaceMode,
+    });
+    if (!result?.participant) return;
+    const saved = result.participant;
+    setCatalog(old => ({
+      ...old,
+      participants: [...old.participants.filter(row => row.id !== saved.id), saved]
+        .sort((a, b) => a.id.localeCompare(b.id)),
+    }));
+    setParticipant(saved.id);
     setCatalogRefresh(value => value + 1);
   };
 
@@ -469,7 +701,9 @@ export default function Home() {
         confirmGuidedAction();
       } else if (direct[event.key]) {
         event.preventDefault();
-        void post("/api/label", { label: direct[event.key] });
+        if (event.key !== "4" || (status.planned_event || plannedEvent) === "rapid intrusion") {
+          void post("/api/label", { label: direct[event.key] });
+        }
       }
     };
     window.addEventListener("keydown", onKeyDown);
@@ -482,24 +716,341 @@ export default function Home() {
   const dominant = useMemo(() => status.hmm_state || "waiting", [status.hmm_state]);
   const guidedIndex = Math.min(status.guided_step ?? 0, GUIDED_PROTOCOL.length - 1);
   const guided = GUIDED_PROTOCOL[guidedIndex];
-  const selectedParticipant = catalog.participants.find(row => row.id === participant);
-  const participantRuns = catalog.runs.filter(run => run.participant_id === participant);
+  const modeParticipants = catalog.participants.filter(row => row.collection_mode === workspaceMode);
+  const selectedParticipant = modeParticipants.find(row => row.id === participant);
+  const participantRuns = catalog.runs.filter(run =>
+    run.participant_id === participant && run.collection_mode === workspaceMode);
   const nextTrial = selectedParticipant?.next_trial ?? "T01";
+  const schedule = studySchedule(participant || "P01");
+  const acceptedStudyKeys = new Set(participantRuns
+    .filter(run => run.quality.grade === "good")
+    .map(run => `${run.block_label}-${run.within_block_trial}`));
+  const nextStudySlot = schedule.find(slot =>
+    !acceptedStudyKeys.has(`${slot.block}-${slot.withinBlockTrial}`));
+  const acceptedStudyRuns = acceptedStudyKeys.size;
+  const intakeComplete = !!completedStudyForms[studyFormKey(participant, "intake")];
+  const blockAFormComplete = !!completedStudyForms[studyFormKey(participant, "block", "A")];
+  const blockBFormComplete = !!completedStudyForms[studyFormKey(participant, "block", "B")];
+  const blockCFormComplete = !!completedStudyForms[studyFormKey(participant, "block", "C")];
+  const finalFormComplete = !!completedStudyForms[studyFormKey(participant, "end")];
+  const robotPose = poseTrust(rig);
+  const calibrationReady = calibration != null && calibration <= 300;
+  const initialRigReady = reachable
+    && xsensComplete
+    && status.optitrack_connected
+    && robotPose.ok
+    && calibrationReady;
+  const dueStudyForm: { stage: ParticipantFormStage; block?: "A" | "B" | "C"; title: string } | null = !participant ? null
+    : !intakeComplete ? { stage: "intake", title: "Complete intake" }
+      : acceptedStudyRuns >= 3 && !blockAFormComplete ? { stage: "block", block: "A", title: "Complete Block A feedback" }
+        : acceptedStudyRuns >= 6 && !blockBFormComplete ? { stage: "block", block: "B", title: "Complete Block B feedback" }
+          : acceptedStudyRuns >= 9 && !blockCFormComplete ? { stage: "block", block: "C", title: "Complete Block C feedback" }
+            : acceptedStudyRuns >= 9 && !finalFormComplete ? { stage: "end", title: "Complete final survey and debrief" }
+              : null;
+  const flowSteps = [
+    { label: "1 · Intake", complete: intakeComplete, current: dueStudyForm?.stage === "intake" },
+    { label: "2 · Suit & calibrate", complete: acceptedStudyRuns > 0 || initialRigReady, current: intakeComplete && acceptedStudyRuns === 0 && !dueStudyForm && !initialRigReady },
+    { label: "3 · Block A", complete: acceptedStudyRuns >= 3, current: acceptedStudyRuns < 3 && intakeComplete && !dueStudyForm && (acceptedStudyRuns > 0 || initialRigReady) },
+    { label: "4 · Block A form", complete: blockAFormComplete, current: dueStudyForm?.stage === "block" && dueStudyForm.block === "A" },
+    { label: "5 · Block B", complete: acceptedStudyRuns >= 6, current: acceptedStudyRuns >= 3 && acceptedStudyRuns < 6 && !dueStudyForm },
+    { label: "6 · Block B form", complete: blockBFormComplete, current: dueStudyForm?.stage === "block" && dueStudyForm.block === "B" },
+    { label: "7 · Block C", complete: acceptedStudyRuns >= 9, current: acceptedStudyRuns >= 6 && acceptedStudyRuns < 9 && !dueStudyForm },
+    { label: "8 · Block C form", complete: blockCFormComplete, current: dueStudyForm?.stage === "block" && dueStudyForm.block === "C" },
+    { label: "9 · Final form & debrief", complete: finalFormComplete, current: dueStudyForm?.stage === "end" },
+  ];
+  const currentFlowIndex = Math.max(0, flowSteps.findIndex(step => step.current));
+  const currentFlowStep = flowSteps[currentFlowIndex];
+  const currentFlowLabel = currentFlowStep.label.replace(/^\d+\s*·\s*/, "");
+  const activePlannedEvent = status.recording ? (status.planned_event || plannedEvent) : plannedEvent;
+  const guidedTitle = guidedIndex === 3
+    ? activePlannedEvent === "rapid intrusion" ? "PERFORM THE APPROVED RAPID INTRUSION"
+      : activePlannedEvent === "distractor" ? "PERFORM THE APPROVED DISTRACTOR"
+        : "CLEAN CONTROL WINDOW — CONTINUE NORMALLY"
+    : guided.title;
+  const guidedCue = guidedIndex === 3
+    ? activePlannedEvent === "rapid intrusion"
+      ? "After the second confirmation starts the robot lift, give the synchronized cue. The pre-briefed operator performs only the approved rapid movement toward the validated protected volume, then immediately retreats. Keep the E-stop in reach."
+      : activePlannedEvent === "distractor"
+        ? "After the second confirmation starts the robot lift, give the synchronized cue for the pre-briefed distractor that stays outside the protected volume."
+        : "Start the same robot lift but give no event cue; the participant remains at the marked start position."
+    : guided.cue;
+  const guidedNext = guided.next;
+  const activePhoneStage = dueStudyForm?.stage ?? phoneStage;
+  const activePhoneBlock = dueStudyForm?.block ?? blockLabel;
+  const phoneUrl = participantFormUrl(activePhoneStage, participant);
+  const phoneTitle = activePhoneStage === "intake" ? "Before the suit goes on"
+    : activePhoneStage === "block" ? `After all three trials in Block ${activePhoneBlock}`
+      : "After Blocks A, B and C are complete";
+  const phoneInstruction = activePhoneStage === "intake"
+    ? "Scan once, confirm the prefilled participant ID, then complete the intake questions."
+    : activePhoneStage === "block"
+      ? `Scan once after Block ${activePhoneBlock}. Confirm the prefilled ID and select Block ${activePhoneBlock} in the first question.`
+      : "Scan once at the very end and complete the final comparison questions.";
+  const isQualification = workspaceMode === "qualification";
+  const activeFormAccess = formAccess?.[activePhoneStage];
+  const formRouteBlocked = activeFormAccess?.accessible_without_login === false;
+  const currentFormReady = activeFormAccess?.accessible_without_login === true;
+  const formStatusText = formRouteBlocked
+    ? `PUBLIC ACCESS BLOCKED (${activeFormAccess?.http_status ?? "network"})`
+    : currentFormReady
+      ? "PUBLIC LINK ONLINE"
+      : "CHECKING PUBLIC LINK";
+  const dueFormStage = dueStudyForm?.stage;
+  const dueFormBlock = dueStudyForm?.block;
+
+  useEffect(() => {
+    if (!participant || !dueFormStage || !currentFormReady) return;
+    let live = true;
+    const checkCompletion = async () => {
+      const params = new URLSearchParams({
+        participant_id: participant,
+        stage: dueFormStage,
+      });
+      if (dueFormBlock) params.set("block", dueFormBlock);
+      try {
+        const response = await fetch(`${apiBase()}/api/forms/completion?${params}`, { cache: "no-store" });
+        if (!response.ok) return;
+        const payload = await response.json() as FormCompletion;
+        if (!live) return;
+        setFormCompletion(payload);
+        if (payload.tracking_available && payload.submitted) {
+          const key = studyFormKey(participant, dueFormStage, dueFormBlock);
+          setCompletedStudyForms(old => {
+            const next = { ...old, [key]: true };
+            try { window.localStorage.setItem("hrc-study-form-handoffs-v1", JSON.stringify(next)); } catch { /* non-fatal */ }
+            return next;
+          });
+        }
+      } catch { /* The manual confirmation remains available if the bridge is offline. */ }
+    };
+    void checkCompletion();
+    const timer = setInterval(checkCompletion, 3000);
+    return () => { live = false; clearInterval(timer); };
+  }, [participant, dueFormStage, dueFormBlock, currentFormReady]);
+  const activeFormCompletion = formCompletion
+    && formCompletion.participant_id === participant
+    && formCompletion.stage === dueFormStage
+    && (dueFormStage !== "block" || formCompletion.block === dueFormBlock)
+    ? formCompletion
+    : null;
+  const defaultMvnReference = `${participant}-${nextTrial}.mvn`;
+  const defaultMotiveReference = `${participant}-${nextTrial}.tak`;
+  const defaultVideoReference = `${participant}-${nextTrial}.mp4`;
+  const effectiveRecordingReferences = {
+    mvn: mvnRecordingReference.trim() || defaultMvnReference,
+    motive: motiveRecordingReference.trim() || defaultMotiveReference,
+    video: videoRecordingReference.trim() || defaultVideoReference,
+  };
+  const preflightChecks = [
+    { key: "service", label: "Sensor service", value: reachable ? "Online" : "Offline", ready: reachable },
+    { key: "xsens", label: "Xsens body", value: xsensComplete ? "23/23 segments" : `${status.xsens_segment_count}/23 segments`, ready: xsensComplete },
+    { key: "optitrack", label: "OptiTrack", value: status.optitrack_connected ? "Fresh stream" : "Waiting", ready: status.optitrack_connected },
+    { key: "robot", label: "Robot pose", value: robotPose.ok ? "Live pose" : robotPose.label, ready: robotPose.ok },
+    { key: "calibration", label: "Calibration", value: calibrationReady ? "Current" : calibration == null ? "Required" : "Expired", ready: calibrationReady },
+  ];
+  const readyPreflightCount = preflightChecks.filter(check => check.ready).length;
+  const currentPreflight = !reachable ? {
+    key: "service", owner: "SYSTEM SETUP", title: "Start the sensor service",
+    detail: "Run the local sensor service on this lab PC. This page will continue automatically when it is online.",
+  } : !xsensComplete ? {
+    key: "xsens", owner: "YOUR ACTION", title: "Connect the Xsens suit",
+    detail: "In MVN Analyze, start Network Streamer and wait for a complete 23-segment body stream.",
+  } : !status.optitrack_connected ? {
+    key: "optitrack", owner: "YOUR ACTION", title: "Start OptiTrack streaming",
+    detail: "Open Motive and start the configured stream. This page will continue when fresh tracking arrives.",
+  } : !robotPose.ok ? {
+    key: "robot", owner: "YOUR ACTION", title: "Make the robot pose trustworthy",
+    detail: robotPose.detail,
+  } : !calibrationReady ? {
+    key: "calibration", owner: "YOUR ACTION", title: "Calibrate the Xsens suit",
+    detail: "Complete the MVN calibration, then confirm it here. Calibration expires after five minutes.",
+  } : !mvnRecordingConfirmed ? {
+    key: "recordings", owner: "YOUR ACTION", title: "Start the three recordings",
+    detail: "Start MVN, Motive and video with the matching filenames below, then confirm that all three timers are moving.",
+  } : {
+    key: "ready", owner: "READY", title: `Start ${nextTrial}`,
+    detail: "All live systems and recordings are ready. Start the trial only when the participant and cell are clear.",
+  };
 
   return (
-    <main>
+    <main className={workspaceMode === "model_development" ? "developmentShell" : "studyShell"}>
       <header className="topbar">
         <div className="brand"><span className="brandMark">HRC</span><div><strong>Operator Motion Console</strong><small>Adaptive safety · Xsens MVN</small></div></div>
         <div className="statusCluster">
-          <span className={`pill ${reachable ? "ok" : "offline"}`}><i />Service {reachable ? "online" : "offline"}</span>
-          <span className={`pill ${xsensComplete ? "ok" : "offline"}`}><i />Xsens {status.connected ? `${status.xsens_segment_count}/23 segments` : "waiting"}</span>
-          <span className={`pill ${status.optitrack_connected ? "ok" : "offline"}`}><i />OptiTrack {status.optitrack_connected ? "tracking" : "waiting"}</span>
+          <span title={`Service ${reachable ? "online" : "offline"}`} className={`pill ${reachable ? "ok" : "offline"}`}><i />{reachable ? "Online" : "Offline"}</span>
+          <span title={`Xsens ${status.connected ? `${status.xsens_segment_count}/23 segments` : "waiting"}`} className={`pill ${xsensComplete ? "ok" : "offline"}`}><i />Xsens {status.connected ? `${status.xsens_segment_count}/23 segments` : "waiting"}</span>
+          <span title={`OptiTrack ${status.optitrack_connected ? "tracking" : "waiting"}`} className={`pill ${status.optitrack_connected ? "ok" : "offline"}`}><i />Opti {status.optitrack_connected ? "tracking" : "waiting"}</span>
+          {workspaceMode !== "model_development" && <button className="headerStop" disabled={rigBusy != null} onClick={() => rigPost("/api/robot", { action: "stop" }, "header_stop")}>STOP ARM</button>}
           <span className="clock">{status.packet_rate_hz.toFixed(1)} Hz</span>
         </div>
       </header>
 
+      <section className="modeChooser" aria-label="Collection workflow">
+        <button className={workspaceMode === "participant_study" ? "modeCard selected" : "modeCard"}
+          disabled={status.recording} onClick={() => chooseWorkspaceMode("participant_study")}>
+          <span>LIVE STUDY</span>
+          <strong>Participant study</strong>
+          <small>9 trials · reported data</small>
+        </button>
+        <button className={workspaceMode === "qualification" ? "modeCard selected development" : "modeCard development"}
+          disabled={status.recording} onClick={() => chooseWorkspaceMode("qualification")}>
+          <span>REHEARSAL</span>
+          <strong>Qualification</strong>
+          <small>Q-runs · not results</small>
+        </button>
+        <button className={workspaceMode === "model_development" ? "modeCard selected development" : "modeCard development"}
+          disabled={status.recording} onClick={() => chooseWorkspaceMode("model_development")}>
+          <span>TRAINING ONLY</span>
+          <strong>Model development</strong>
+          <small>Labelled pilot data</small>
+        </button>
+      </section>
+
+      {workspaceMode !== "model_development" ? (
+        <>
+          <section className="studyContextBar" aria-label="Current participant session step">
+            <div className="studyContextIdentity">
+              <span>{isQualification ? "QUALIFICATION" : "PARTICIPANT STUDY"}</span>
+              <div className="contextParticipantControl">
+                {modeParticipants.length > 0 && <select aria-label="Participant code" value={participant} onChange={event => setParticipant(event.target.value)}>
+                  {modeParticipants.map(row => <option key={row.id} value={row.id}>{row.id}</option>)}
+                </select>}
+                <button onClick={() => void createStructuredParticipant()}>+ New {isQualification ? "Q code" : "participant"}</button>
+              </div>
+            </div>
+            <div className="currentStepChip">
+              <span>STEP {currentFlowIndex + 1} OF {flowSteps.length}</span>
+              <strong>{participant ? currentFlowLabel : isQualification ? "Create Q code" : "Create participant"}</strong>
+            </div>
+            <div className="studyCounter"><strong>{acceptedStudyRuns}/9</strong><span>trials accepted</span></div>
+          </section>
+
+          {status.recording && (
+            <section className={`runDirector label-${status.event_label === "hazard" ? "hazard" : guided.label}`} aria-live="polite">
+              <div className="runDirectorHead">
+                <span>LIVE {isQualification ? "QUALIFICATION" : "PARTICIPANT"} RUN · BLOCK {status.block_label} · TRIAL {status.within_block_trial} · STEP {guidedIndex + 1}/{GUIDED_PROTOCOL.length}</span>
+                <strong>PHASE: {status.label.toUpperCase()} · EVENT: {status.event_label.toUpperCase()}</strong>
+              </div>
+              <h2>{guidedTitle}</h2>
+              <p>{guidedCue}</p>
+              {guidedIndex === 0 && <button className="syncMarker" onClick={() => void post("/api/sync")}>
+                {status.sync_marker_count > 0 ? `✓ Sync marker ${status.sync_marker_count} recorded` : "Record visible shared sync marker"}
+              </button>}
+              {guidedIndex >= 3 && guidedIndex <= 8 && <div className="simPanelNote">No top fixture: suction stays ON while the panel is overhead. Never release an unsupported panel.</div>}
+              <button onClick={confirmGuidedAction} disabled={protocolWorking}>{protocolWorking ? "CHECKING / WORKING…" : armedStep === guidedIndex ? `PRESS AGAIN NOW — ${guidedNext}` : guidedNext}</button>
+              <button className="runAbort" onClick={() => void abortRecording()}>Abort safely &amp; preserve attempt</button>
+              <small>Advance only at the real phase boundary. Robot motion and suction actions require a deliberate second press.</small>
+            </section>
+          )}
+
+          <section className="studyLayout">
+            {!status.recording && <article className="panel oneStepCard">
+              {!participant ? (
+                <div className="oneStepAction emptyAction">
+                  <span>STEP 1</span>
+                  <h2>{isQualification ? "Create a rehearsal code" : "Create an anonymous participant code"}</h2>
+                  <p>{isQualification
+                    ? "Use a Q-code for this rehearsal. Qualification runs stay separate from participant results."
+                    : "This anonymous code links every trial file and questionnaire. No participant name is required."}</p>
+                  <button className="stepPrimary" onClick={() => void createStructuredParticipant()}>Create next {isQualification ? "Q code" : "participant"}</button>
+                </div>
+              ) : dueStudyForm ? (
+                <div className="oneStepAction formStep">
+                  <div className="stepStatus"><span>PARTICIPANT HANDOFF</span><b className={currentFormReady ? "readyText" : "warnText"}>{formStatusText}</b></div>
+                  <div className="inlineFormHandoff">
+                    <div className={currentFormReady ? "inlineQr" : "inlineQr qrUnavailable"}>
+                      {currentFormReady ? <QRCodeSVG value={phoneUrl} size={244} marginSize={2} level="M" /> : <strong>FORM UNAVAILABLE</strong>}
+                    </div>
+                    <div className="inlineFormCopy">
+                      <span>{participant} · {dueStudyForm.stage === "block" ? `BLOCK ${dueStudyForm.block}` : dueStudyForm.stage.toUpperCase()}</span>
+                      <h2>{dueStudyForm.stage === "intake" ? "Scan to begin" : dueStudyForm.title}</h2>
+                      <p>{phoneInstruction}</p>
+                      {activeFormCompletion?.tracking_available ? (
+                        <div className="submissionWaiting" role="status"><i /><strong>Waiting for submission</strong><small>This advances automatically when the response reaches the Sheet.</small></div>
+                      ) : currentFormReady ? (
+                        <button className="manualSubmission" onClick={() => setStudyFormComplete(dueStudyForm.stage, dueStudyForm.block, true)}>Continue after the confirmation screen appears</button>
+                      ) : null}
+                      <details className="formFallback">
+                        <summary>QR not scanning?</summary>
+                        <a href={currentFormReady ? phoneUrl : undefined} target="_blank" rel="noreferrer">Open form on this computer</a>
+                      </details>
+                    </div>
+                  </div>
+                  {isQualification && <small className="qualificationNote">For the rehearsal, submit a clearly marked dummy response and verify its Sheet row.</small>}
+                </div>
+              ) : nextStudySlot ? (
+                <div className={`oneStepAction trialStep action-${currentPreflight.key}`}>
+                  <div className="stepStatus"><span>{currentPreflight.owner}</span><b>NEXT · {nextTrial}</b></div>
+                  <h2>{currentPreflight.title}</h2>
+                  <p>{currentPreflight.detail}</p>
+                  <div className="trialIdentity" aria-label="Next trial assignment">
+                    <strong>Block {nextStudySlot.block} · Trial {nextStudySlot.withinBlockTrial}</strong>
+                    <span>{nextStudySlot.controller}</span>
+                    <span>{nextStudySlot.event}</span>
+                  </div>
+
+                  {currentPreflight.key === "calibration" && (
+                    <button className="stepPrimary" onClick={() => post("/api/calibration/mark")}>Calibration complete</button>
+                  )}
+
+                  {currentPreflight.key === "recordings" && (
+                    <>
+                      <div className="recordingFiles" aria-label="Required recording filenames">
+                        <label><span>MVN</span><input value={mvnRecordingReference || defaultMvnReference} maxLength={500} onChange={event => setMvnRecordingReference(event.target.value)} /></label>
+                        <label><span>Motive</span><input value={motiveRecordingReference || defaultMotiveReference} maxLength={500} onChange={event => setMotiveRecordingReference(event.target.value)} /></label>
+                        <label><span>Video</span><input value={videoRecordingReference || defaultVideoReference} maxLength={500} onChange={event => setVideoRecordingReference(event.target.value)} /></label>
+                      </div>
+                      <button className="stepPrimary" onClick={() => setMvnRecordingConfirmed(true)}>All three recordings are running</button>
+                    </>
+                  )}
+
+                  {currentPreflight.key === "ready" && (
+                    <button className="stepPrimary" onClick={() => void startRecording(nextStudySlot, effectiveRecordingReferences)}>Start Block {nextStudySlot.block} · Trial {nextStudySlot.withinBlockTrial}</button>
+                  )}
+
+                  <details className="preflightDetails">
+                    <summary>{readyPreflightCount}/5 systems ready <span>View all checks</span></summary>
+                    <div className="preflightList" aria-label="Run preflight">
+                      {preflightChecks.map(check => (
+                        <div key={check.key} className={check.ready ? "ready" : "blocked"}>
+                          <i /><span>{check.label}</span><b>{check.value}</b>
+                        </div>
+                      ))}
+                    </div>
+                  </details>
+                </div>
+              ) : (
+                <div className="oneStepAction completeAction"><span>SESSION COMPLETE</span><h2>All required trials and forms are complete</h2><p>Debrief the participant and preserve the session manifest.</p></div>
+              )}
+              {message && (!dueStudyForm || status.recording) && <p className="feedback compactFeedback">{message}</p>}
+            </article>}
+
+            <details className="panel studyDetails">
+              <summary><span>Session map</span><b>{acceptedStudyRuns}/9 trials accepted</b></summary>
+              <div className="trialMatrix">
+                {schedule.map(slot => {
+                  const matches = participantRuns.filter(run => run.block_label === slot.block && run.within_block_trial === slot.withinBlockTrial);
+                  const accepted = matches.some(run => run.quality.grade === "good");
+                  const attempted = matches.length > 0;
+                  return <div key={`${slot.block}-${slot.withinBlockTrial}`} className={accepted ? "trialSlot accepted" : attempted ? "trialSlot repeat" : "trialSlot"}>
+                    <span>{slot.block}{slot.withinBlockTrial}</span><strong>{slot.event}</strong><small>{accepted ? "✓ accepted" : attempted ? "repeat" : "waiting"}</small>
+                  </div>;
+                })}
+              </div>
+            </details>
+
+            <details className="panel studyDetails">
+              <summary><span>Rig status &amp; recovery</span><b className={robotPose.ok ? "readyText" : "warnText"}>{robotPose.label}</b></summary>
+              <p className={robotPose.ok ? "studyRigOk" : "poseWarn"}>{robotPose.detail}</p>
+              <RigButton tag="stop_motion_study" label="STOP ARM MOTION — suction stays on" kind="stop" busy={rigBusy} result={rigResult} onPress={() => rigPost("/api/robot", { action: "stop" }, "stop_motion_study")} />
+              <div className="studyRecovery"><RigButton tag="grip_study" label="Suction on" busy={rigBusy} result={rigResult} onPress={() => rigPost("/api/gripper", { action: "grip", channel: "BOTH", vacuum }, "grip_study")} /><RigButton tag="down_study" label="Return to low pose" busy={rigBusy} result={rigResult} onPress={() => rigPost("/api/robot", { action: "go_down" }, "down_study")} /><RigButton tag="release_study" label="Release supported panel" busy={rigBusy} result={rigResult} onPress={() => rigPost("/api/gripper", { action: "release", channel: "BOTH" }, "release_study")} /></div>
+            </details>
+          </section>
+        </>
+      ) : (<>
+
       <section className="hero">
-        <div><p className="eyebrow">LIVE EXPERIMENT</p><h1>See what the safety system sees.</h1><p className="sub">Capture motion, attach ground-truth labels and inspect the exact signals entering the layered HMM.</p></div>
+        <div><p className="eyebrow">TRAINING ONLY — NEVER PARTICIPANT RESULTS</p><h1>Model development</h1><p className="sub">Label pilot motion, inspect signals, and retrain. Study and qualification runs stay separate.</p></div>
         <div className={`stateReadout state-${dominant}`}><span>INFERRED STATE</span><strong>{dominant}</strong><small>{status.model_source}</small></div>
       </section>
 
@@ -519,13 +1070,16 @@ export default function Home() {
       {tab === "operate" && status.recording && (
         <section className={`runDirector label-${status.event_label === "hazard" ? "hazard" : guided.label}`} aria-live="polite">
           <div className="runDirectorHead">
-            <span>LIVE RUN DIRECTOR · STEP {guidedIndex + 1}/{GUIDED_PROTOCOL.length}</span>
+            <span>LIVE RUN DIRECTOR · {status.block_label} / {status.controller_condition} / TRIAL {status.within_block_trial} · STEP {guidedIndex + 1}/{GUIDED_PROTOCOL.length}</span>
             <strong>PHASE: {status.label.toUpperCase()} · EVENT: {status.event_label.toUpperCase()}</strong>
           </div>
-          <h2>{guided.title}</h2>
-          <p>{guided.cue}</p>
+          <h2>{guidedTitle}</h2>
+          <p>{guidedCue}</p>
+          {guidedIndex === 0 && <button className="syncMarker" onClick={() => void post("/api/sync")}>
+            {status.sync_marker_count > 0 ? `✓ Sync marker ${status.sync_marker_count} recorded` : "Record visible shared sync marker"}
+          </button>}
           {guidedIndex >= 3 && guidedIndex <= 8 && <div className="simPanelNote">SIMULATION RULE: no top fixture means suction stays ON while the panel is at the top. Never release an unsupported panel overhead.</div>}
-          <button onClick={confirmGuidedAction} disabled={protocolWorking}>{protocolWorking ? "CHECKING / WORKING…" : armedStep === guidedIndex ? `PRESS AGAIN NOW — ${guided.next}` : guided.next}</button>
+          <button onClick={confirmGuidedAction} disabled={protocolWorking}>{protocolWorking ? "CHECKING / WORKING…" : armedStep === guidedIndex ? `PRESS AGAIN NOW — ${guidedNext}` : guidedNext}</button>
           <small>The dashboard operator advances each real phase. Suction and robot motion require two separate presses within five seconds.</small>
         </section>
       )}
@@ -553,7 +1107,7 @@ export default function Home() {
             <button onClick={() => { setParticipantEditor(null); setParticipantName(""); }}>Cancel</button>
           </div>}
           <div className="actions">
-            {!status.recording ? <button className="primary" disabled={!xsensComplete || !status.optitrack_connected || !participant || !mvnRecordingConfirmed || !mvnRecordingReference.trim() || calibration == null || calibration > 300} onClick={startRecording}>Start {nextTrial} guided run</button> : <button className="stop" onClick={() => void abortRecording()}>Abort / stop & save</button>}
+            {!status.recording ? <button className="primary" disabled={!xsensComplete || !status.optitrack_connected || !participant || !mvnRecordingConfirmed || !mvnRecordingReference.trim() || calibration == null || calibration > 300} onClick={() => void startRecording()}>Start {nextTrial} development run</button> : <button className="stop" onClick={() => void abortRecording()}>Abort / stop & save</button>}
           </div>
           {!status.recording && <label className="nativeReference"><span>Visible native MVN file name/path for this run</span><input value={mvnRecordingReference} maxLength={500} placeholder="e.g. C:\\MVN\\P06-T01.mvn" onChange={event => setMvnRecordingReference(event.target.value)} /></label>}
           {!status.recording && <label className="preflightCheck"><input type="checkbox" checked={mvnRecordingConfirmed} onChange={event => setMvnRecordingConfirmed(event.target.checked)} /><span>Native recording is active in MVN Analyze and its file path is visible.</span></label>}
@@ -579,10 +1133,51 @@ export default function Home() {
               <div className="runMetrics">
                 <span>{run.samples.toLocaleString()} samples</span><span>{run.duration_s.toFixed(1)} s</span><span>{run.rate_hz.toFixed(1)} Hz</span><span>{run.stale_percent.toFixed(2)}% stale</span>
               </div>
-              <div className="labelCoverage">{STATES.map(label => <span key={label}>{label} {run.labels[label] == null ? "—" : `${n(run.labels[label], 1)}s`}</span>)}<span>hazard event {run.events?.hazard ?? 0} frames</span></div>
+              <div className="labelCoverage">{STATES.map(label => <span key={label}>{label} {run.labels[label] == null ? "—" : `${n(run.labels[label], 1)}s`}</span>)}<span>{run.planned_event || "legacy event"}: {(run.events?.hazard ?? 0) + (run.events?.distractor ?? 0)} frames</span></div>
               <p>{run.quality.reasons.join(" · ")}</p>
             </div>)}
           </div>
+        </article>
+
+        <article className="panel participantPhone">
+          <div className="panelHead">
+            <div><p className="kicker">03 · PARTICIPANT PHONE</p><h2>One QR, only when due</h2></div>
+            <span className={currentFormReady ? "phoneReady" : "warnText"}>{formStatusText}</span>
+          </div>
+          <p className="phoneRule">Questionnaires happen five times: intake once, after each three-trial block, and at the end. Never interrupt an individual trial for a form.</p>
+          <div className="phoneStages" role="group" aria-label="Participant questionnaire stage">
+            {(["intake", "block", "end"] as ParticipantFormStage[]).map(stage => (
+              <button key={stage} className={phoneStage === stage ? "selected" : ""}
+                disabled={status.recording} onClick={() => setPhoneStage(stage)}>
+                {stage === "block" ? `Block ${blockLabel}` : PARTICIPANT_FORMS[stage].label}
+                <small>{verifiedForms[stage] ? "✓ tested" : "not tested"}</small>
+              </button>
+            ))}
+          </div>
+          <div className={`phoneHandoff ${status.recording ? "locked" : ""}`}>
+            <div className="phoneCopy">
+              <span>{status.recording ? "NOT DURING A RUN" : `${participant} · ${PARTICIPANT_FORMS[phoneStage].label.toUpperCase()}`}</span>
+              <strong>{status.recording ? "Participant continues the physical task" : phoneTitle}</strong>
+              <p>{status.recording ? "The questionnaire stays hidden until the run is safely saved." : phoneInstruction}</p>
+              {!status.recording && phoneStage === "block" && <em>Controller identity is never shown to the participant.</em>}
+            </div>
+            {!status.recording && currentFormReady && (
+              <button className="qrButton" onClick={() => setPhoneFullscreen(true)} aria-label={`Show ${PARTICIPANT_FORMS[phoneStage].label} QR full screen`}>
+                <QRCodeSVG value={phoneUrl} size={154} marginSize={2} level="M" />
+                <span>Tap to enlarge</span>
+              </button>
+            )}
+            {!status.recording && !currentFormReady && (
+              <div className="qrLocked"><strong>QR LOCKED</strong><span>Test responder access first</span></div>
+            )}
+          </div>
+          {!status.recording && <div className="formPreflight">
+            <a href={phoneUrl} target="_blank" rel="noreferrer">Open {PARTICIPANT_FORMS[phoneStage].label} test link ↗</a>
+            <label><input type="checkbox" disabled={formRouteBlocked} checked={verifiedForms[phoneStage]} onChange={event => setVerifiedForms(old => ({ ...old, [phoneStage]: event.target.checked }))} />
+              <span>{formRouteBlocked ? "Set responder access to Anyone with the link." : "I opened this on a participant phone without a Monash login and a response can be submitted."}</span>
+            </label>
+          </div>}
+          <p className="phoneDataNote">The phone writes directly to the existing Google Form response tabs. The Sheet remains the background research record, not another screen the participant has to navigate.</p>
         </article>
 
         <article className="panel signals">
@@ -601,18 +1196,18 @@ export default function Home() {
           <p className="help">The experimenter advances the protocol at each real phase onset. The active label then persists on every frame until the next cue; the participant never touches this console.</p>
           <div className="guidedRun">
             <span>GUIDED RUN · STEP {guidedIndex + 1}/{GUIDED_PROTOCOL.length} · {status.label.toUpperCase()}</span>
-            <strong>{guided.title}</strong>
-            <p>{guided.cue}</p>
+            <strong>{guidedTitle}</strong>
+            <p>{guidedCue}</p>
             <small>Hold each labelled state for at least 2 seconds. Press Enter or use the button.</small>
             <button className="protocolNext" disabled={!status.recording || status.guided_step == null || protocolWorking} onClick={confirmGuidedAction}>
-              {protocolWorking ? "CHECKING / WORKING…" : armedStep === guidedIndex ? `PRESS AGAIN NOW — ${guided.next}` : guided.next}
+              {protocolWorking ? "CHECKING / WORKING…" : armedStep === guidedIndex ? `PRESS AGAIN NOW — ${guidedNext}` : guidedNext}
             </button>
           </div>
           <p className="manualLabelTitle">Manual label override — recovery/debugging only</p>
           <div className="labelButtons">{STATES.map(s => <button key={s} className={status.label === s ? "selected" : ""} disabled={!status.recording} onClick={() => post("/api/label", { label: s })}>{s}</button>)}</div>
-          <button className="unlabel" disabled={!status.recording} onClick={() => post("/api/label", { label: "hazard" })}>Mark hazard event (phase stays unchanged)</button>
+          <button className="unlabel" disabled={!status.recording || activePlannedEvent !== "rapid intrusion"} onClick={() => post("/api/label", { label: "hazard" })}>Mark rapid-intrusion event (phase stays unchanged)</button>
           <button className="unlabel" disabled={!status.recording} onClick={() => post("/api/label", { label: "unlabelled" })}>Mark transition / unlabelled</button>
-          <p className="shortcutHelp"><kbd>Enter</kbd> next guided phase · <kbd>1</kbd> approach · <kbd>2</kbd> work · <kbd>3</kbd> retreat · <kbd>4</kbd> hazard · <kbd>0</kbd> unlabelled</p>
+          <p className="shortcutHelp"><kbd>Enter</kbd> next guided phase · <kbd>1</kbd> approach · <kbd>2</kbd> work · <kbd>3</kbd> retreat · <kbd>4</kbd> rapid intrusion (planned trials only) · <kbd>0</kbd> unlabelled</p>
         </article>
 
         <article className="panel probabilities">
@@ -720,6 +1315,20 @@ export default function Home() {
           <p className="feedback">{rigMsg || (rig.robot?.program_state ?? "")}</p>
         </article>
       </section>
+      </>)}
+      {phoneFullscreen && !status.recording && currentFormReady && (
+        <div className="participantOverlay" role="dialog" aria-modal="true" aria-label="Participant questionnaire QR">
+          <button className="overlayClose" onClick={() => setPhoneFullscreen(false)} aria-label="Close participant view">Close ×</button>
+          <div className="participantCard">
+            <span>PARTICIPANT {participant}</span>
+            <h2>{phoneTitle}</h2>
+            <p>{phoneInstruction}</p>
+            <div className="participantQr"><QRCodeSVG value={phoneUrl} size={340} marginSize={3} level="M" /></div>
+            <strong>Scan with your phone camera</strong>
+            <small>Your participant ID is already filled in. Ask the experimenter if the form does not open.</small>
+          </div>
+        </div>
+      )}
       <footer><span>Data remains on this lab PC</span><span>{status.recording_path || "No active recording"}</span></footer>
     </main>
   );

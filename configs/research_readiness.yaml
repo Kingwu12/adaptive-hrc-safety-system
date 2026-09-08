@@ -39,6 +39,20 @@ gates:
     complete: false
     evidence: null
     requirement: Replay and then witness each controller condition driving the same live command path and logs.
+  synchronised_objective_logging:
+    complete: false
+    evidence: null
+    requirement: >-
+      For every trial preserve aligned schema-v3 Xsens, raw OptiTrack orientation/quality,
+      high-rate robot state/command telemetry, event timestamps and consented video with a
+      shared sync marker; prove that every frozen objective outcome can be recomputed.
+  participant_data_flow:
+    complete: false
+    evidence: null
+    requirement: >-
+      Complete one nine-trial mock participant with unique participant/trial IDs, blinded
+      block/controller/event metadata, all Trial-log file checks, and successful intake,
+      per-block and end-form submissions from a participant device.
   protocol_and_ethics_reconciled:
     complete: false
     evidence: null

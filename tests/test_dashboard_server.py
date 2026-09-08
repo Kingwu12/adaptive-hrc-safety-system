@@ -7,14 +7,17 @@ import sys
 import threading
 import time
 import types
+import urllib.error
+from pathlib import Path
 
 import numpy as np
 import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from scripts.dashboard_server import (DashboardState, GuidedRunController,
-                                      RigControl, RunCatalog, safe_id)
+from scripts.dashboard_server import (ApiHandler, DashboardState,
+                                      GuidedRunController, RigControl,
+                                      RunCatalog, safe_id)
 
 
 def _full_xsens_frame() -> dict:
@@ -39,20 +42,87 @@ def test_safe_id_removes_path_characters():
     assert safe_id("../P 01/", "fallback") == "P-01"
 
 
-def _write_catalog_run(path, participant, trial, labels, stale_at=()):
+def test_form_probe_identifies_login_challenge_as_not_public(monkeypatch):
+    def login_required(*_args, **_kwargs):
+        raise urllib.error.HTTPError(
+            "https://docs.google.com/forms/", 401, "Unauthorized", None, None
+        )
+
+    monkeypatch.setattr("scripts.dashboard_server.urllib.request.urlopen", login_required)
+    ApiHandler._form_status_cache = None
+
+    result = ApiHandler._form_access_status()
+
+    assert result["all_responder_routes_available"] is True
+    assert result["all_accessible_without_login"] is False
+    assert all(item["requires_monash_login"] for item in result["forms"].values())
+    assert all(item["responder_route_available"] for item in result["forms"].values())
+
+
+def test_form_completion_reports_unconfigured_without_guessing_submission(monkeypatch, tmp_path):
+    monkeypatch.delenv("HRC_FORM_COMPLETION_URL", raising=False)
+    monkeypatch.delenv("HRC_FORM_COMPLETION_TOKEN", raising=False)
+    monkeypatch.chdir(tmp_path)
+
+    result = ApiHandler._form_completion_status({
+        "participant_id": ["P07"],
+        "stage": ["intake"],
+    })
+
+    assert result["tracking_configured"] is False
+    assert result["tracking_available"] is False
+    assert result["submitted"] is False
+
+
+def test_form_completion_bridge_returns_only_boolean_status(monkeypatch):
+    class FakeResponse:
+        status = 200
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def read(self):
+            return b'{"ok":true,"submitted":true}'
+
+    monkeypatch.setenv("HRC_FORM_COMPLETION_URL", "https://example.test/exec")
+    monkeypatch.setenv("HRC_FORM_COMPLETION_TOKEN", "test-secret")
+    monkeypatch.setattr(
+        "scripts.dashboard_server.urllib.request.urlopen",
+        lambda *_args, **_kwargs: FakeResponse(),
+    )
+
+    result = ApiHandler._form_completion_status({
+        "participant_id": ["P07"],
+        "stage": ["block"],
+        "block": ["B"],
+    })
+
+    assert result["tracking_available"] is True
+    assert result["submitted"] is True
+    assert "answers" not in result
+
+
+def _write_catalog_run(path, participant, trial, labels, stale_at=(),
+                       collection_mode=None):
     session = f"{participant}-{trial}-20260902-120000-abcdef"
     with path.open("w", encoding="utf-8") as handle:
         sample = 0
         for label in labels:
             for _ in range(300):
-                handle.write(json.dumps({
+                row = {
                     "session_id": session,
                     "participant_id": participant,
                     "trial_id": trial,
                     "t": sample / 60.0,
                     "stale": sample in stale_at,
                     "ground_truth": label,
-                }) + "\n")
+                }
+                if collection_mode is not None:
+                    row["collection_mode"] = collection_mode
+                handle.write(json.dumps(row) + "\n")
                 sample += 1
 
 
@@ -69,6 +139,7 @@ def test_run_catalog_lists_quality_names_and_next_trial(tmp_path):
     assert result["participants"][0]["next_trial"] == "T07"
     assert result["runs"][0]["quality"]["grade"] == "good"
     assert result["runs"][0]["quality"]["score"] == 100
+    assert result["runs"][0]["collection_mode"] == "model_development"
 
     saved = catalog.save_participant("Alex Example", "P01")
     assert saved["participant"]["name"] == "Alex Example"
@@ -76,6 +147,27 @@ def test_run_catalog_lists_quality_names_and_next_trial(tmp_path):
     assert created["participant"]["id"] == "P02"
     assert created["participant"]["next_trial"] == "T01"
     assert (tmp_path / "participants.json").exists()
+
+
+def test_catalog_separates_new_study_participants_from_legacy_development(tmp_path):
+    labels = [
+        "approaching", "working", "retreating", "approaching",
+        "working", "hazard", "retreating",
+    ]
+    _write_catalog_run(tmp_path / "legacy.jsonl", "P01", "T01", labels)
+    _write_catalog_run(
+        tmp_path / "study.jsonl", "P06", "T01", labels,
+        collection_mode="participant_study")
+    catalog = RunCatalog(tmp_path)
+    catalog.save_participant("", "P06", "participant_study")
+
+    result = catalog.catalog()
+    runs = {row["participant_id"]: row for row in result["runs"]}
+    participants = {row["id"]: row for row in result["participants"]}
+    assert runs["P01"]["collection_mode"] == "model_development"
+    assert runs["P06"]["collection_mode"] == "participant_study"
+    assert participants["P01"]["collection_mode"] == "model_development"
+    assert participants["P06"]["collection_mode"] == "participant_study"
 
 
 def test_run_catalog_marks_incomplete_short_attempt_for_repeat(tmp_path):
@@ -226,13 +318,23 @@ def test_dashboard_rejects_reused_native_recording_reference(tmp_path):
 
 
 def test_guided_protocol_persists_and_applies_labels(tmp_path):
-    state = DashboardState(tmp_path, segment_id=1)
+    state = DashboardState(
+        tmp_path, segment_id=1, model_path=Path("data/models/pilot_hmm.json"),
+        enable_research_output=True,
+    )
     state.on_xsens_frame(_full_xsens_frame())
     now = time.monotonic()
     state.on_sample(0.0, (2.0, 0.0, 1.0), True, now)
     state.optitrack_bridge.on_sample(0.0, (2.0, 0.0, 1.0), True, now)
     state.tick()
     state.mark_calibrated()
+    with pytest.raises(ValueError, match="Assigned study slot is A1"):
+        state.start_session(
+            "P07", "T-wrong", mvn_recording_confirmed=True,
+            mvn_recording_reference=r"C:\MVN\P07-T-wrong.mvn",
+            block_label="A", within_block_trial=1,
+            controller_condition="reactive SSM", planned_event="clean",
+            collection_mode="participant_study")
     state.start_session(
         "P01", "T-guided", mvn_recording_confirmed=True,
         mvn_recording_reference=r"C:\MVN\P01-T-guided.mvn")
@@ -241,6 +343,7 @@ def test_guided_protocol_persists_and_applies_labels(tmp_path):
     assert first["guided_step"] == 0
     assert first["label"] == "unlabelled"
 
+    state.mark_sync_event()
     state.advance_guided_protocol()
     second = state.snapshot()
     assert second["guided_step"] == 1
@@ -255,6 +358,105 @@ def test_guided_protocol_persists_and_applies_labels(tmp_path):
     stopped = state.snapshot()
     assert stopped["guided_step"] is None
     assert stopped["label"] == "unlabelled"
+
+
+def test_study_metadata_and_clean_event_are_logged_without_fake_hazard(tmp_path):
+    state = DashboardState(
+        tmp_path, segment_id=1, model_path=Path("data/models/pilot_hmm.json"),
+        enable_research_output=True,
+    )
+    state.on_xsens_frame(_full_xsens_frame())
+    now = time.monotonic()
+    state.on_sample(0.0, (2.0, 0.0, 1.0), True, now)
+    state.optitrack_bridge.on_sample(0.0, (2.0, 0.0, 1.0), True, now)
+    state.tick()
+    state.mark_calibrated()
+    state.start_session(
+        "P07", "T01", mvn_recording_confirmed=True,
+        mvn_recording_reference=r"C:\MVN\P07-T01.mvn",
+        block_label="A", within_block_trial=1,
+        controller_condition="fixed zone", planned_event="clean",
+        collection_mode="participant_study",
+        motive_recording_reference="P07-T01.tak",
+        video_recording_reference="P07-T01.mp4")
+    marker = state.mark_sync_event()
+    assert marker["sync_marker_count"] == 1
+
+    for _ in range(7):
+        state.advance_guided_protocol()
+    assert state.snapshot()["guided_step"] == 7
+    assert state.snapshot()["event_label"] == "none"
+
+    for index in range(1, 4):
+        later = now + index / 60.0
+        position = (2.0 - index * 0.01, 0.0, 1.0)
+        state.on_sample(index / 60.0, position, True, later)
+        state.optitrack_bridge.on_sample(index / 60.0, position, True, later)
+        state.tick()
+    result = state.stop_session()
+    assert Path(result["manifest_path"]).is_file()
+    manifest = json.loads(Path(result["manifest_path"]).read_text())
+    assert manifest["native_motive"] == "P07-T01.tak"
+    assert manifest["consented_video"] == "P07-T01.mp4"
+
+    rows = [json.loads(line) for line in Path(result["path"]).read_text().splitlines()]
+    row = next(item for item in rows
+               if (item.get("controller_decision") or {}).get("condition"))
+    assert row["block_label"] == "A"
+    assert row["within_block_trial"] == 1
+    assert row["controller_condition"] == "fixed zone"
+    assert row["planned_event"] == "clean"
+    assert row["collection_mode"] == "participant_study"
+    assert row["ground_truth_event"] == "none"
+    assert row["controller_decision"]["condition"] == "static"
+    assert row["controller_decision"]["command"] in {
+        "full_speed", "reduced_speed", "protective_stop",
+    }
+    assert row["controller_decision"]["output_applied"] is False
+    assert row["controller_output_applied"] is False
+    events = list(tmp_path.glob("*.events.jsonl"))
+    assert len(events) == 1
+    event_rows = [json.loads(line) for line in events[0].read_text().splitlines()]
+    assert event_rows[0]["event"] == "trial_started"
+    assert any(item["event"] == "shared_sync_marker" for item in event_rows)
+    assert event_rows[-1]["event"] == "trial_aborted"
+
+    catalog = RunCatalog(tmp_path).catalog()
+    assert len(catalog["runs"]) == 1
+    assert catalog["runs"][0]["planned_event"] == "clean"
+    assert catalog["runs"][0]["collection_mode"] == "participant_study"
+
+
+def test_qualification_uses_separate_ids_and_structured_schedule(tmp_path):
+    catalog = RunCatalog(tmp_path)
+    first = catalog.save_participant("", collection_mode="qualification")
+    second = catalog.save_participant("", collection_mode="qualification")
+    assert first["participant"]["id"] == "Q01"
+    assert second["participant"]["id"] == "Q02"
+    assert first["participant"]["collection_mode"] == "qualification"
+
+    state = DashboardState(
+        tmp_path, segment_id=1, model_path=Path("data/models/pilot_hmm.json"),
+        enable_research_output=True,
+    )
+    state.on_xsens_frame(_full_xsens_frame())
+    now = time.monotonic()
+    state.on_sample(0.0, (2.0, 0.0, 1.0), True, now)
+    state.optitrack_bridge.on_sample(0.0, (2.0, 0.0, 1.0), True, now)
+    state.tick()
+    state.mark_calibrated()
+    state.start_session(
+        "Q01", "T01", mvn_recording_confirmed=True,
+        mvn_recording_reference=r"C:\MVN\Q01-T01.mvn",
+        block_label="A", within_block_trial=1,
+        controller_condition="fixed zone", planned_event="clean",
+        collection_mode="qualification",
+        motive_recording_reference="Q01-T01.tak",
+        video_recording_reference="Q01-T01.mp4",
+    )
+    assert state.snapshot()["collection_mode"] == "qualification"
+    assert state.active_controller is not None
+    state.stop_session()
 
 
 def test_guided_protocol_requires_active_recording(tmp_path):
@@ -297,6 +499,16 @@ def test_rig_status_poll_returns_cached_value_while_probe_is_slow():
         time.sleep(0.01)
     second = rig.status_snapshot({"connected": False}, max_age_s=60.0)
     assert second["robot"]["error"] == "offline"
+
+
+def test_robot_status_rejects_an_open_port_with_empty_dashboard_replies():
+    rig = RigControl.__new__(RigControl)
+    rig._dash = lambda *commands: [""] * len(commands)
+
+    status = rig.robot_status()
+
+    assert status["reachable"] is False
+    assert "incomplete status" in status["error"]
 
 
 def test_goto_pose_uses_rtde_and_disconnects(monkeypatch):
@@ -371,6 +583,31 @@ def test_goto_pose_rejects_low_vacuum_before_connecting(monkeypatch):
     assert connected is False
 
 
+def test_research_speed_output_is_clamped_and_deduplicated():
+    calls = []
+
+    class FakeIO:
+        def setSpeedSlider(self, value):
+            calls.append(value)
+            return True
+
+    rig = RigControl.__new__(RigControl)
+    rig._output_lock = threading.Lock()
+    rig._io = FakeIO()
+    rig._last_speed_fraction = None
+    rig._last_output_attempt_at = 0.0
+    rig._last_output_failure = None
+
+    first = rig.apply_research_speed_fraction(1.5)
+    second = rig.apply_research_speed_fraction(1.0)
+    stopped = rig.apply_research_speed_fraction(-0.2)
+
+    assert calls == [1.0, 0.0]
+    assert first["applied"] is True and first["changed"] is True
+    assert second["status"] == "already_applied"
+    assert stopped["speed_fraction"] == 0.0
+
+
 class FakeGuidedState:
     def __init__(self, step=0, distance=2.0):
         self.config = {"zones": {
@@ -391,6 +628,7 @@ class FakeGuidedState:
             "stale": False,
             "optitrack_connected": True,
             "feature": {"d": self.distance},
+            "sync_marker_count": 1,
         }
 
     def start_session(self, participant, trial,
@@ -412,7 +650,17 @@ class FakeGuidedState:
         self.label = label
         return {"message": f"Ground truth: {label}"}
 
-    def stop_session(self):
+    def begin_planned_event_window(self, source="robot_lift"):
+        self.actions = getattr(self, "actions", [])
+        self.actions.append(("event_start", source))
+        return {"event_label": "hazard", "source": source}
+
+    def end_planned_event_window(self, source="robot_lift"):
+        self.actions = getattr(self, "actions", [])
+        self.actions.append(("event_end", source))
+        return {"event_label": "hazard", "source": source}
+
+    def stop_session(self, outcome="aborted"):
         self.recording = False
         self.step = None
         self.stopped = True
@@ -497,6 +745,9 @@ def test_integrated_guided_actions_grip_lift_lower_release_and_save():
     arm_and_confirm(guided, clock)
     assert state.step == 4
     assert rig.actions[-1] == ("goto", "pose2_top")
+    assert state.actions == [
+        ("event_start", "robot_lift"), ("event_end", "robot_lift"),
+    ]
 
     state.step = 8
     arm_and_confirm(guided, clock)

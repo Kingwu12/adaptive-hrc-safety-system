@@ -17,6 +17,8 @@ venv/
 
 # Local dashboard authorization secret — never commit
 data/xsens/.control_key
+data/xsens/.form_completion_url
+data/xsens/dashboard.log
 
 # LaTeX build artifacts
 paper/*.pdf

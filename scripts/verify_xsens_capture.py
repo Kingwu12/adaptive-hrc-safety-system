@@ -20,6 +20,10 @@ EXPECTED_PHASE_SEQUENCE = [
     "approaching", "working", "retreating",
     "approaching", "working", "retreating",
 ]
+VALID_COLLECTION_MODES = {"participant_study", "qualification", "model_development"}
+VALID_BLOCKS = {"A", "B", "C"}
+VALID_CONTROLLERS = {"fixed zone", "reactive SSM", "predictive SSM"}
+VALID_PLANNED_EVENTS = {"clean", "distractor", "rapid intrusion"}
 
 
 def audit_capture(path: Path, min_rows: int = 120, min_segments: int = 23,
@@ -40,9 +44,43 @@ def audit_capture(path: Path, min_rows: int = 120, min_segments: int = 23,
     phase_sequence: list[str] = []
     session_ids: set[str] = set()
     native_references: set[str] = set()
+    motive_references: set[str] = set()
+    video_references: set[str] = set()
     model_hashes: set[str] = set()
+    collection_modes: set[str] = set()
+    blocks: set[str] = set()
+    within_trials: set[int] = set()
+    controllers: set[str] = set()
+    planned_events: set[str] = set()
+    controller_decision_rows = 0
+    controller_output_applied_rows = 0
+    recorded_monotonic_times: list[float] = []
     pelvis_positions: set[tuple[float, float, float]] = set()
     expected_ids = {str(i) for i in range(1, min_segments + 1)}
+    outcome = None
+    sync_markers = 0
+    manifest: dict = {}
+
+    if require_trial:
+        event_path = path.with_name(path.stem + ".events.jsonl")
+        try:
+            for raw_event in event_path.read_text(encoding="utf-8").splitlines():
+                if not raw_event.strip():
+                    continue
+                event_name = json.loads(raw_event).get("event")
+                if event_name == "trial_completed":
+                    outcome = "completed"
+                elif event_name == "trial_aborted":
+                    outcome = "aborted"
+                elif event_name == "shared_sync_marker":
+                    sync_markers += 1
+        except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+            failures.append(f"missing or unreadable event journal ({exc})")
+        manifest_path = path.with_name(path.stem + ".manifest.json")
+        try:
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+            failures.append(f"missing or unreadable trial manifest ({exc})")
 
     try:
         raw_lines = path.read_text(encoding="utf-8").splitlines()
@@ -119,6 +157,10 @@ def audit_capture(path: Path, min_rows: int = 120, min_segments: int = 23,
         session_id = str(record.get("session_id") or "").strip()
         native_reference = str(
             record.get("mvn_native_recording_reference") or "").strip()
+        motive_reference = str(
+            record.get("motive_recording_reference") or "").strip()
+        video_reference = str(
+            record.get("video_recording_reference") or "").strip()
         model_hash = str(record.get("model_sha256") or "").strip().lower()
         if session_id:
             session_ids.add(session_id)
@@ -130,10 +172,61 @@ def audit_capture(path: Path, min_rows: int = 120, min_segments: int = 23,
             native_references.add(native_reference)
         else:
             failures.append(f"line {line_number}: missing native MVN file reference")
+        if motive_reference:
+            motive_references.add(motive_reference)
+        else:
+            failures.append(f"line {line_number}: missing native Motive file reference")
+        if video_reference:
+            video_references.add(video_reference)
+        else:
+            failures.append(f"line {line_number}: missing consented video file reference")
         if re.fullmatch(r"[0-9a-f]{64}", model_hash):
             model_hashes.add(model_hash)
         else:
             failures.append(f"line {line_number}: invalid or synthetic model_sha256")
+
+        collection_mode = str(record.get("collection_mode") or "")
+        block = str(record.get("block_label") or "")
+        controller = str(record.get("controller_condition") or "")
+        planned_event = str(record.get("planned_event") or "")
+        try:
+            within_trial = int(record.get("within_block_trial"))
+        except (TypeError, ValueError):
+            within_trial = 0
+        if collection_mode in VALID_COLLECTION_MODES:
+            collection_modes.add(collection_mode)
+        else:
+            failures.append(f"line {line_number}: invalid collection_mode")
+        if block in VALID_BLOCKS:
+            blocks.add(block)
+        else:
+            failures.append(f"line {line_number}: invalid block_label")
+        if within_trial in {1, 2, 3}:
+            within_trials.add(within_trial)
+        else:
+            failures.append(f"line {line_number}: invalid within_block_trial")
+        if controller in VALID_CONTROLLERS:
+            controllers.add(controller)
+        else:
+            failures.append(f"line {line_number}: invalid controller_condition")
+        if planned_event in VALID_PLANNED_EVENTS:
+            planned_events.add(planned_event)
+        else:
+            failures.append(f"line {line_number}: invalid planned_event")
+        decision = record.get("controller_decision")
+        recorded_monotonic = record.get("recorded_monotonic_s")
+        if isinstance(recorded_monotonic, (int, float)) and math.isfinite(recorded_monotonic):
+            recorded_monotonic_times.append(float(recorded_monotonic))
+        else:
+            failures.append(f"line {line_number}: invalid recorded_monotonic_s")
+        if isinstance(decision, dict) and decision.get("command") in {
+            "full_speed", "reduced_speed", "protective_stop"
+        }:
+            controller_decision_rows += 1
+            if decision.get("output_applied") is True and (
+                record.get("controller_output_applied") is True
+            ):
+                controller_output_applied_rows += 1
 
         phase = str(record.get("ground_truth_phase") or "")
         event = str(record.get("ground_truth_event") or "")
@@ -150,8 +243,9 @@ def audit_capture(path: Path, min_rows: int = 120, min_segments: int = 23,
         if record.get("stale") is True:
             stale_rows += 1
 
-    if rows < min_rows:
-        failures.append(f"only {rows} rows; require at least {min_rows}")
+    required_rows = min(30, min_rows) if outcome == "aborted" else min_rows
+    if rows < required_rows:
+        failures.append(f"only {rows} rows; require at least {required_rows}")
     unique_counters = len(set(counters))
     if unique_counters < 2:
         failures.append("sample_counter did not advance")
@@ -159,21 +253,68 @@ def audit_capture(path: Path, min_rows: int = 120, min_segments: int = 23,
         failures.append("time_code_s did not advance")
 
     if require_trial:
-        missing_phases = REQUIRED_PHASES - set(phase_counts)
-        if missing_phases:
-            failures.append(
-                "missing labelled phases: " + ",".join(sorted(missing_phases)))
-        if phase_sequence != EXPECTED_PHASE_SEQUENCE:
-            failures.append(
-                "phase sequence is not approach-work-retreat repeated twice")
-        if event_counts.get("hazard", 0) == 0:
-            failures.append("no labelled hazard event window")
+        if outcome not in {"completed", "aborted"}:
+            failures.append("event journal has no terminal completed/aborted outcome")
+        if sync_markers < 1:
+            failures.append("event journal contains no shared sync marker")
+        if outcome == "completed":
+            missing_phases = REQUIRED_PHASES - set(phase_counts)
+            if missing_phases:
+                failures.append(
+                    "missing labelled phases: " + ",".join(sorted(missing_phases)))
+            if phase_sequence != EXPECTED_PHASE_SEQUENCE:
+                failures.append(
+                    "phase sequence is not approach-work-retreat repeated twice")
+        planned_event = next(iter(planned_events), None)
+        if outcome == "completed" and planned_event == "rapid intrusion":
+            if event_counts.get("hazard", 0) == 0:
+                failures.append("rapid-intrusion trial has no hazard event window")
+            if event_counts.get("distractor", 0):
+                failures.append("rapid-intrusion trial contains a distractor label")
+        elif outcome == "completed" and planned_event == "distractor":
+            if event_counts.get("distractor", 0) == 0:
+                failures.append("distractor trial has no distractor event window")
+            if event_counts.get("hazard", 0):
+                failures.append("distractor trial contains a hazard label")
+        elif outcome == "completed" and planned_event == "clean" and (
+            event_counts.get("hazard", 0) or event_counts.get("distractor", 0)
+        ):
+            failures.append("clean trial contains an inserted event label")
         if len(session_ids) != 1:
             failures.append("capture does not contain exactly one session_id")
         if len(native_references) != 1:
             failures.append("capture does not contain exactly one native MVN file reference")
+        if len(motive_references) != 1:
+            failures.append("capture does not contain exactly one native Motive file reference")
+        if len(video_references) != 1:
+            failures.append("capture does not contain exactly one consented video file reference")
         if len(model_hashes) != 1:
             failures.append("capture does not contain exactly one real model digest")
+        if len(collection_modes) != 1:
+            failures.append("capture does not contain exactly one collection_mode")
+        if len(blocks) != 1 or len(within_trials) != 1:
+            failures.append("capture does not contain one stable study slot")
+        if len(controllers) != 1 or len(planned_events) != 1:
+            failures.append("capture does not contain one stable controller/event assignment")
+        if controller_decision_rows == 0:
+            failures.append("capture contains no controller decision rows")
+        if len(recorded_monotonic_times) < 2 or (
+            max(recorded_monotonic_times) <= min(recorded_monotonic_times)
+        ):
+            failures.append("dashboard monotonic timestamps did not advance")
+        if collection_modes == {"qualification"} and controller_output_applied_rows == 0:
+            failures.append("qualification capture contains no acknowledged robot output")
+        if manifest:
+            if manifest.get("session_id") not in session_ids:
+                failures.append("trial manifest session_id does not match capture")
+            if manifest.get("outcome") != outcome:
+                failures.append("trial manifest outcome does not match event journal")
+            if manifest.get("native_mvn") not in native_references:
+                failures.append("trial manifest MVN reference does not match capture")
+            if manifest.get("native_motive") not in motive_references:
+                failures.append("trial manifest Motive reference does not match capture")
+            if manifest.get("consented_video") not in video_references:
+                failures.append("trial manifest video reference does not match capture")
         if rows and stale_rows / rows > 0.05:
             failures.append(
                 f"OptiTrack stale rate {100 * stale_rows / rows:.2f}% exceeds 5%")
@@ -198,7 +339,24 @@ def audit_capture(path: Path, min_rows: int = 120, min_segments: int = 23,
         "session_id": next(iter(session_ids), None) if len(session_ids) == 1 else None,
         "native_mvn_reference": (
             next(iter(native_references), None) if len(native_references) == 1 else None),
+        "native_motive_reference": (
+            next(iter(motive_references), None) if len(motive_references) == 1 else None),
+        "video_reference": (
+            next(iter(video_references), None) if len(video_references) == 1 else None),
         "model_sha256": next(iter(model_hashes), None) if len(model_hashes) == 1 else None,
+        "collection_mode": (
+            next(iter(collection_modes), None) if len(collection_modes) == 1 else None),
+        "block_label": next(iter(blocks), None) if len(blocks) == 1 else None,
+        "within_block_trial": (
+            next(iter(within_trials), None) if len(within_trials) == 1 else None),
+        "controller_condition": (
+            next(iter(controllers), None) if len(controllers) == 1 else None),
+        "planned_event": (
+            next(iter(planned_events), None) if len(planned_events) == 1 else None),
+        "controller_decision_rows": controller_decision_rows,
+        "controller_output_applied_rows": controller_output_applied_rows,
+        "outcome": outcome,
+        "sync_marker_count": sync_markers,
         "capture_sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
     }
 
@@ -219,14 +377,48 @@ def audit_batch(paths: list[Path], min_captures: int = 10,
     sessions = [item.get("session_id") for item in summaries if item.get("session_id")]
     native_refs = [item.get("native_mvn_reference") for item in summaries
                    if item.get("native_mvn_reference")]
+    motive_refs = [item.get("native_motive_reference") for item in summaries
+                   if item.get("native_motive_reference")]
+    video_refs = [item.get("video_reference") for item in summaries
+                  if item.get("video_reference")]
     model_hashes = {item.get("model_sha256") for item in summaries
                     if item.get("model_sha256")}
     if len(sessions) != len(set(sessions)):
         failures.append("session_id is reused across capture files")
     if len(native_refs) != len(set(native_refs)):
         failures.append("native MVN file reference is reused across capture files")
+    if len(motive_refs) != len(set(motive_refs)):
+        failures.append("native Motive file reference is reused across capture files")
+    if len(video_refs) != len(set(video_refs)):
+        failures.append("video file reference is reused across capture files")
     if len(model_hashes) > 1:
         failures.append("model digest changed inside the qualification batch")
+    modes = {item.get("collection_mode") for item in summaries}
+    if modes != {"qualification"}:
+        failures.append(
+            "qualification batch must contain only collection_mode=qualification"
+        )
+    completed = [item for item in summaries if item.get("outcome") == "completed"]
+    aborted = [item for item in summaries if item.get("outcome") == "aborted"]
+    if len(completed) < 9:
+        failures.append(
+            f"only {len(completed)} complete qualification trials; require at least 9"
+        )
+    if not aborted:
+        failures.append("qualification batch contains no controlled aborted recovery run")
+    planned = [item.get("planned_event") for item in completed]
+    for event in sorted(VALID_PLANNED_EVENTS):
+        if planned.count(event) < 3:
+            failures.append(
+                f"first nine complete trials cover {event!r} only {planned.count(event)} times; require 3"
+            )
+    controller_counts = [item.get("controller_condition") for item in completed]
+    for controller in sorted(VALID_CONTROLLERS):
+        if controller_counts.count(controller) < 3:
+            failures.append(
+                f"complete trials cover {controller!r} only "
+                f"{controller_counts.count(controller)} times; require 3"
+            )
     return list(dict.fromkeys(failures)), summaries
 
 
@@ -241,7 +433,11 @@ def _finite_vector(value: object, length: int) -> bool:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("captures", type=Path, nargs="+")
+    parser.add_argument("captures", type=Path, nargs="*")
+    parser.add_argument(
+        "--qualification-dir", type=Path,
+        help="discover Q*.jsonl captures in this directory, excluding event journals",
+    )
     parser.add_argument("--min-rows", type=int, default=120)
     parser.add_argument("--min-segments", type=int, default=23)
     parser.add_argument(
@@ -251,14 +447,24 @@ def main() -> int:
     parser.add_argument("--report", type=Path)
     args = parser.parse_args()
 
+    captures = list(args.captures)
+    if args.qualification_dir is not None:
+        captures.extend(
+            path for path in sorted(args.qualification_dir.glob("Q*.jsonl"))
+            if not path.name.endswith(".events.jsonl")
+        )
+    captures = list(dict.fromkeys(path.resolve() for path in captures))
+    if not captures and args.qualification_dir is None:
+        parser.error("provide capture files or --qualification-dir")
+
     if args.trial_batch:
         failures, summaries = audit_batch(
-            args.captures, min_captures=args.min_captures,
+            captures, min_captures=args.min_captures,
             min_rows=args.min_rows, min_segments=args.min_segments)
     else:
         summaries = []
         failures = []
-        for path in args.captures:
+        for path in captures:
             capture_failures, summary = audit_capture(
                 path, min_rows=args.min_rows, min_segments=args.min_segments)
             summaries.append(summary)
