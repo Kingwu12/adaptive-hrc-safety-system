@@ -28,6 +28,10 @@ For the complete participant workflow in team-readable language, start with
 three controllers, three scenarios, nine-trial schedule, five questionnaire handoffs,
 operator roles, measurements, analysis logic and no-go boundaries in one place.
 
+Automatic grip/retreat/lift/lower sequencing is implemented for **Q-code
+qualification only**. Read [the automatic-trial handoff](docs/automatic-trial-qualification.md)
+for its controls, tests, fault behaviour and the still-required physical release.
+
 **Participant-day materials:** print the [participant handout](output/pdf/participant-handout.pdf)
 for participants and the [operator session script](output/pdf/operator-session-script.pdf)
 for the team. Edit [the shared wording](docs/participant-session-pack.md), then run

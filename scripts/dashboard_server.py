@@ -128,7 +128,7 @@ class RunCatalog:
         self.output_dir = output_dir
         self.registry_path = output_dir / "participants.json"
         self.lock = threading.RLock()
-        self._cache: dict[str, tuple[int, int, dict]] = {}
+        self._cache: dict[str, tuple[int, tuple[int, int], dict]] = {}
 
     @staticmethod
     def _clean_name(value: object, collection_mode: str) -> str:
@@ -181,10 +181,11 @@ class RunCatalog:
                  stale_ratio: float, label_counts: dict[str, int],
                  sequence: list[str], invalid_rows: int,
                  event_counts: dict[str, int] | None = None,
-                 planned_event: str | None = None) -> dict:
+                 planned_event: str | None = None, *, automatic=False,
+                 completed=False) -> dict:
         score = 100
         issues: list[str] = []
-        missing = [label for label in cls.REQUIRED_LABELS
+        missing = [] if automatic else [label for label in cls.REQUIRED_LABELS
                    if label_counts.get(label, 0) == 0]
         if missing:
             score -= 15 * len(missing)
@@ -205,7 +206,7 @@ class RunCatalog:
             # Preserve the legacy quality rule for older guided-run files.
             score -= 15
             issues.append("missing cued hazard event")
-        if tuple(sequence) != cls.EXPECTED_SEQUENCE:
+        if not automatic and tuple(sequence) != cls.EXPECTED_SEQUENCE:
             score -= 15
             issues.append("phase order or completion differs from the guided run")
         if duration_s < 30:
@@ -220,7 +221,7 @@ class RunCatalog:
         elif stale_ratio > 0.01:
             score -= 15
             issues.append(f"{stale_ratio * 100:.1f}% stale tracking")
-        if rate_hz > 0:
+        if rate_hz > 0 and not automatic:
             short = [label for label in cls.REQUIRED_LABELS
                      if 0 < label_counts.get(label, 0) / rate_hz < 2.0]
             if short:
@@ -229,6 +230,9 @@ class RunCatalog:
         if invalid_rows:
             score -= 10
             issues.append(f"{invalid_rows} unreadable samples")
+        if automatic and not completed:
+            score = 0
+            issues.append("automatic cycle was not completed; inspect before repeating")
         score = max(0, score)
         if score >= 85 and not missing:
             grade, label = "good", "GOOD"
@@ -237,7 +241,8 @@ class RunCatalog:
         else:
             grade, label = "repeat", "REPEAT"
         if not issues:
-            issues.append("all phases captured in order with stable tracking")
+            issues.append("automatic cycle completed with stable capture; human labels require video annotation" if automatic
+                          else "all phases captured in order with stable tracking")
         return {"grade": grade, "label": label, "score": score, "reasons": issues}
 
     def _summarize(self, path: Path, stat) -> dict:
@@ -247,7 +252,9 @@ class RunCatalog:
         participant_id = "P00"
         trial_id = "T00"
         block_label = controller_condition = planned_event = None
+        within_block_trial = None
         collection_mode = "model_development"
+        execution_mode = "operator_confirmed"
         label_counts: dict[str, int] = {}
         event_counts: dict[str, int] = {}
         sequence: list[str] = []
@@ -261,10 +268,12 @@ class RunCatalog:
                     continue
                 samples += 1
                 if samples == 1:
+                    execution_mode = str(row.get("execution_mode") or "operator_confirmed")
                     session_id = str(row.get("session_id") or path.stem)
                     participant_id = safe_id(row.get("participant_id"), "P00")
                     trial_id = safe_id(row.get("trial_id"), "T00")
                     block_label = row.get("block_label")
+                    within_block_trial = row.get("within_block_trial")
                     controller_condition = row.get("controller_condition")
                     planned_event = row.get("planned_event")
                     collection_mode = (
@@ -299,9 +308,19 @@ class RunCatalog:
         duration_s = max(0.0, (last_t - first_t)) if first_t is not None and last_t is not None else 0.0
         rate_hz = samples / duration_s if duration_s > 0 else 0.0
         stale_ratio = stale / samples if samples else 1.0
+        completed = False
+        if execution_mode == "automatic":
+            try:
+                manifest = json.loads(path.with_suffix(".manifest.json").read_text())
+                completed = (manifest.get("session_id") == session_id
+                             and manifest.get("outcome") == "completed"
+                             and manifest.get("execution_mode") == "automatic")
+            except (OSError, ValueError):
+                pass
         quality = self._quality(samples, duration_s, rate_hz, stale_ratio,
                                 label_counts, sequence, invalid, event_counts,
-                                planned_event)
+                                planned_event, automatic=execution_mode == "automatic",
+                                completed=completed)
         label_seconds = {
             label: round(count / rate_hz, 1) if rate_hz > 0 else 0.0
             for label, count in label_counts.items()
@@ -311,10 +330,12 @@ class RunCatalog:
             "participant_id": participant_id,
             "trial_id": trial_id,
             "block_label": block_label,
+            "within_block_trial": within_block_trial,
             "controller_condition": controller_condition,
             "planned_event": planned_event,
             "collection_mode": collection_mode,
             "started_at": self._started_at(session_id, stat.st_mtime),
+            "execution_mode": execution_mode,
             "file_name": path.name,
             "samples": samples,
             "duration_s": round(duration_s, 1),
@@ -354,9 +375,12 @@ class RunCatalog:
                 stat = path.stat()
                 key = str(path.resolve())
                 cached = self._cache.get(key)
-                if cached is None or cached[0] != stat.st_size or cached[1] != stat.st_mtime_ns:
+                manifest_path = path.with_suffix(".manifest.json")
+                stamp = (stat.st_mtime_ns,
+                         manifest_path.stat().st_mtime_ns if manifest_path.exists() else 0)
+                if cached is None or cached[0] != stat.st_size or cached[1] != stamp:
                     summary = self._summarize(path, stat)
-                    self._cache[key] = (stat.st_size, stat.st_mtime_ns, summary)
+                    self._cache[key] = (stat.st_size, stamp, summary)
                 runs.append(dict(self._cache[key][2]))
             runs.sort(key=lambda row: row["started_at"], reverse=True)
 
@@ -499,6 +523,8 @@ class DashboardState:
         self.label = "unlabelled"
         self.event_label = "none"
         self.guided_step: int | None = None
+        self.execution_mode = "operator_confirmed"
+        self.controller_updated_at = 0.0
         self.recording_path: str | None = None
         self.samples_written = 0
         self.mvn_recording_confirmed = False
@@ -542,6 +568,7 @@ class DashboardState:
                     }
                     self._apply_controller_output_locked(decision)
                     self.controller_decision = decision
+                    self.controller_updated_at = now
             return
         # Absolute operator position comes from the tracked head rigid body in
         # robot-base coordinates. Xsens remains the articulated-motion source.
@@ -590,6 +617,7 @@ class DashboardState:
             self.posterior = posterior
             self.hmm_state = state
             self.controller_decision = controller_decision
+            self.controller_updated_at = now
             if self.recording and self.file is not None:
                 rigid_bodies = {}
                 if self.optitrack_monitor is not None:
@@ -619,6 +647,7 @@ class DashboardState:
                     "planned_event": self.planned_event,
                     "collection_mode": self.collection_mode,
                     "recorded_monotonic_s": round(now, 6),
+                    "execution_mode": self.execution_mode,
                     "recorded_utc_time": datetime.now(timezone.utc).isoformat(),
                     "t": round(xsens_sample.t, 6),
                     "source_time_s": xsens_sample.motive_timestamp,
@@ -694,7 +723,8 @@ class DashboardState:
                       planned_event: object = None,
                       collection_mode: object = "model_development",
                       motive_recording_reference: object = None,
-                      video_recording_reference: object = None) -> dict:
+                      video_recording_reference: object = None,
+                      execution_mode: str = "operator_confirmed") -> dict:
         with self.lock:
             if self.recording:
                 raise ValueError("A recording is already active")
@@ -827,6 +857,7 @@ class DashboardState:
             self.controller_condition = controller or None
             self.planned_event = event or None
             self.collection_mode = mode
+            self.execution_mode = execution_mode
             stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
             self.session_id = f"{self.participant_id}-{self.trial_id}-{stamp}-{uuid.uuid4().hex[:6]}"
             self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -890,6 +921,7 @@ class DashboardState:
                 "controller_condition": self.controller_condition,
                 "planned_event": self.planned_event,
                 "outcome": outcome,
+                "execution_mode": self.execution_mode,
                 "samples": self.samples_written,
                 "dashboard_jsonl": self.recording_path,
                 "event_jsonl": self.event_path,
@@ -943,6 +975,7 @@ class DashboardState:
             "planned_event": self.planned_event,
             "collection_mode": self.collection_mode,
             "event": kind,
+            "execution_mode": self.execution_mode,
             "monotonic_time_s": round(time.monotonic(), 6),
             "utc_time": datetime.now(timezone.utc).isoformat(),
             **payload,
@@ -1041,6 +1074,11 @@ class DashboardState:
                 raise ValueError("Guided sequence is complete; stop and save the run")
             self.guided_step += 1
             self.label, self.event_label = GUIDED_PROTOCOL_LABELS[self.guided_step]
+            if self.execution_mode == "automatic":
+                # Keep this inside the same state lock as the step update;
+                # otherwise the sampling thread can log a machine transition
+                # as a human ground-truth frame before the caller resets it.
+                self.label = "unlabelled"
             self._journal_event_locked(
                 "guided_step_changed", guided_step=self.guided_step,
                 phase=self.label, event_label=self.event_label)
@@ -1224,6 +1262,16 @@ class RigControl:
         }
         result = {"available": True, "sampled_monotonic_s": round(time.monotonic(), 6)}
         try:
+            source_clock = getattr(recv, "getTimestamp", None)
+            if source_clock is not None:
+                source_time = float(source_clock())
+                if not math.isfinite(source_time):
+                    raise ValueError("Invalid RTDE source timestamp")
+                last_source = getattr(self, "_last_telemetry_source", None)
+                if last_source is None or last_source[0] != source_time:
+                    self._last_telemetry_source = (source_time, time.monotonic())
+                result["source_timestamp_s"] = source_time
+                result["source_age_s"] = time.monotonic() - self._last_telemetry_source[1]
             for key, name in getters.items():
                 fn = getattr(recv, name, None)
                 if fn is None:
@@ -1248,7 +1296,8 @@ class RigControl:
         fraction = max(0.0, min(1.0, float(speed_fraction)))
         with self._output_lock:
             if (self._last_speed_fraction is not None and
-                    abs(self._last_speed_fraction - fraction) < 1e-6):
+                    abs(self._last_speed_fraction - fraction) < 1e-6 and
+                    time.monotonic() - getattr(self, "_last_speed_write_at", 0.0) < 0.1):
                 return {
                     "applied": True, "changed": False,
                     "status": "already_applied", "speed_fraction": fraction,
@@ -1279,6 +1328,7 @@ class RigControl:
                 applied = bool(self._io.setSpeedSlider(fraction))
             except Exception as exc:
                 self._io = None
+                self._last_speed_fraction = None
                 return {
                     "applied": False, "changed": False,
                     "status": "write_failed",
@@ -1287,7 +1337,10 @@ class RigControl:
                 }
             if applied:
                 self._last_speed_fraction = fraction
+                self._last_speed_write_at = time.monotonic()
                 self._last_output_failure = None
+            else:
+                self._last_speed_fraction = None
             return {
                 "applied": applied, "changed": applied,
                 "status": "applied" if applied else "robot_rejected",
@@ -1408,6 +1461,9 @@ class RigControl:
                     self._last_gripper_t = time.monotonic()
                 elif not self._last_gripper:
                     return {"error": out.get("error", "gripper unreachable")}
+                else:
+                    # A failed refresh must not masquerade as a fresh seal.
+                    return {"error": out.get("error", "gripper refresh failed")}
             return dict(self._last_gripper)
 
     def send_panel_cycle(self) -> dict:
@@ -1494,7 +1550,8 @@ class RigControl:
 
     # ------------------------------------------------------- discrete moves
 
-    def goto_pose(self, name: str, speed: float = 0.10) -> dict:
+    def goto_pose(self, name: str, speed: float = 0.10, *, guard=None,
+                  cancel: threading.Event | None = None) -> dict:
         """Move slowly to a taught joint pose through the RTDE controller.
 
         Discrete moves deliberately do not use the primary-interface socket.
@@ -1532,9 +1589,41 @@ class RigControl:
         control = None
         try:
             control = RTDEControlInterface(self.robot_host)
-            moved = control.moveJ([float(v) for v in pose["q"]], spd, 0.15)
+            target = [float(v) for v in pose["q"]]
+            if len(target) != 6 or not all(math.isfinite(v) for v in target):
+                raise ValueError("Invalid taught joint pose")
+            if guard is not None:
+                # Robot-side watchdog stops this script if the host loop stalls.
+                # Neither this nor stopJ is an independent safety-rated chain.
+                guard()
+                if cancel is not None and cancel.is_set():
+                    raise ValueError("Automatic motion cancelled")
+                if control.setWatchdog(2.0) is False:
+                    raise ValueError("Could not enable motion watchdog")
+                moved = control.moveJ(target, spd, 0.15, True)
+            else:
+                moved = control.moveJ(target, spd, 0.15)
             if not moved:
                 raise ValueError(f"move to {name} failed")
+            if guard is not None:
+                deadline = time.monotonic() + 90.0
+                while True:
+                    if cancel is not None and cancel.is_set():
+                        raise ValueError("Automatic motion cancelled")
+                    guard()
+                    if control.kickWatchdog() is False:
+                        raise ValueError("Motion watchdog communication failed")
+                    if control.getAsyncOperationProgress() < 0:
+                        actual = self.pose_status()
+                        q = actual.get("q") or []
+                        if (not actual.get("available") or len(q) != 6
+                                or not all(math.isfinite(float(v)) for v in q)
+                                or max(abs(float(a) - b) for a, b in zip(q, target)) > 0.08):
+                            raise ValueError("Motion ended without reaching the taught pose")
+                        break
+                    if time.monotonic() >= deadline:
+                        raise ValueError("Automatic motion timed out")
+                    time.sleep(0.05)
         finally:
             if control is not None:
                 try:
@@ -1661,7 +1750,7 @@ class GuidedRunController:
         if distance is None:
             raise ValueError("Operator separation is unavailable; robot motion is blocked")
         distance = float(distance)
-        if distance < self.motion_clearance_m:
+        if not math.isfinite(distance) or distance < self.motion_clearance_m:
             raise ValueError(
                 f"Operator is {distance:.2f} m from the robot; move beyond "
                 f"{self.motion_clearance_m:.2f} m before confirming cell clear"
@@ -1672,7 +1761,9 @@ class GuidedRunController:
         target = self.rig._poses.get(name, {}).get("q")
         pose = self.rig.pose_status()
         current = pose.get("q")
-        if not target or not pose.get("available") or not current:
+        if (not target or len(target) != 6 or not pose.get("available")
+                or not current or len(current) != 6
+                or not all(math.isfinite(float(v)) for v in [*target, *current])):
             raise ValueError(f"Cannot verify the robot is at {name}")
         error = max(abs(float(a) - float(b)) for a, b in zip(current, target))
         if error > self.POSE_TOLERANCE_RAD:
@@ -1699,6 +1790,8 @@ class GuidedRunController:
             self._require_operator_clear()
             self._require_pose("pose1_low")
             stats = self.rig.gripper_stats(max_age_s=0.0)
+            if stats.get("error") or not all(k in stats for k in ("vacuum_A_permille", "vacuum_B_permille", "pump_rpm")):
+                raise ValueError("Cannot verify released gripper; fresh telemetry is required")
             vacuum = (int(stats.get("vacuum_A_permille", 0)),
                       int(stats.get("vacuum_B_permille", 0)))
             pump = int(stats.get("pump_rpm", 0))
@@ -1709,16 +1802,18 @@ class GuidedRunController:
                 )
             metadata = (block_label, within_block_trial,
                         controller_condition, planned_event)
-            if any(value is not None for value in metadata):
+            extra = ({"execution_mode": "automatic"}
+                     if getattr(self, "automatic_requested", False) else {})
+            if any(value is not None for value in metadata) or collection_mode in {"qualification", "participant_study"}:
                 result = self.state.start_session(
                     participant, trial, mvn_recording_confirmed,
                     mvn_recording_reference, block_label, within_block_trial,
                     controller_condition, planned_event, collection_mode,
-                    motive_recording_reference, video_recording_reference)
+                    motive_recording_reference, video_recording_reference, **extra)
             else:
                 result = self.state.start_session(
                     participant, trial, mvn_recording_confirmed,
-                    mvn_recording_reference)
+                    mvn_recording_reference, **extra)
             return {**result, "preflight": {
                 "pose": "pose1_low", "vacuum": vacuum,
                 "operator_clearance_m": self.motion_clearance_m,
@@ -1795,6 +1890,250 @@ class GuidedRunController:
                     "guided_action_completed", guided_step=step,
                     action_summary=str(action)[:500])
             return {**advanced, "action": action}
+
+
+class AutomaticRunController(GuidedRunController):
+    """Single-cycle automation for the *current*, suction-held panel task.
+
+    Unlike the legacy ceiling-fastening demo this never releases overhead.
+    Qualification-only until the physical release evidence is supplied. No
+    model belief chooses a task transition or becomes ground-truth labels.
+    """
+
+    VERSION = "automatic-panel-v1"
+    SEAL_DWELL_S = 1.0
+    CLEAR_DWELL_S = 2.0
+    HEALTH_MAX_AGE_S = 2.0
+    WAIT_TIMEOUT_S = 120.0
+
+    def __init__(self, state, rig, clock=time.monotonic, *, enabled=False):
+        super().__init__(state, rig, clock)
+        self.enabled = enabled
+        self.automatic = False
+        self.cancel = threading.Event()
+        self.phase = "idle"
+        self.reason = ("Automatic qualification available; hardware preflight required" if enabled
+                       else "Automatic qualification is disabled on this server")
+        self.since = self.clock()
+        self.stable_since = None
+        self.health = None
+        self.health_lock = threading.Lock()
+        self.lock = threading.RLock()
+
+    def status(self):
+        return {"enabled": self.enabled, "active": self.automatic,
+                "qualification_only": True, "version": self.VERSION,
+                "phase": self.phase, "reason": self.reason,
+                "fault": self.phase == "fault"}
+
+    def _phase(self, phase, reason):
+        if self.cancel.is_set() and phase != "fault":
+            return
+        self.phase, self.reason = phase, reason
+        self.since, self.stable_since = self.clock(), None
+        self._journal("automation_transition", phase=phase, reason=reason,
+                      protocol_version=self.VERSION)
+
+    def start(self, *args, automatic=False, **kwargs):
+        with self.lock:
+            return self._start(*args, automatic=automatic, **kwargs)
+
+    def _start(self, *args, automatic=False, **kwargs):
+        if self.state.snapshot().get("recording"):
+            raise ValueError("A recording is already active")
+        if automatic and (not self.enabled or kwargs.get("collection_mode") != "qualification"
+                          or not re.fullmatch(r"Q\d+", str(args[0] if args else ""))):
+            raise ValueError("Automatic trials require --enable-automatic-trials and a Q-code qualification run; participant release is not validated")
+        self.automatic = False
+        self.automatic_requested = automatic
+        result = super().start(*args, **kwargs)
+        self.automatic = automatic
+        self.cancel.clear()
+        self.health = None
+        self._phase("ready", "Record sync, then arm loading suction")
+        return {**result, "automation": self.status()}
+
+    def refresh_health(self):
+        if not self.automatic or self.cancel.is_set():
+            return
+        # Stamp BEFORE slow IO. A 30-second stalled SSH call is not fresh data
+        # just because it eventually returned. Motion never waits on this IO.
+        started = self.clock()
+        try:
+            health = {"at": started,
+                      "grip": self.rig.gripper_stats(max_age_s=0.0),
+                      "robot": self.rig.robot_status()}
+        except Exception as exc:
+            health = {"at": started, "error": str(exc)}
+        with self.health_lock:
+            if self.health is None or health["at"] >= self.health["at"]:
+                self.health = health
+
+    def _tracking(self):
+        snap = self.state.snapshot()
+        if (not snap.get("recording") or not snap.get("connected")
+                or snap.get("stale") or not snap.get("optitrack_connected")
+                or snap.get("xsens_segment_count", 0) < MVN_FULL_BODY_SEGMENTS):
+            raise ValueError("Recording or tracking unavailable")
+        distance = (snap.get("feature") or {}).get("d")
+        if distance is None or not math.isfinite(float(distance)):
+            raise ValueError("Valid separation unavailable")
+        return snap, float(distance)
+
+    def _health(self, require_grip=True):
+        with self.health_lock:
+            health = self.health
+        if not health or not 0 <= self.clock() - health["at"] <= self.HEALTH_MAX_AGE_S:
+            raise ValueError("Robot/gripper telemetry stale")
+        robot = health.get("robot", {})
+        if (health.get("error") or not robot.get("reachable")
+                or robot.get("robotmode") != "Robotmode: RUNNING"
+                or robot.get("safety") != "Safetystatus: NORMAL"):
+            raise ValueError("Robot health is not normal")
+        grip = health.get("grip", {})
+        if grip.get("error"):
+            raise ValueError("Gripper read failed")
+        seal = [float(grip.get(k, -1)) for k in ("vacuum_A_permille", "vacuum_B_permille")]
+        if not all(math.isfinite(v) and v >= 0 for v in seal):
+            raise ValueError("Invalid gripper pressure")
+        sealed = min(seal) >= self.GRIP_MIN_PERMILLE
+        if require_grip and not sealed:
+            raise ValueError("Vacuum grip lost; suction remains on")
+        return sealed
+
+    def _motion_guard(self):
+        if self.cancel.is_set():
+            raise ValueError("Automatic trial stopped")
+        snap, _ = self._tracking()
+        self._health()
+        # Distance does NOT veto the assigned event here: the selected safety
+        # controller must govern the same trajectory in all three conditions.
+        # Tracking/output failure is an independent, latched fault instead.
+        decision = snap.get("controller_decision") or {}
+        updated = getattr(self.state, "controller_updated_at", 0.0)
+        if (self.clock() - updated > 0.5 or not decision.get("output_applied")):
+            raise ValueError("Research controller output is stale or failed")
+
+    def _stable(self, condition, duration):
+        if not condition:
+            self.stable_since = None
+            return False
+        if self.stable_since is None:
+            self.stable_since = self.clock()
+        return (self.clock() - self.stable_since >= duration
+                and self.health is not None and self.health["at"] > self.stable_since)
+
+    def _advance_to(self, step):
+        if self.cancel.is_set():
+            raise ValueError("Automatic trial stopped")
+        while int(self.state.snapshot()["guided_step"]) < step:
+            self.state.advance_guided_protocol()
+        # Machine-detected boundaries are not independent human annotations.
+        self.state.set_label("unlabelled")
+
+    def arm_step(self):
+        if not self.automatic:
+            return super().arm_step()
+        with self.lock:
+            step = self.state.snapshot().get("guided_step")
+            if self.cancel.is_set() or step not in (0, 9):
+                raise ValueError("Only loading suction and supported release need arming")
+            self.armed_step, self.armed_at = step, self.clock()
+            return {"message": "Press again to start loading suction" if step == 0 else PHYSICAL_STEP_WARNINGS[9]}
+
+    def complete_step(self, vacuum=60):
+        if not self.automatic:
+            return super().complete_step(vacuum)
+        # Reject duplicate/stale clicks; the background worker owns auto steps.
+        if self.cancel.is_set():
+            raise ValueError("Trial is faulted; abort and inspect before a new run")
+        step = self.state.snapshot().get("guided_step")
+        if step == 9:
+            telemetry = self.rig.telemetry_snapshot()
+            qd = telemetry.get("actual_qd") or []
+            if (not telemetry.get("available") or len(qd) != 6
+                    or not 0 <= float(telemetry.get("source_age_s", math.inf)) <= 0.25
+                    or not all(math.isfinite(float(v)) for v in qd)
+                    or max(abs(float(v)) for v in qd) > 0.005):
+                raise ValueError("Cannot verify the robot is stationary for supported release")
+            result = super().complete_step(vacuum)
+            self.automatic = False
+            self._phase("complete", "Run saved; panel released at low pose")
+            return result
+        with self.lock:
+            if step == 0 and self.phase == "ready":
+                if self.armed_step != 0 or not self.ARM_MIN_DELAY_S <= self.clock() - self.armed_at <= self.ARM_TIMEOUT_S:
+                    raise ValueError("Arm loading suction, then confirm within five seconds")
+                self._clear_arm()
+                if self.state.snapshot().get("sync_marker_count", 0) < 1:
+                    raise ValueError("Record the shared sync marker first")
+                self._require_robot_ready()
+                self._require_pose("pose1_low")
+                self._require_operator_clear()
+                result = self.rig.gripper_action("grip", "BOTH", int(vacuum))
+                if not result.get("ok"):
+                    self.request_stop("Loading suction command failed")
+                    raise ValueError("Loading suction command failed; inspect rig")
+                try:
+                    self.refresh_health()
+                    self._health(require_grip=False)
+                except Exception as exc:
+                    self.request_stop(str(exc))
+                    raise
+                self._advance_to(1)
+                self._phase("loading", "Place panel against both cups; waiting for stable vacuum")
+            elif step == 7 and self.phase == "task":
+                self._advance_to(8)
+                self._phase("retreat_lower", "Task complete. Step back; lowering starts automatically after clear dwell")
+            else:
+                raise ValueError("This step advances automatically; do not confirm it manually")
+        return {"message": self.reason, "automation": self.status()}
+
+    def request_stop(self, reason="Operator stop"):
+        # Never wait for the controller lock: an in-flight move owns it.
+        self.cancel.set()
+        self._clear_arm()
+        if self.automatic:
+            self._phase("fault", reason + "; no automatic restart or suction release")
+
+    def tick(self):
+        if not self.automatic or self.cancel.is_set() or self.phase in ("ready", "complete"):
+            return
+        if not self.lock.acquire(blocking=False):
+            return
+        try:
+            snap, distance = self._tracking()
+            sealed = self._health(require_grip=self.phase != "loading")
+            if self.phase == "loading":
+                if self._stable(sealed, self.SEAL_DWELL_S):
+                    self._advance_to(3)
+                    self._phase("retreat_lift", "Grip verified. Release panel and step back; lift starts automatically after clear dwell")
+            elif self.phase in ("retreat_lift", "retreat_lower"):
+                if self._stable(distance >= self.motion_clearance_m, self.CLEAR_DWELL_S):
+                    lifting = self.phase == "retreat_lift"
+                    self._motion_guard()
+                    self._phase("lifting" if lifting else "lowering", "Robot moving; follow the pre-briefed event cue" if lifting else "Robot lowering; stay clear")
+                    if lifting:
+                        self.state.begin_planned_event_window(source="automatic_lift")
+                    try:
+                        self.rig.goto_pose("pose2_top" if lifting else "pose1_low",
+                                           guard=self._motion_guard, cancel=self.cancel)
+                    finally:
+                        if lifting and self.state.snapshot().get("recording"):
+                            self.state.end_planned_event_window(source="automatic_lift")
+                    self._advance_to(7 if lifting else 9)
+                    self._phase("task" if lifting else "supported_release",
+                                "Robot up. Approach and perform the task; confirm task complete when finished" if lifting else "Robot low. Support panel, then confirm release")
+            if self.phase in ("loading", "retreat_lift", "retreat_lower") and self.clock() - self.since > self.WAIT_TIMEOUT_S:
+                raise ValueError("Automatic step timed out")
+        except Exception as exc:
+            self.request_stop(str(exc))
+            try:
+                self.rig.robot_action("stop")
+            except Exception as stop_exc:
+                self.reason += f"; stop command failed: {stop_exc}. Use physical E-stop"
+        finally:
+            self.lock.release()
 
 
 CONTROL_PAGE = """<!doctype html><html><head><meta charset="utf-8">
@@ -2052,7 +2391,7 @@ class ApiHandler(BaseHTTPRequestHandler):
         path = parsed.path
         query = urllib.parse.parse_qs(parsed.query)
         if path == "/api/status":
-            self._json(self.state.snapshot())
+            self._json({**self.state.snapshot(), "automation": self.guided.status()})
         elif path == "/api/rig":
             self._json(self.rig.status_snapshot(self.state.snapshot()))
         elif path == "/api/catalog":
@@ -2078,12 +2417,19 @@ class ApiHandler(BaseHTTPRequestHandler):
             rig_paths = {
                 "/api/gripper", "/api/robot", "/api/demo", "/api/cycle",
                 "/api/xsens/reset", "/api/protocol/start", "/api/protocol/arm",
-                "/api/protocol/complete", "/api/sync",
+                "/api/protocol/complete", "/api/sync", "/api/session/stop",
             }
             if self.path in rig_paths:
                 # rig control needs the key from any remote browser
                 if remote and self.headers.get("X-Control-Key", "") != self.control_key:
                     return self._json({"error": "Bad or missing control key"}, 403)
+                if self.guided.automatic and self.state.snapshot().get("recording"):
+                    if self.path in {"/api/gripper", "/api/demo", "/api/cycle", "/api/xsens/reset"}:
+                        raise ValueError("Abort the automatic trial before manual rig commands")
+                    if self.path == "/api/robot":
+                        if body.get("action") not in {"stop", "pause"}:
+                            raise ValueError("Only stop/pause is allowed during an automatic trial")
+                        self.guided.request_stop("Operator " + str(body.get("action")))
                 if self.path == "/api/gripper":
                     result = self.rig.gripper_action(
                         str(body.get("action")), str(body.get("channel", "BOTH")),
@@ -2100,17 +2446,30 @@ class ApiHandler(BaseHTTPRequestHandler):
                         participant_id, self.catalog.next_trial(participant_id),
                         body.get("mvn_recording_confirmed") is True,
                         body.get("mvn_recording_reference"),
-                        body.get("block_label"), body.get("within_block_trial"),
-                        body.get("controller_condition"), body.get("planned_event"),
-                        body.get("collection_mode", "model_development"),
-                        body.get("motive_recording_reference"),
-                        body.get("video_recording_reference"))
+                        block_label=body.get("block_label"),
+                        within_block_trial=body.get("within_block_trial"),
+                        controller_condition=body.get("controller_condition"),
+                        planned_event=body.get("planned_event"),
+                        collection_mode=body.get("collection_mode", "model_development"),
+                        motive_recording_reference=body.get("motive_recording_reference"),
+                        video_recording_reference=body.get("video_recording_reference"),
+                        automatic=body.get("automatic") is True)
                 elif self.path == "/api/protocol/arm":
                     result = self.guided.arm_step()
                 elif self.path == "/api/protocol/complete":
                     result = self.guided.complete_step(int(body.get("vacuum", 60)))
                 elif self.path == "/api/sync":
                     result = self.state.mark_sync_event()
+                elif self.path == "/api/session/stop":
+                    self.guided.request_stop("Trial aborted")
+                    try:
+                        stop_result = self.rig.robot_action("stop")
+                    except Exception as exc:
+                        stop_result = {"error": str(exc)}
+                    result = self.state.stop_session(outcome="aborted")
+                    result["robot_stop"] = stop_result
+                    if stop_result.get("error"):
+                        result["message"] += "; ROBOT STOP UNCONFIRMED — use physical E-stop"
                 else:
                     if body.get("action") == "start":
                         result = self.rig.demo_start(int(body.get("vacuum", 60)))
@@ -2124,12 +2483,12 @@ class ApiHandler(BaseHTTPRequestHandler):
                     body.get("participant_id"), body.get("trial_id"),
                     body.get("mvn_recording_confirmed") is True,
                     body.get("mvn_recording_reference"))
-            elif self.path == "/api/session/stop":
-                result = self.state.stop_session(outcome="aborted")
             elif self.path == "/api/label":
+                if self.guided.automatic:
+                    raise ValueError("Automatic task phases are not ground-truth labels; annotate from video")
                 result = self.state.set_label(body.get("label"))
             elif self.path == "/api/protocol/advance":
-                result = self.state.advance_guided_protocol()
+                raise ValueError("Direct advance is disabled; use the guarded protocol controls")
             elif self.path == "/api/calibration/mark":
                 result = self.state.mark_calibrated()
             elif self.path == "/api/participants":
@@ -2156,6 +2515,8 @@ def main() -> int:
     parser.add_argument("--udp-port", type=int, default=9763)
     parser.add_argument("--segment", type=int, default=PELVIS)
     parser.add_argument("--out", default="data/xsens")
+    parser.add_argument("--enable-automatic-trials", action="store_true",
+                        help="enable Q-code automatic qualification only; not participant release")
     parser.add_argument(
         "--enable-research-speed-output", action="store_true",
         help=(
@@ -2193,7 +2554,7 @@ def main() -> int:
                      state.config["robot"].get("dashboard_port", 29999))
     state.optitrack_monitor = optitrack_monitor
     state.rig = rig
-    guided = GuidedRunController(state, rig)
+    guided = AutomaticRunController(state, rig, enabled=args.enable_automatic_trials)
     key_file = Path(args.out) / ".control_key"
     if key_file.exists():
         control_key = key_file.read_text().strip()
@@ -2210,6 +2571,17 @@ def main() -> int:
 
     tick_thread = threading.Thread(target=ticker, daemon=True)
     tick_thread.start()
+
+    def automation_loop() -> None:
+        while not stop.wait(0.05):
+            guided.tick()
+
+    def hardware_loop() -> None:
+        while not stop.wait(0.25):
+            guided.refresh_health()
+
+    threading.Thread(target=automation_loop, daemon=True).start()
+    threading.Thread(target=hardware_loop, daemon=True).start()
     ApiHandler.state = state
     ApiHandler.rig = rig
     ApiHandler.guided = guided
@@ -2234,6 +2606,7 @@ def main() -> int:
     except KeyboardInterrupt:
         pass
     finally:
+        guided.request_stop("Service shutting down")
         stop.set()
         listener.stop()
         optitrack_listener.stop()

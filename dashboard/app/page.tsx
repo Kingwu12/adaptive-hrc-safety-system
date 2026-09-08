@@ -9,6 +9,10 @@ type Feature = {
 };
 
 type Status = {
+  automation?: {
+    enabled: boolean; active: boolean; qualification_only: boolean;
+    version: string; phase: string; reason: string; fault: boolean;
+  };
   connected: boolean;
   packets: number;
   packet_rate_hz: number;
@@ -63,6 +67,7 @@ type RunSummary = {
   participant_name: string;
   trial_id: string;
   block_label?: string | null;
+  within_block_trial?: number | null;
   controller_condition?: string | null;
   planned_event?: string | null;
   collection_mode: CollectionMode;
@@ -567,6 +572,7 @@ export default function Home() {
       controller_condition: isStructuredRun ? (slot?.controller ?? controllerCondition) : undefined,
       planned_event: isStructuredRun ? (slot?.event ?? plannedEvent) : undefined,
       collection_mode: workspaceMode,
+      automatic: workspaceMode === "qualification" && status.automation?.enabled === true,
       motive_recording_reference: isStructuredRun ? (references?.motive ?? motiveRecordingReference.trim()) : undefined,
       video_recording_reference: isStructuredRun ? (references?.video ?? videoRecordingReference.trim()) : undefined,
     });
@@ -663,7 +669,8 @@ export default function Home() {
   const confirmGuidedAction = () => {
     if (!status.recording || status.guided_step == null || protocolBusy.current) return;
     const step = status.guided_step;
-    if (!PHYSICAL_STEPS.has(step)) {
+    if (status.automation?.active && (status.automation.fault || ![0, 7, 9].includes(step))) return;
+    if (!(status.automation?.active ? [0, 9].includes(step) : PHYSICAL_STEPS.has(step))) {
       clearArmedAction();
       void advanceProtocol();
       return;
@@ -762,19 +769,37 @@ export default function Home() {
   const currentFlowStep = flowSteps[currentFlowIndex];
   const currentFlowLabel = currentFlowStep.label.replace(/^\d+\s*·\s*/, "");
   const activePlannedEvent = status.recording ? (status.planned_event || plannedEvent) : plannedEvent;
-  const guidedTitle = guidedIndex === 3
+  const automaticActive = status.automation?.active === true;
+  const automaticWaiting = automaticActive && (status.automation?.fault === true || ![0, 7, 9].includes(guidedIndex));
+  const automaticTitles: Record<string, string> = {
+    ready: "READY TO LOAD", loading: "PLACE THE PANEL ON BOTH CUPS",
+    retreat_lift: "GRIP VERIFIED — LET GO AND STEP BACK",
+    lifting: "ROBOT LIFTING — EVENT WINDOW OPEN",
+    task: "APPROACH AND COMPLETE THE PANEL TASK",
+    retreat_lower: "STEP BACK — ROBOT WILL LOWER",
+    lowering: "ROBOT LOWERING — STAY CLEAR",
+    supported_release: "SUPPORT THE PANEL BEFORE RELEASE",
+    fault: "TRIAL STOPPED — DO NOT RESTART",
+  };
+  const guidedTitle = automaticActive ? automaticTitles[status.automation?.phase || ""] || "AUTOMATIC TRIAL"
+    : guidedIndex === 3
     ? activePlannedEvent === "rapid intrusion" ? "PERFORM THE APPROVED RAPID INTRUSION"
       : activePlannedEvent === "distractor" ? "PERFORM THE APPROVED DISTRACTOR"
         : "CLEAN CONTROL WINDOW — CONTINUE NORMALLY"
     : guided.title;
-  const guidedCue = guidedIndex === 3
+  const guidedCue = automaticActive ? status.automation?.reason || "Waiting for trial state"
+    : guidedIndex === 3
     ? activePlannedEvent === "rapid intrusion"
       ? "After the second confirmation starts the robot lift, give the synchronized cue. The pre-briefed operator performs only the approved rapid movement toward the validated protected volume, then immediately retreats. Keep the E-stop in reach."
       : activePlannedEvent === "distractor"
         ? "After the second confirmation starts the robot lift, give the synchronized cue for the pre-briefed distractor that stays outside the protected volume."
         : "Start the same robot lift but give no event cue; the participant remains at the marked start position."
     : guided.cue;
-  const guidedNext = guided.next;
+  const guidedNext = automaticActive
+    ? automaticWaiting ? "AUTOMATIC — FOLLOW THE INSTRUCTION ABOVE"
+      : guidedIndex === 0 ? "START LOADING SUCTION"
+        : guidedIndex === 7 ? "TASK COMPLETE — BEGIN RETREAT" : "PANEL SUPPORTED — RELEASE & SAVE"
+    : guided.next;
   const activePhoneStage = dueStudyForm?.stage ?? phoneStage;
   const activePhoneBlock = dueStudyForm?.block ?? blockLabel;
   const phoneUrl = participantFormUrl(activePhoneStage, participant);
@@ -937,9 +962,9 @@ export default function Home() {
                 {status.sync_marker_count > 0 ? `✓ Sync marker ${status.sync_marker_count} recorded` : "Record visible shared sync marker"}
               </button>}
               {guidedIndex >= 3 && guidedIndex <= 8 && <div className="simPanelNote">No top fixture: suction stays ON while the panel is overhead. Never release an unsupported panel.</div>}
-              <button onClick={confirmGuidedAction} disabled={protocolWorking}>{protocolWorking ? "CHECKING / WORKING…" : armedStep === guidedIndex ? `PRESS AGAIN NOW — ${guidedNext}` : guidedNext}</button>
+              <button onClick={confirmGuidedAction} disabled={protocolWorking || automaticWaiting}>{protocolWorking ? "CHECKING / WORKING…" : armedStep === guidedIndex ? `PRESS AGAIN NOW — ${guidedNext}` : guidedNext}</button>
               <button className="runAbort" onClick={() => void abortRecording()}>Abort safely &amp; preserve attempt</button>
-              <small>Advance only at the real phase boundary. Robot motion and suction actions require a deliberate second press.</small>
+              <small>{automaticActive ? "Automatic qualification: grip and retreat advance the robot. Task completion and supported release remain explicit. Faults require abort and inspection." : "Operator-confirmed mode: advance only at the real phase boundary. Robot motion and suction actions require a deliberate second press."}</small>
             </section>
           )}
 
@@ -988,6 +1013,9 @@ export default function Home() {
                     <span>{nextStudySlot.controller}</span>
                     <span>{nextStudySlot.event}</span>
                   </div>
+                  <small>{isQualification && status.automation?.enabled
+                    ? "Automatic qualification: load → seal → retreat → lift → task → retreat → lower. Supported release is confirmed."
+                    : "Operator-confirmed sequence. Automatic participant release remains unqualified."}</small>
 
                   {currentPreflight.key === "calibration" && (
                     <button className="stepPrimary" onClick={() => post("/api/calibration/mark")}>Calibration complete</button>

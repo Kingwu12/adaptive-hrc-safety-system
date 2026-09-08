@@ -5,6 +5,12 @@
 **Audience:** the full FYP team, lab supervisor and anyone operating the participant session  
 **Authority:** this guide explains the study. The machine-readable contract remains `configs/analysis_plan.yaml`, and collection may begin only when `configs/research_readiness.yaml` passes the collection stage.
 
+**Automation update:** an automatic grip/retreat/lift/lower cycle is now available
+for Q-code qualification, not yet participant release. Use the
+[automatic-trial handoff](automatic-trial-qualification.md) for that rehearsal.
+The operator-confirmed participant instructions below have not been silently
+replaced; qualify and freeze the changed execution protocol before collecting it.
+
 **For today's participant session:** print the one-page [participant handout](../output/pdf/participant-handout.pdf) and the [operator script](../output/pdf/operator-session-script.pdf). Their editable wording lives in [participant-session-pack.md](participant-session-pack.md). Give participants the handout; keep the operator script and this research guide with the team.
 
 ## The experiment in one minute

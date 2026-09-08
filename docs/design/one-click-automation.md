@@ -1,5 +1,9 @@
 # One-click panel-cycle automation
 
+Historical architecture note: this hand-guiding/ceiling-fastening state machine
+is not the current dashboard runner. For the suction-held surrogate-panel cycle,
+use [Automatic trial qualification](../automatic-trial-qualification.md).
+
 The automated experiment uses one deterministic task sequence for all three
 conditions. The controller condition changes only the safety-supervisor output
 (full speed, reduced speed, or stop), never the task poses or phase order.
