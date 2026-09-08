@@ -1,9 +1,11 @@
 # Team guide: final participant experiment
 
 **Project:** Adaptive Human-Robot Collaboration Safety Through Motion-State Recognition and Predictive Speed-and-Separation Monitoring  
-**Protocol version:** candidate v1, 9 September 2026  
+**Protocol version:** candidate v1, 9 September 2026; communication pack v1.1
 **Audience:** the full FYP team, lab supervisor and anyone operating the participant session  
 **Authority:** this guide explains the study. The machine-readable contract remains `configs/analysis_plan.yaml`, and collection may begin only when `configs/research_readiness.yaml` passes the collection stage.
+
+**For today's participant session:** print the one-page [participant handout](../output/pdf/participant-handout.pdf) and the [operator script](../output/pdf/operator-session-script.pdf). Their editable wording lives in [participant-session-pack.md](participant-session-pack.md). Give participants the handout; keep the operator script and this research guide with the team.
 
 ## The experiment in one minute
 
@@ -135,31 +137,11 @@ This is a minimal **within-participant factorial design**: every participant act
 5. Open the participant dashboard and confirm the public form routes work on a signed-out phone.
 6. Prepare the next unused anonymous participant code. Never reuse a pilot or participant code.
 
-### Verbatim participant opening script
+### Participant briefing and spoken cues
 
-The study lead reads the following after the approved consent process and before fitting the suit. Do not paraphrase the study structure differently for different participants.
+Use [participant-session-pack.md](participant-session-pack.md) as the single source for the welcome, post-intake briefing, comprehension check, block introduction, trial cues, form instructions, clarification wording and debrief. Its two printable PDFs are linked above. It supersedes the earlier embedded opening script.
 
-> Thank you for taking part. Today you will complete the same panel-handling task nine times: three trials in each of three blocks called A, B and C. The letters represent different robot behaviours, but we will not tell you which is which until the study is finished.
->
-> In every trial, you will carry the panel to the robot, align it on the suction gripper, let go and return to the marked start position. The robot will then lift the panel. During that lift, you will either remain at the marker, perform the safe movement we have rehearsed, or perform the controlled closing movement we have rehearsed and immediately retreat. Only perform a movement when the experimenter gives the cue. Do not improvise, run, fall or try to surprise the system.
->
-> After the lift, you will approach the raised panel, complete the same task, retreat to the marker and wait while the robot lowers the panel. Follow the operator's instruction before approaching or touching the panel at any point.
->
-> You will answer a short form before the suit goes on, after each three-trial block, and once at the end. There is no form after every individual trial. We are recording synchronized motion-capture, robot and video data under your anonymous participant code.
->
-> You can pause or stop at any time without giving a reason. If you feel uncomfortable, unsure or notice anything unexpected, say “STOP” immediately and remain where you are unless the safety operator directs you to retreat. Do you have any questions before we demonstrate and rehearse the two approved movements?
-
-After reading the script, demonstrate the final supervisor-approved safe-motion and controlled-closing actions away from active robot motion. The participant rehearses each action only under the approved procedure. Do not begin the study if they cannot perform both actions comfortably and repeatably.
-
-### Verbatim pre-trial scenario cues
-
-Use only the cue matching the dashboard-assigned scenario. The words in square brackets must be replaced by the exact terms in the signed-off physical movement script before Q01.
-
-- **Baseline:** “The robot lift will start after the second confirmation. Remain at the start marker until I tell you to approach the raised panel. There will be no movement cue in this trial.”
-- **Safe-motion challenge:** “When the lift starts, wait for me to say NOW. On NOW, perform the rehearsed [safe-motion action] once, return to the start marker and wait.”
-- **Controlled closing challenge:** “When the lift starts, wait for me to say NOW. On NOW, perform the rehearsed [controlled-closing action] once, stop at the approved endpoint, immediately retreat to the start marker and wait.”
-
-Immediately before each block, say: “This is Block [A, B or C]. It contains three trials under the same robot behaviour. The movement order is assigned by the dashboard. Perform only the action I cue, once.”
+Read the neutral welcome before intake and the detailed task briefing after intake, so the baseline answers are collected before the demonstration. Demonstrate and rehearse the released actions with robot motion stopped. Fill the team action card with the exact panel-task completion rule, movement paths, pace, limits and stop procedure. These details must come from the released lab procedure. Coded records do not make identifiable video anonymous; use the existing consent choices and data-handling wording.
 
 ### Intake and instrumentation
 

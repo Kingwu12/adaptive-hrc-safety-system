@@ -28,6 +28,11 @@ For the complete participant workflow in team-readable language, start with
 three controllers, three scenarios, nine-trial schedule, five questionnaire handoffs,
 operator roles, measurements, analysis logic and no-go boundaries in one place.
 
+**Participant-day materials:** print the [participant handout](output/pdf/participant-handout.pdf)
+for participants and the [operator session script](output/pdf/operator-session-script.pdf)
+for the team. Edit [the shared wording](docs/participant-session-pack.md), then run
+`python scripts/build_participant_pack.py` with `reportlab` installed to rebuild the PDFs.
+
 ## Quickstart
 
 ```bash
