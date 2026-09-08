@@ -17,9 +17,11 @@ class State(FakeGuidedState):
         self.events = []
         self.fresh = True
         self.output = True
+        self.sync_count = 0
 
     def snapshot(self):
         return {**super().snapshot(), "stale": not self.fresh, "xsens_segment_count": 23,
+                "sync_marker_count": self.sync_count,
                 "controller_decision": {"output_applied": self.output}}
 
     def start_session(self, *args, **kwargs):
@@ -60,9 +62,9 @@ def tick(clock, state, runner, seconds=0):
 
 
 def begin(clock, runner):
-    runner.arm_step()
-    clock.advance(1)
-    runner.complete_step()
+    # Only the existing sync marker is needed. Suction is already on from start.
+    assert runner.rig.actions == [("grip", "BOTH", 60)]
+    runner.state.sync_count = 1
 
 
 def test_full_automatic_cycle_moves_once_each_and_never_releases_overhead():
@@ -297,9 +299,10 @@ def request(runner, state, rig, path, body, remote=False, key=""):
 ])
 def test_http_manual_bypasses_rejected_during_automatic_trial(path, body):
     clock, state, rig, runner = setup()
+    before = list(rig.actions)
     code, _ = request(runner, state, rig, path, body)
     assert code == 400
-    assert not rig.actions
+    assert rig.actions == before
 
 
 def test_remote_abort_requires_key_and_preserves_attempt_even_when_stop_fails():
@@ -385,3 +388,62 @@ def test_catalog_rechecks_completed_manifest_and_keeps_block_trial_slot(tmp_path
     run = catalog.catalog()["runs"][0]
     assert run["quality"]["grade"] == "good"
     assert run["within_block_trial"] == 1 and run["block_label"] == "A"
+
+
+def test_trial_start_turns_suction_on_once_without_any_arm_or_complete_request():
+    clock, state, rig, runner = setup()
+    assert runner.phase == "loading" and state.step == 0
+    assert rig.actions == [("grip", "BOTH", 60)]
+    assert not any(a[0] == "goto" for a in rig.actions)
+    with pytest.raises(ValueError, match="already active"):
+        runner.start("Q01", "T01", True, "another.mvn", automatic=True,
+                     collection_mode="qualification")
+    with pytest.raises(ValueError, match="Only supported release"):
+        runner.arm_step()
+    assert rig.actions == [("grip", "BOTH", 60)]
+
+
+def test_missing_sync_keeps_suction_on_but_cannot_advance_to_motion():
+    clock, state, rig, runner = setup()
+    for _ in range(10):
+        tick(clock, state, runner, 1)
+    assert state.step == 0 and runner.phase == "loading"
+    assert rig.actions == [("grip", "BOTH", 60)]
+    state.sync_count = 1
+    tick(clock, state, runner)
+    assert state.step == 1  # still needs a fresh stable-seal interval
+    tick(clock, state, runner, 1)
+    assert state.step == 3
+
+
+@pytest.mark.parametrize("failure", ["moving", "wrong_pose", "gripper_command", "gripper_read", "cancel"])
+def test_automatic_suction_start_failures_do_not_trigger_motion_or_vent(failure):
+    clock = FakeClock()
+    state, rig = State(clock), Rig()
+    runner = AutomaticRunController(state, rig, clock, enabled=True)
+    if failure == "moving":
+        rig.telemetry_snapshot = lambda: {"available": True, "actual_qd": [0.1] * 6, "source_age_s": 0}
+    elif failure == "wrong_pose":
+        rig.current_q = list(rig._poses["pose2_top"]["q"])
+    else:
+        original = rig.gripper_action
+
+        def action(*args):
+            result = original(*args)
+            if failure == "gripper_command":
+                return {"ok": False, "error": "command rejected"}
+            if failure == "gripper_read":
+                rig.gripper_stats = lambda **kwargs: {"error": "read failed"}
+            if failure == "cancel":
+                runner.request_stop("Stop during suction startup")
+            return result
+        rig.gripper_action = action
+    with pytest.raises(ValueError):
+        runner.start("Q01", "T01", True, "failed.mvn", automatic=True,
+                     collection_mode="qualification", block_label="A")
+    assert not any(a[0] in ("goto", "release") for a in rig.actions)
+    if failure in ("moving", "wrong_pose"):
+        assert not rig.actions and not state.recording
+    else:
+        assert runner.phase == "fault" and runner.cancel.is_set()
+        assert state.recording  # failed attempt retained for abort/save

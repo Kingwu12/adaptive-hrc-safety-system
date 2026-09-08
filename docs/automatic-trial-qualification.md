@@ -10,9 +10,14 @@ those timings with future automatic runs without addressing the protocol change.
 One server-owned cycle, independent of which of the three safety controllers is
 assigned. Browser refresh does not restart or advance the cycle.
 
-1. Start the recording with its assigned controller/event and unique native files.
-2. Record the shared sync marker. Arm and confirm **Start loading suction** once,
-   with the robot at its taught low pose and the operator initially clear.
+1. Press **Start trial — suction turns on** with its assigned controller/event
+   and unique native files. After verifying the robot is stationary at the low
+   pose, suction is off initially and the operator is clear, this single action
+   starts recording and enables loading suction. There is no separate suction
+   confirmation. Starting the service alone still never activates the gripper.
+2. Record the shared sync marker while suction is already on. Missing sync blocks
+   advancement and motion, not suction availability. A failed suction start
+   latches a fault and retains the recording for abort/save; it never vents.
 3. Participant approaches and places the panel against both cups. The robot stays
    stationary. Suction is already running; both measured pressures must remain
    above the seal threshold before the dashboard instructs release and retreat.
@@ -27,7 +32,7 @@ assigned. Browser refresh does not restart or advance the cycle.
 7. At the verified low pose, the participant supports the panel. Arm and confirm
    **Panel supported — release & save**. There is no unattended repeat loop.
 
-The two deliberate suction confirmations are not per-movement robot triggers.
+Only supported release retains the deliberate two-press suction confirmation.
 The safety comparison still exercises controller response during motion.
 
 ## Run software checks without hardware
@@ -103,7 +108,10 @@ the existing research-readiness gates complete from software tests.
 
 ## Software verification, 9 September 2026
 
-- Full Python suite: 153 passed, including 30 automatic-trial regression cases.
+- v1 baseline: 153 Python tests passed, including 30 automatic-trial cases.
+- v2 adds trial-start suction without another confirmation, plus regressions for
+  missing sync, duplicate starts, startup cancellation, failed suction/telemetry,
+  and moving/wrong-pose startup. Full suite: 160 passed (37 automatic-trial cases).
 - Dashboard lint and production build passed. Browser inspection confirmed the
   study/qualification separation, one current action, and offline robot status.
 - Standalone `tsc --noEmit` remains blocked by missing Cloudflare worker type

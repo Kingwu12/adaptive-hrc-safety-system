@@ -1900,7 +1900,7 @@ class AutomaticRunController(GuidedRunController):
     model belief chooses a task transition or becomes ground-truth labels.
     """
 
-    VERSION = "automatic-panel-v1"
+    VERSION = "automatic-panel-v2"
     SEAL_DWELL_S = 1.0
     CLEAR_DWELL_S = 2.0
     HEALTH_MAX_AGE_S = 2.0
@@ -1934,24 +1934,58 @@ class AutomaticRunController(GuidedRunController):
         self._journal("automation_transition", phase=phase, reason=reason,
                       protocol_version=self.VERSION)
 
-    def start(self, *args, automatic=False, **kwargs):
+    def start(self, *args, automatic=False, vacuum=60, **kwargs):
         with self.lock:
-            return self._start(*args, automatic=automatic, **kwargs)
+            return self._start(*args, automatic=automatic, vacuum=vacuum, **kwargs)
 
-    def _start(self, *args, automatic=False, **kwargs):
+    def _start(self, *args, automatic=False, vacuum=60, **kwargs):
         if self.state.snapshot().get("recording"):
             raise ValueError("A recording is already active")
         if automatic and (not self.enabled or kwargs.get("collection_mode") != "qualification"
                           or not re.fullmatch(r"Q\d+", str(args[0] if args else ""))):
             raise ValueError("Automatic trials require --enable-automatic-trials and a Q-code qualification run; participant release is not validated")
+        if automatic:
+            if not 10 <= int(vacuum) <= 80:
+                raise ValueError("Loading vacuum must be between 10 and 80 percent")
+            self._require_stationary()
         self.automatic = False
         self.automatic_requested = automatic
+        self.cancel.clear()
         result = super().start(*args, **kwargs)
         self.automatic = automatic
-        self.cancel.clear()
         self.health = None
-        self._phase("ready", "Record sync, then arm loading suction")
+        self._phase("ready", "Operator-confirmed run")
+        if automatic:
+            # Start trial is the explicit actuation command. No later suction
+            # click, inferred-state trigger or service-start side effect.
+            try:
+                self._require_stationary()
+                self._journal("automation_loading_suction_requested", vacuum_percent=int(vacuum))
+                if self.cancel.is_set():
+                    raise ValueError("Trial stopped before loading suction")
+                action = self.rig.gripper_action("grip", "BOTH", int(vacuum))
+                if not action.get("ok"):
+                    raise ValueError("Loading suction command failed; inspect rig")
+                if self.cancel.is_set():
+                    raise ValueError("Trial stopped during loading suction")
+                self.refresh_health()
+                self._health(require_grip=False)
+                self._journal("automation_loading_suction_enabled", vacuum_percent=int(vacuum))
+                self._phase("loading", "Suction on. Record shared sync, then place the panel against both cups")
+            except Exception as exc:
+                self.request_stop(str(exc))
+                # Preserve this failed attempt and never vent automatically.
+                raise ValueError(f"Trial faulted during suction startup: {exc}") from exc
         return {**result, "automation": self.status()}
+
+    def _require_stationary(self):
+        telemetry = self.rig.telemetry_snapshot()
+        qd = telemetry.get("actual_qd") or []
+        if (not telemetry.get("available") or len(qd) != 6
+                or not 0 <= float(telemetry.get("source_age_s", math.inf)) <= 0.25
+                or not all(math.isfinite(float(v)) for v in qd)
+                or max(abs(float(v)) for v in qd) > 0.005):
+            raise ValueError("Cannot verify the robot is stationary")
 
     def refresh_health(self):
         if not self.automatic or self.cancel.is_set():
@@ -2036,10 +2070,10 @@ class AutomaticRunController(GuidedRunController):
             return super().arm_step()
         with self.lock:
             step = self.state.snapshot().get("guided_step")
-            if self.cancel.is_set() or step not in (0, 9):
-                raise ValueError("Only loading suction and supported release need arming")
+            if self.cancel.is_set() or step != 9:
+                raise ValueError("Only supported release needs arming; loading suction starts with the trial")
             self.armed_step, self.armed_at = step, self.clock()
-            return {"message": "Press again to start loading suction" if step == 0 else PHYSICAL_STEP_WARNINGS[9]}
+            return {"message": PHYSICAL_STEP_WARNINGS[9]}
 
     def complete_step(self, vacuum=60):
         if not self.automatic:
@@ -2049,40 +2083,13 @@ class AutomaticRunController(GuidedRunController):
             raise ValueError("Trial is faulted; abort and inspect before a new run")
         step = self.state.snapshot().get("guided_step")
         if step == 9:
-            telemetry = self.rig.telemetry_snapshot()
-            qd = telemetry.get("actual_qd") or []
-            if (not telemetry.get("available") or len(qd) != 6
-                    or not 0 <= float(telemetry.get("source_age_s", math.inf)) <= 0.25
-                    or not all(math.isfinite(float(v)) for v in qd)
-                    or max(abs(float(v)) for v in qd) > 0.005):
-                raise ValueError("Cannot verify the robot is stationary for supported release")
+            self._require_stationary()
             result = super().complete_step(vacuum)
             self.automatic = False
             self._phase("complete", "Run saved; panel released at low pose")
             return result
         with self.lock:
-            if step == 0 and self.phase == "ready":
-                if self.armed_step != 0 or not self.ARM_MIN_DELAY_S <= self.clock() - self.armed_at <= self.ARM_TIMEOUT_S:
-                    raise ValueError("Arm loading suction, then confirm within five seconds")
-                self._clear_arm()
-                if self.state.snapshot().get("sync_marker_count", 0) < 1:
-                    raise ValueError("Record the shared sync marker first")
-                self._require_robot_ready()
-                self._require_pose("pose1_low")
-                self._require_operator_clear()
-                result = self.rig.gripper_action("grip", "BOTH", int(vacuum))
-                if not result.get("ok"):
-                    self.request_stop("Loading suction command failed")
-                    raise ValueError("Loading suction command failed; inspect rig")
-                try:
-                    self.refresh_health()
-                    self._health(require_grip=False)
-                except Exception as exc:
-                    self.request_stop(str(exc))
-                    raise
-                self._advance_to(1)
-                self._phase("loading", "Place panel against both cups; waiting for stable vacuum")
-            elif step == 7 and self.phase == "task":
+            if step == 7 and self.phase == "task":
                 self._advance_to(8)
                 self._phase("retreat_lower", "Task complete. Step back; lowering starts automatically after clear dwell")
             else:
@@ -2105,7 +2112,12 @@ class AutomaticRunController(GuidedRunController):
             snap, distance = self._tracking()
             sealed = self._health(require_grip=self.phase != "loading")
             if self.phase == "loading":
-                if self._stable(sealed, self.SEAL_DWELL_S):
+                synced = snap.get("sync_marker_count", 0) >= 1
+                self.reason = ("Place panel against both cups; suction is on and seal detection is automatic" if synced
+                               else "Suction on. Record shared sync before approaching; motion remains blocked")
+                if synced and snap.get("guided_step") == 0:
+                    self._advance_to(1)
+                if self._stable(synced and sealed, self.SEAL_DWELL_S):
                     self._advance_to(3)
                     self._phase("retreat_lift", "Grip verified. Release panel and step back; lift starts automatically after clear dwell")
             elif self.phase in ("retreat_lift", "retreat_lower"):
@@ -2429,12 +2441,13 @@ class ApiHandler(BaseHTTPRequestHandler):
                     if self.path == "/api/robot":
                         if body.get("action") not in {"stop", "pause"}:
                             raise ValueError("Only stop/pause is allowed during an automatic trial")
-                        self.guided.request_stop("Operator " + str(body.get("action")))
                 if self.path == "/api/gripper":
                     result = self.rig.gripper_action(
                         str(body.get("action")), str(body.get("channel", "BOTH")),
                         int(body.get("vacuum", 60)))
                 elif self.path == "/api/robot":
+                    if body.get("action") in {"stop", "pause"}:
+                        self.guided.request_stop("Operator " + str(body.get("action")))
                     result = self.rig.robot_action(str(body.get("action")))
                 elif self.path == "/api/xsens/reset":
                     result = self._xsens_reset(str(body.get("type", "grid")))
@@ -2453,6 +2466,7 @@ class ApiHandler(BaseHTTPRequestHandler):
                         collection_mode=body.get("collection_mode", "model_development"),
                         motive_recording_reference=body.get("motive_recording_reference"),
                         video_recording_reference=body.get("video_recording_reference"),
+                        vacuum=int(body.get("vacuum", 60)),
                         automatic=body.get("automatic") is True)
                 elif self.path == "/api/protocol/arm":
                     result = self.guided.arm_step()

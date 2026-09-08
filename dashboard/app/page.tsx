@@ -573,6 +573,7 @@ export default function Home() {
       planned_event: isStructuredRun ? (slot?.event ?? plannedEvent) : undefined,
       collection_mode: workspaceMode,
       automatic: workspaceMode === "qualification" && status.automation?.enabled === true,
+      vacuum,
       motive_recording_reference: isStructuredRun ? (references?.motive ?? motiveRecordingReference.trim()) : undefined,
       video_recording_reference: isStructuredRun ? (references?.video ?? videoRecordingReference.trim()) : undefined,
     });
@@ -669,8 +670,8 @@ export default function Home() {
   const confirmGuidedAction = () => {
     if (!status.recording || status.guided_step == null || protocolBusy.current) return;
     const step = status.guided_step;
-    if (status.automation?.active && (status.automation.fault || ![0, 7, 9].includes(step))) return;
-    if (!(status.automation?.active ? [0, 9].includes(step) : PHYSICAL_STEPS.has(step))) {
+    if (status.automation?.active && (status.automation.fault || ![7, 9].includes(step))) return;
+    if (!(status.automation?.active ? step === 9 : PHYSICAL_STEPS.has(step))) {
       clearArmedAction();
       void advanceProtocol();
       return;
@@ -770,9 +771,9 @@ export default function Home() {
   const currentFlowLabel = currentFlowStep.label.replace(/^\d+\s*·\s*/, "");
   const activePlannedEvent = status.recording ? (status.planned_event || plannedEvent) : plannedEvent;
   const automaticActive = status.automation?.active === true;
-  const automaticWaiting = automaticActive && (status.automation?.fault === true || ![0, 7, 9].includes(guidedIndex));
+  const automaticWaiting = automaticActive && (status.automation?.fault === true || ![7, 9].includes(guidedIndex));
   const automaticTitles: Record<string, string> = {
-    ready: "READY TO LOAD", loading: "PLACE THE PANEL ON BOTH CUPS",
+    ready: "READY TO LOAD", loading: status.sync_marker_count < 1 ? "SUCTION ON — RECORD SHARED SYNC" : "PLACE THE PANEL ON BOTH CUPS",
     retreat_lift: "GRIP VERIFIED — LET GO AND STEP BACK",
     lifting: "ROBOT LIFTING — EVENT WINDOW OPEN",
     task: "APPROACH AND COMPLETE THE PANEL TASK",
@@ -797,8 +798,7 @@ export default function Home() {
     : guided.cue;
   const guidedNext = automaticActive
     ? automaticWaiting ? "AUTOMATIC — FOLLOW THE INSTRUCTION ABOVE"
-      : guidedIndex === 0 ? "START LOADING SUCTION"
-        : guidedIndex === 7 ? "TASK COMPLETE — BEGIN RETREAT" : "PANEL SUPPORTED — RELEASE & SAVE"
+      : guidedIndex === 7 ? "TASK COMPLETE — BEGIN RETREAT" : "PANEL SUPPORTED — RELEASE & SAVE"
     : guided.next;
   const activePhoneStage = dueStudyForm?.stage ?? phoneStage;
   const activePhoneBlock = dueStudyForm?.block ?? blockLabel;
@@ -1033,7 +1033,7 @@ export default function Home() {
                   )}
 
                   {currentPreflight.key === "ready" && (
-                    <button className="stepPrimary" onClick={() => void startRecording(nextStudySlot, effectiveRecordingReferences)}>Start Block {nextStudySlot.block} · Trial {nextStudySlot.withinBlockTrial}</button>
+                    <button className="stepPrimary" onClick={() => void startRecording(nextStudySlot, effectiveRecordingReferences)}>Start Block {nextStudySlot.block} · Trial {nextStudySlot.withinBlockTrial}{isQualification && status.automation?.enabled ? " — suction turns on" : ""}</button>
                   )}
 
                   <details className="preflightDetails">

@@ -105,7 +105,8 @@ def test_automatic_qualification_does_not_offer_manual_movement_advances():
     page = (ROOT / "dashboard/app/page.tsx").read_text(encoding="utf-8")
     assert 'automatic: workspaceMode === "qualification" && status.automation?.enabled === true' in page
     assert 'disabled={protocolWorking || automaticWaiting}' in page
-    assert 'status.automation.fault || ![0, 7, 9].includes(step)' in page
-    assert 'START LOADING SUCTION' in page
+    assert 'status.automation.fault || ![7, 9].includes(step)' in page
+    assert 'START LOADING SUCTION' not in page
+    assert ' — suction turns on' in page
     assert 'TASK COMPLETE — BEGIN RETREAT' in page
     assert 'Automatic participant release remains unqualified.' in page
