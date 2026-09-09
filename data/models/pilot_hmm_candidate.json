@@ -1,0 +1,492 @@
+{
+  "schema_version": 3,
+  "states": [
+    "approaching",
+    "working",
+    "retreating"
+  ],
+  "feature_order": [
+    "d",
+    "v_proj",
+    "speed",
+    "heading_alignment"
+  ],
+  "transition_matrix": [
+    [
+      0.9961783439490446,
+      0.0037637521713954833,
+      5.7903879559930515e-05
+    ],
+    [
+      1.8664028817260494e-05,
+      0.9993654230202131,
+      0.0006159129509695963
+    ],
+    [
+      5.1150895140664964e-05,
+      5.1150895140664964e-05,
+      0.9998976982097186
+    ]
+  ],
+  "emissions": {
+    "kind": "gaussian_mixture",
+    "weights": [
+      [
+        0.31656216141546445,
+        0.47382065596220835,
+        0.2096171826223272
+      ],
+      [
+        0.304901628822283,
+        0.284943434941502,
+        0.41015493623621496
+      ],
+      [
+        0.27475702970268046,
+        0.42824363445734126,
+        0.2969993358399783
+      ]
+    ],
+    "means": [
+      [
+        [
+          1.24383493721269,
+          -0.0077572039205827436,
+          0.33447090780265,
+          0.026540725428365327
+        ],
+        [
+          1.551828284596758,
+          0.6184474037476367,
+          0.768473303171171,
+          0.8155712943777577
+        ],
+        [
+          2.5520342896679153,
+          0.035206115173472496,
+          0.1020835937845794,
+          0.25193767655991567
+        ]
+      ],
+      [
+        [
+          0.6430345720038292,
+          -0.24569865929534734,
+          0.5785796008511791,
+          -0.4464875334647462
+        ],
+        [
+          0.8047610328730891,
+          0.2504426669576914,
+          0.4798116980990732,
+          0.5307899263713216
+        ],
+        [
+          0.6711724237897766,
+          0.00703826800502835,
+          0.07169905026377635,
+          0.08887198685513113
+        ]
+      ],
+      [
+        [
+          2.5247023993524595,
+          -0.025603415091012622,
+          0.19306438919460323,
+          -0.1480408819983432
+        ],
+        [
+          1.6338866084398014,
+          -0.6200330567896638,
+          0.7512005559824674,
+          -0.8301738287215298
+        ],
+        [
+          0.7527953636615133,
+          -0.06690271400635601,
+          0.42845065979090197,
+          -0.12077741022283897
+        ]
+      ]
+    ],
+    "variances": [
+      [
+        [
+          0.47583553878242346,
+          0.04556550597559683,
+          0.08683076359535488,
+          0.3554774140851995
+        ],
+        [
+          0.37690605750043604,
+          0.03442598593605295,
+          0.04199418757609552,
+          0.025452630627094353
+        ],
+        [
+          0.062094299399765185,
+          0.006961762029554446,
+          0.00913250582647998,
+          0.38288104798105604
+        ]
+      ],
+      [
+        [
+          0.037063823089797665,
+          0.045800970905938064,
+          0.07185357848299312,
+          0.09431096499909011
+        ],
+        [
+          0.27056471019180905,
+          0.039063789230565485,
+          0.05894476204347687,
+          0.1310451880313407
+        ],
+        [
+          0.07221644202922811,
+          0.0033572253729790254,
+          0.004992745847383983,
+          0.4196326157023019
+        ]
+      ],
+      [
+        [
+          0.07961172719087772,
+          0.02443450770455542,
+          0.03201779054976694,
+          0.4082754867005194
+        ],
+        [
+          0.2791467416213892,
+          0.03645726589272141,
+          0.03654312778136237,
+          0.02419145981934223
+        ],
+        [
+          0.04177722411931384,
+          0.042730755220190084,
+          0.10048061754347612,
+          0.28998629876921983
+        ]
+      ]
+    ]
+  },
+  "source": "labelled real pilot recordings \u00b7 3-component diagonal GMM",
+  "generated_at_utc": "2026-09-09T09:31:30.573616+00:00",
+  "data_summary": {
+    "recordings_scanned": 46,
+    "recordings_selected": 32,
+    "complete_trials": 32,
+    "participants": [
+      "P03",
+      "P04",
+      "P05"
+    ],
+    "training_runs": [
+      {
+        "participant_id": "P03",
+        "trial_id": "T01",
+        "file_name": "P03-T01-20260902-114344-df0d4d.jsonl"
+      },
+      {
+        "participant_id": "P03",
+        "trial_id": "T02",
+        "file_name": "P03-T02-20260902-114633-722395.jsonl"
+      },
+      {
+        "participant_id": "P03",
+        "trial_id": "T03",
+        "file_name": "P03-T03-20260902-114852-eba97c.jsonl"
+      },
+      {
+        "participant_id": "P03",
+        "trial_id": "T04",
+        "file_name": "P03-T04-20260902-115127-646b10.jsonl"
+      },
+      {
+        "participant_id": "P03",
+        "trial_id": "T05",
+        "file_name": "P03-T05-20260902-115353-7d4684.jsonl"
+      },
+      {
+        "participant_id": "P03",
+        "trial_id": "T06",
+        "file_name": "P03-T06-20260902-115614-8db39a.jsonl"
+      },
+      {
+        "participant_id": "P03",
+        "trial_id": "T07",
+        "file_name": "P03-T07-20260902-115816-6f848a.jsonl"
+      },
+      {
+        "participant_id": "P03",
+        "trial_id": "T08",
+        "file_name": "P03-T08-20260902-120035-1482ba.jsonl"
+      },
+      {
+        "participant_id": "P04",
+        "trial_id": "T01",
+        "file_name": "P04-T01-20260902-131706-cf4df4.jsonl"
+      },
+      {
+        "participant_id": "P04",
+        "trial_id": "T02",
+        "file_name": "P04-T02-20260902-132043-8f2c96.jsonl"
+      },
+      {
+        "participant_id": "P04",
+        "trial_id": "T03",
+        "file_name": "P04-T03-20260902-132317-eb63ed.jsonl"
+      },
+      {
+        "participant_id": "P04",
+        "trial_id": "T04",
+        "file_name": "P04-T04-20260902-132541-6ceb16.jsonl"
+      },
+      {
+        "participant_id": "P04",
+        "trial_id": "T05",
+        "file_name": "P04-T05-20260902-132755-eca79b.jsonl"
+      },
+      {
+        "participant_id": "P04",
+        "trial_id": "T06",
+        "file_name": "P04-T06-20260902-133036-d7846e.jsonl"
+      },
+      {
+        "participant_id": "P04",
+        "trial_id": "T07",
+        "file_name": "P04-T07-20260902-133257-5185a0.jsonl"
+      },
+      {
+        "participant_id": "P04",
+        "trial_id": "T08",
+        "file_name": "P04-T08-20260902-133526-f4e273.jsonl"
+      },
+      {
+        "participant_id": "P04",
+        "trial_id": "T09",
+        "file_name": "P04-T09-20260902-133728-a297ec.jsonl"
+      },
+      {
+        "participant_id": "P04",
+        "trial_id": "T10",
+        "file_name": "P04-T10-20260902-133950-0dc65f.jsonl"
+      },
+      {
+        "participant_id": "P04",
+        "trial_id": "T11",
+        "file_name": "P04-T11-20260902-134153-b5dca6.jsonl"
+      },
+      {
+        "participant_id": "P04",
+        "trial_id": "T12",
+        "file_name": "P04-T12-20260902-134346-ed4ec2.jsonl"
+      },
+      {
+        "participant_id": "P05",
+        "trial_id": "T01",
+        "file_name": "P05-T01-20260902-140637-260e10.jsonl"
+      },
+      {
+        "participant_id": "P05",
+        "trial_id": "T02",
+        "file_name": "P05-T02-20260902-140831-43d2b9.jsonl"
+      },
+      {
+        "participant_id": "P05",
+        "trial_id": "T03",
+        "file_name": "P05-T03-20260902-141029-108a72.jsonl"
+      },
+      {
+        "participant_id": "P05",
+        "trial_id": "T04",
+        "file_name": "P05-T04-20260902-144935-26b5f3.jsonl"
+      },
+      {
+        "participant_id": "P05",
+        "trial_id": "T05",
+        "file_name": "P05-T05-20260902-145138-4e866f.jsonl"
+      },
+      {
+        "participant_id": "P05",
+        "trial_id": "T06",
+        "file_name": "P05-T06-20260902-145338-88245c.jsonl"
+      },
+      {
+        "participant_id": "P05",
+        "trial_id": "T07",
+        "file_name": "P05-T07-20260902-145538-76fa1f.jsonl"
+      },
+      {
+        "participant_id": "P05",
+        "trial_id": "T08",
+        "file_name": "P05-T08-20260902-145740-73df42.jsonl"
+      },
+      {
+        "participant_id": "P05",
+        "trial_id": "T09",
+        "file_name": "P05-T09-20260902-145939-10ca6c.jsonl"
+      },
+      {
+        "participant_id": "P05",
+        "trial_id": "T10",
+        "file_name": "P05-T10-20260902-150200-da8c69.jsonl"
+      },
+      {
+        "participant_id": "P05",
+        "trial_id": "T11",
+        "file_name": "P05-T11-20260902-150356-50c93c.jsonl"
+      },
+      {
+        "participant_id": "P05",
+        "trial_id": "T12",
+        "file_name": "P05-T12-20260902-150604-6ceccf.jsonl"
+      }
+    ],
+    "label_counts": {
+      "approaching": 17267,
+      "working": 53609,
+      "retreating": 19611
+    },
+    "min_samples_per_state_per_trial": 30,
+    "feature_order": [
+      "d",
+      "v_proj",
+      "speed",
+      "heading_alignment"
+    ],
+    "emission_components_per_state": 3,
+    "transition_power": 1.0,
+    "target_definition": "three mutually exclusive task phases; hazard is an orthogonal event"
+  },
+  "validation": {
+    "method": "leave-one-participant-out",
+    "participants": [
+      "P03",
+      "P04",
+      "P05"
+    ],
+    "accuracy": 0.7620873716666482,
+    "balanced_accuracy": 0.694909682430124,
+    "online_filter_accuracy": 0.7440847856598185,
+    "online_filter_balanced_accuracy": 0.685421141757942,
+    "per_phase_recall": {
+      "approaching": 0.6203741240516593,
+      "working": 0.8685668451192897,
+      "retreating": 0.5957880781194228
+    },
+    "confusion": [
+      [
+        10712,
+        4114,
+        2441
+      ],
+      [
+        3398,
+        46563,
+        3648
+      ],
+      [
+        2309,
+        5618,
+        11684
+      ]
+    ],
+    "folds": [
+      {
+        "participant_id": "P03",
+        "held_out_trials": 8,
+        "training_trials": 24,
+        "accuracy": 0.7516208888364965,
+        "balanced_accuracy": 0.6768516472685451,
+        "online_filter_accuracy": 0.7324452827223074,
+        "per_phase_recall": {
+          "approaching": 0.5666476516447994,
+          "working": 0.8728853226345704,
+          "retreating": 0.5910219675262656
+        },
+        "confusion": [
+          [
+            2980,
+            1671,
+            608
+          ],
+          [
+            1264,
+            13054,
+            637
+          ],
+          [
+            639,
+            1502,
+            3094
+          ]
+        ]
+      },
+      {
+        "participant_id": "P04",
+        "held_out_trials": 12,
+        "training_trials": 20,
+        "accuracy": 0.7593424752848404,
+        "balanced_accuracy": 0.6760917498761034,
+        "online_filter_accuracy": 0.7492824631084568,
+        "per_phase_recall": {
+          "approaching": 0.6075168287210172,
+          "working": 0.8835020675887637,
+          "retreating": 0.5372563533185295
+        },
+        "confusion": [
+          [
+            3249,
+            1700,
+            399
+          ],
+          [
+            1535,
+            18588,
+            916
+          ],
+          [
+            995,
+            2756,
+            4355
+          ]
+        ]
+      },
+      {
+        "participant_id": "P05",
+        "held_out_trials": 12,
+        "training_trials": 20,
+        "accuracy": 0.7739073498117531,
+        "balanced_accuracy": 0.7318746275145576,
+        "online_filter_accuracy": 0.7479129153707644,
+        "per_phase_recall": {
+          "approaching": 0.6731231231231232,
+          "working": 0.8470621629293216,
+          "retreating": 0.6754385964912281
+        },
+        "confusion": [
+          [
+            4483,
+            743,
+            1434
+          ],
+          [
+            599,
+            14921,
+            2095
+          ],
+          [
+            675,
+            1360,
+            4235
+          ]
+        ]
+      }
+    ],
+    "sequence_boundary_policy": "reset Viterbi at every unlabelled or invalid gap",
+    "role": "development estimate; if this configuration was selected using these folds, confirm it once on a newly recruited untouched participant"
+  }
+}

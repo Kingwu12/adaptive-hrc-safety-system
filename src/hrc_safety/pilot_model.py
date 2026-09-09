@@ -71,7 +71,7 @@ def load_upper_hmm(path: str | Path) -> UpperHMM:
     variances = np.asarray(emissions_payload["variances"], dtype=float)
     if A.shape != (len(STATES), len(STATES)):
         raise ValueError(f"Invalid transition matrix shape in {source}: {A.shape}")
-    if not np.isfinite(A).all() or not np.isfinite(means).all():
+    if not np.isfinite(A).all() or np.any(A < 0) or not np.isfinite(means).all():
         raise ValueError(f"Non-finite model parameter in {source}")
     if not np.isfinite(variances).all() or np.any(variances <= 0):
         raise ValueError(f"Invalid emission variance in {source}")

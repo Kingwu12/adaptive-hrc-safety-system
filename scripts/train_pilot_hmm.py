@@ -26,7 +26,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--input", default="data/xsens", help="recording directory")
     parser.add_argument(
-        "--output", default="data/models/pilot_hmm.json", help="fitted model JSON"
+        "--output", default="data/models/pilot_hmm_candidate.json", help="development candidate JSON; promotion is a separate qualified release step"
     )
     parser.add_argument("--min-complete-trials", type=int, default=3)
     parser.add_argument("--min-samples-per-state", type=int, default=30)
@@ -39,8 +39,8 @@ def main() -> int:
     parser.add_argument(
         "--transition-power",
         type=float,
-        default=8.0,
-        help="row-normalized transition sharpening power (default: 8)",
+        default=1.0,
+        help="transition exponent; 1 preserves fitted counts (8 is historical replay only)",
     )
     parser.add_argument(
         "--participants",

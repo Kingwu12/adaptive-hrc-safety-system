@@ -66,7 +66,8 @@ cd dashboard && npm run dev                 # open http://localhost:3000
 python -m pip install -e ".[training]"
 python scripts/train_pilot_hmm.py --participants P03,P04,P05 --validation participant --check-only
 python scripts/train_pilot_hmm.py --participants P03,P04,P05 --validation participant
-# Restart dashboard_server.py; it loads data/models/pilot_hmm.json automatically.
+# Training writes pilot_hmm_candidate.json. It does not replace the active model.
+# Promotion requires causal validation and a separately qualified study release.
 
 # On a Windows 10/11 machine, run Xsens Analyze/Animate with the Awinda
 # dongle attached. Stream Position + Quaternion over UDP to this Mac:9763.

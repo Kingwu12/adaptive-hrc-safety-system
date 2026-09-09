@@ -468,3 +468,6 @@ footer{display:flex;justify-content:space-between;border-top:1px solid var(--lin
   .studyShell .inlineFormHandoff{grid-template-columns:1fr;gap:24px}
   .studyShell .inlineQr{justify-self:center}.studyShell .inlineQr svg{width:min(70vw,260px)}
 }
+:root .automationReadiness{grid-column:1/-1;padding:16px 20px;border:1px solid #b9c8c0;border-left:4px solid #27674e;background:#fff;color:#172c23;font-size:1rem}
+:root .automationReadiness p{margin:8px 0 0;line-height:1.5}
+:root .controllerWitness{display:grid;gap:8px;margin:16px 0;padding:16px;background:#edf3ef;border-left:4px solid #27674e;color:#172c23;font-size:1rem;overflow-wrap:anywhere}

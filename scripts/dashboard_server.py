@@ -36,6 +36,8 @@ from vg10 import VG10  # noqa: E402
 from hrc_safety.analysis import build_controller, fit_hmm  # noqa: E402
 from hrc_safety.config import load_config  # noqa: E402
 from hrc_safety.features import FeatureExtractor  # noqa: E402
+from hrc_safety.experiment_diagnostics import (ControllerComparison, EventExposure, model_health,
+                                             release_fingerprint)  # noqa: E402
 from hrc_safety.work_locations import WorkLocationVisits  # noqa: E402
 from hrc_safety.simulated_drilling import SimulatedDrilling, aligned_hands  # noqa: E402
 from hrc_safety.lhmm.upper import (STATES, GaussianMixtureEmissions)  # noqa: E402
@@ -548,6 +550,13 @@ class DashboardState:
             self.model_source = "synthetic baseline"
             self.model_sha256 = "synthetic-baseline"
         self.packet_times: deque[float] = deque(maxlen=240)
+        self.model_health = model_health(self.hmm, features["sample_rate_hz"])
+        self.controller_comparison = None
+        self.shadow_controllers = None
+        self.study_release = None
+        self.runtime_release = release_fingerprint(
+            Path(__file__).resolve().parents[1], self.model_sha256, self.config)
+        self.event_exposure = EventExposure(self.config)
         self.packets = 0
         self.last_packet_wall: float | None = None
         self.position: list[float] | None = None
@@ -623,6 +632,7 @@ class DashboardState:
         optitrack_sample = self.optitrack_bridge.tick(now)
         if xsens_sample is None:
             with self.lock:
+                self.event_exposure.moving = False
                 if self.recording and self.active_controller is not None:
                     decision = {
                         "status": "tracking_unavailable",
@@ -633,6 +643,7 @@ class DashboardState:
                     }
                     self._apply_controller_output_locked(decision)
                     self.controller_decision = decision
+                    self.controller_comparison = None
                     self.controller_updated_at = now
             return
         # Absolute operator position comes from the tracked head rigid body in
@@ -644,12 +655,15 @@ class DashboardState:
         state = None
         feature = None
         controller_decision = None
+        comparison = None
         if frame is not None:
             feature = asdict(frame)
             if self.active_controller is not None:
                 decision = self.active_controller.decide(frame, robot_mode="ssm")
                 controller_decision = asdict(decision)
                 controller_decision["output_applied"] = False
+                if self.shadow_controllers is not None:
+                    comparison = self.shadow_controllers.decide(frame)
                 if decision.inferred_state in STATES:
                     posterior = {
                         name: float(decision.state_posterior[i])
@@ -682,6 +696,7 @@ class DashboardState:
             self.posterior = posterior
             self.hmm_state = state
             self.controller_decision = controller_decision
+            self.controller_comparison = comparison
             self.controller_updated_at = now
             if self.recording and self.file is not None:
                 rigid_bodies = {}
@@ -701,6 +716,8 @@ class DashboardState:
                     if self.rig is not None else
                     {"available": False, "error": "rig not attached"}
                 )
+                self.event_exposure.observe(feature, robot_telemetry,
+                                            self.event_label in {"hazard", "distractor"})
                 record = {
                     "schema_version": 3,
                     "session_id": self.session_id,
@@ -729,9 +746,12 @@ class DashboardState:
                     "ground_truth": self.label,
                     "ground_truth_phase": self.label,
                     "ground_truth_event": self.event_label,
+                    "event_label_basis": "planned_cue_window_not_observed_onset",
                     "hmm_state": state,
                     "hmm_posterior": posterior,
                     "controller_decision": controller_decision,
+                    "controller_comparison": comparison,
+                    "study_release_sha256": (self.study_release or {}).get("sha256"),
                     "controller_output_applied": self.controller_output_applied,
                     "sync_marker_count": self.sync_marker_count,
                     "model_source": self.model_source,
@@ -812,6 +832,11 @@ class DashboardState:
         with self.lock:
             if self.recording:
                 raise ValueError("A recording is already active")
+            current_release = release_fingerprint(
+                Path(__file__).resolve().parents[1], self.model_sha256, self.config)
+            for name, digest in self.runtime_release["files"].items():
+                if (name.endswith((".py", ".tsx")) or name == "configs/mocap_extrinsics.yaml") and current_release["files"].get(name) != digest:
+                    raise ValueError("Study code changed after this service started; restart it before a new trial")
             if not self.connected:
                 raise ValueError("Xsens is not streaming yet")
             if self.optitrack_stale:
@@ -934,6 +959,11 @@ class DashboardState:
                 build_controller(implementation, self.config, self.hmm)
                 if implementation is not None else None
             )
+            self.shadow_controllers = (ControllerComparison(self.config, self.hmm)
+                                       if implementation is not None else None)
+            self.controller_comparison = None
+            self.event_exposure = EventExposure(self.config)
+            self.study_release = current_release
             self.participant_id = safe_id(participant, "P00")
             self.trial_id = safe_id(trial, "T00")
             self.block_label = block or None
@@ -1020,6 +1050,10 @@ class DashboardState:
                 self._catalog_event_counts, self.planned_event,
                 automatic=automatic, completed=outcome == "completed",
             )
+            exposure = self.event_exposure.status(self.planned_event)
+            if exposure["review_reason"] and quality["grade"] == "good":
+                quality = {**quality, "grade": "review", "label": "REVIEW EVENT",
+                           "reasons": quality["reasons"] + [exposure["review_reason"]]}
             label_seconds = {
                 label: round(count / rate_hz, 1) if rate_hz > 0 else 0.0
                 for label, count in self._catalog_label_counts.items()
@@ -1058,6 +1092,8 @@ class DashboardState:
                 "outcome": outcome,
                 "execution_mode": self.execution_mode,
                 "automation_contract": self.automation_contract,
+                "study_release": self.study_release,
+                "event_exposure": exposure,
                 "samples": self.samples_written,
                 "dashboard_jsonl": self.recording_path,
                 "event_jsonl": self.event_path,
@@ -1163,7 +1199,7 @@ class DashboardState:
         return {"message": f"Ground truth: {value}"}
 
     def begin_planned_event_window(self, source: str = "robot_lift") -> dict:
-        """Open the assigned event while the robot is actually in motion."""
+        """Open the planned cue window; telemetry separately verifies motion."""
         with self.lock:
             if not self.recording:
                 raise ValueError("Start recording before opening an event window")
@@ -1278,6 +1314,15 @@ class DashboardState:
                 "hmm_state": self.hmm_state,
                 "model_source": self.model_source,
                 "model_sha256": self.model_sha256,
+                "model_health": self.model_health,
+                "event_exposure": self.event_exposure.status(self.planned_event),
+                "controller_comparison": self.controller_comparison,
+                "controller_profile": {
+                    "mode": "ssm",
+                    "red_radius_m": (self.config["zones"]["K"] * self.config["zones"]["T"]
+                                     + self.config["zones"]["C"] + self.config["zones"]["Sa"]),
+                    "predictive_role": "Earlier caution for rapid closing; all controllers share the red stop boundary.",
+                },
                 "recording": self.recording,
                 "session_id": self.session_id,
                 "participant_id": self.participant_id,
@@ -2234,17 +2279,28 @@ class AutomaticRunController(GuidedRunController):
             "complete": (7, "Trial saved", None),
         }
         number, title, action = cues.get(phase, (None, "Automatic qualification", None))
+        cue_instruction = None
+        if phase == "lifting":
+            snap = self.state.snapshot()
+            if snap.get("event_exposure", {}).get("robot_moving"):
+                event = snap.get("planned_event")
+                title = {"rapid intrusion": "Motion underway: give the approved rapid-intrusion cue",
+                         "distractor": "Motion underway: give the approved distractor cue"}.get(
+                             event, "Motion underway: clean trial, no event cue")
+                cue_instruction = "Use only the pre-briefed movement and route. The event window ends when lifting finishes."
         sync_required = (self.automatic and phase == "loading"
                          and self.state.snapshot().get("sync_marker_count", 0) < 1)
         if sync_required:
             title = "Suction on — record shared sync"
         return {"stage": number, "stages_total": 7, "title": title,
-                "instruction": self.reason, "action_label": action,
+                "instruction": cue_instruction or self.reason, "action_label": action,
                 "sync_required": sync_required,
                 "automatic_wait": self.automatic and action is None}
 
     def status(self):
         return {"enabled": self.enabled, "active": self.automatic,
+                "availability": "qualification_ready" if self.enabled else "service_disabled",
+                "participant_blocker": "Automatic participant release requires a witnessed lab qualification. Participant trials currently use operator confirmations.",
                 "work_locations": ({"configured": False} if self.work_visits is None else
                                    {"configured": True, **self.work_visits.status()}),
                 "simulated_drilling": self.drilling.status(),

@@ -263,6 +263,18 @@ def test_dashboard_state_records_enriched_labelled_frames(tmp_path):
     assert set(row["hmm_posterior"]) == {"approaching", "working", "retreating"}
 
 
+def test_start_session_rejects_code_changed_since_service_start(tmp_path, monkeypatch):
+    import scripts.dashboard_server as service
+    state = DashboardState(tmp_path, segment_id=1)
+    changed = dict(state.runtime_release)
+    changed['files'] = dict(changed['files'])
+    changed['files']['scripts/dashboard_server.py'] = 'changed-after-startup'
+    monkeypatch.setattr(service, 'release_fingerprint', lambda *args: changed)
+    with pytest.raises(ValueError, match='restart it before a new trial'):
+        state.start_session('P01', 'T01')
+    assert not state.recording
+
+
 def test_start_session_resets_temporal_model_state(tmp_path):
     state = DashboardState(tmp_path, segment_id=1)
     state.on_xsens_frame(_full_xsens_frame())

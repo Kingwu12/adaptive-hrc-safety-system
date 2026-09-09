@@ -49,3 +49,4 @@ dashboard/tsconfig.tsbuildinfo
 
 # Dashboard runtime logs (stdout/stderr captures — regenerated on every run, never source)
 /logs/
+data/service-logs/

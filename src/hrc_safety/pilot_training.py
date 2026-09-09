@@ -73,6 +73,14 @@ def load_trial(path: str | Path) -> TrialData:
                 raise ValueError(f"{source}:{line_number}: invalid JSON") from exc
             participant_id = str(record.get("participant_id") or participant_id)
             trial_id = str(record.get("trial_id") or trial_id)
+            # Evaluation subjects and machine cues must never become training data.
+            # Legacy pilot files omit collection_mode and remain readable.
+            if (record.get("collection_mode") in {"participant_study", "qualification"}
+                    or record.get("execution_mode") == "automatic"
+                    or record.get("stale") is True):
+                skipped += 1
+                end_segment()
+                continue
             label = str(
                 record.get("ground_truth_phase")
                 or record.get("ground_truth")
@@ -183,7 +191,7 @@ def _fit_mixture_emissions(
 
 def fit_trials(
     trials: list[TrialData], emission_components: int = 1,
-    transition_power: float = 8.0,
+    transition_power: float = 1.0,
 ) -> UpperHMM:
     if not trials:
         raise ValueError("No complete labelled trials supplied")
@@ -193,9 +201,9 @@ def fit_trials(
     A = UpperHMM.fit_transitions(sequences, laplace=1.0)
     if transition_power <= 0:
         raise ValueError("transition_power must be positive")
-    # Sharpen the fitted row-stochastic transition matrix, then renormalise it.
-    # This is a proper probability matrix and encodes the empirically justified
-    # persistence of task phases without changing the emission evidence.
+    # Preserve measured transition counts by default. Raising frame-rate self-
+    # transitions to the eighth power made phase changes almost impossible.
+    # Non-unit powers remain available only for explicit historical replay.
     A = np.power(A, float(transition_power))
     A = A / A.sum(axis=1, keepdims=True)
     if emission_components < 1:
@@ -242,7 +250,7 @@ def _filter_trial(model: UpperHMM, trial: TrialData) -> tuple[list[str], list[st
 
 def leave_one_trial_out(
     trials: list[TrialData], emission_components: int = 1,
-    transition_power: float = 8.0,
+    transition_power: float = 1.0,
 ) -> dict:
     """Validate on unseen whole trials so adjacent frames cannot leak across folds."""
     predictions: list[str] = []
@@ -284,7 +292,7 @@ def leave_one_trial_out(
 
 def leave_one_participant_out(
     trials: list[TrialData], emission_components: int = 1,
-    transition_power: float = 8.0,
+    transition_power: float = 1.0,
 ) -> dict:
     """Validate on people absent from fitting, not merely unseen adjacent runs."""
     participant_ids = sorted({trial.participant_id for trial in trials})

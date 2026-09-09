@@ -22,7 +22,7 @@ def _study_tree(tmp_path, monkeypatch):
             "method": "leave-one-participant-out",
             "accuracy": 0.82,
             "balanced_accuracy": 0.75,
-            "online_filter_accuracy": 0.79,
+            "online_filter_accuracy": 0.84,
         },
     }), encoding="utf-8")
     model_hash = hashlib.sha256(model_path.read_bytes()).hexdigest()
@@ -56,4 +56,14 @@ def test_freeze_rejects_model_not_used_by_qualification_runs(tmp_path, monkeypat
         capture["model_sha256"] = "0" * 64
     report_path.write_text(json.dumps(report), encoding="utf-8")
     with pytest.raises(ValueError, match="not recorded with the active model"):
+        build_freeze(tmp_path, report_path)
+
+
+def test_offline_accuracy_cannot_qualify_a_weaker_online_filter(tmp_path, monkeypatch):
+    report_path, _ = _study_tree(tmp_path, monkeypatch)
+    path = tmp_path / 'data/models/pilot_hmm.json'
+    model = json.loads(path.read_text())
+    model['validation']['online_filter_accuracy'] = .79
+    path.write_text(json.dumps(model))
+    with pytest.raises(ValueError, match='causal online-filter accuracy'):
         build_freeze(tmp_path, report_path)

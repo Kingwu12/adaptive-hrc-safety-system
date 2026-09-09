@@ -49,6 +49,11 @@ def build_freeze(root: Path, qualification_report: Path) -> dict:
         raise ValueError("active model is not the frozen three-phase definition")
     if float(validation.get("accuracy", 0.0)) < 0.80:
         raise ValueError("participant-held-out development accuracy is below 0.80")
+    if validation.get("method") != "leave-one-participant-out":
+        raise ValueError("participant-held-out causal validation is required")
+    online = validation.get("online_filter_accuracy")
+    if not isinstance(online, (float, int)) or not 0.80 <= online <= 1.0:
+        raise ValueError("causal online-filter accuracy is below 0.80 or missing; offline decoding cannot qualify live control")
 
     dirty = subprocess.run(
         ["git", "status", "--porcelain", "--untracked-files=no"],

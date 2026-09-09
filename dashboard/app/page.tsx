@@ -11,6 +11,7 @@ type Feature = {
 type Status = {
   automation?: {
     enabled: boolean; active: boolean; qualification_only: boolean;
+    availability?: string; participant_blocker?: string;
     version: string; phase: string; reason: string; fault: boolean;
     task_sha256?: string | null;
     work_locations?: { configured: boolean; visited_count?: number; total_locations?: number };
@@ -35,7 +36,12 @@ type Status = {
   hmm_state: string | null;
   model_source: string;
   model_sha256: string;
+  model_health?: { warnings: string[] };
+  event_exposure?: {motion_samples: number; rapid_closing_samples: number; review_reason: string | null};
+  controller_comparison?: Record<string, {speed_fraction: number; rule: string; shadow_only: boolean}> | null;
+  controller_profile?: {red_radius_m: number; predictive_role: string};
   controller_output_enabled: boolean;
+  controller_decision?: {speed_fraction: number; rule: string} | null;
   recording: boolean;
   session_id: string | null;
   participant_id: string | null;
@@ -564,15 +570,21 @@ export default function Home() {
     }
   };
 
+  const startInFlight = useRef(false);
+  const [startBusy, setStartBusy] = useState(false);
   const startRecording = async (slot?: StudySlot, references?: {
     mvn: string;
     motive: string;
     video: string;
-  }) => {
+  }, recordingsConfirmed = mvnRecordingConfirmed) => {
+    if (startInFlight.current) return;
+    startInFlight.current = true;
+    setStartBusy(true);
+    try {
     const isStructuredRun = workspaceMode !== "model_development";
     const result = await post("/api/protocol/start", {
       participant_id: participant,
-      mvn_recording_confirmed: mvnRecordingConfirmed,
+      mvn_recording_confirmed: recordingsConfirmed,
       mvn_recording_reference: references?.mvn ?? mvnRecordingReference.trim(),
       block_label: isStructuredRun ? (slot?.block ?? blockLabel) : undefined,
       within_block_trial: isStructuredRun ? (slot?.withinBlockTrial ?? Number(withinBlockTrial)) : undefined,
@@ -589,6 +601,10 @@ export default function Home() {
       setMvnRecordingReference("");
       setMotiveRecordingReference("");
       setVideoRecordingReference("");
+    }
+    } finally {
+      startInFlight.current = false;
+      setStartBusy(false);
     }
   };
 
@@ -949,6 +965,11 @@ export default function Home() {
               </div>
               <h2>{guidedTitle}</h2>
               <p>{guidedCue}</p>
+              {status.controller_decision && <div className="controllerWitness" role="status">
+                <strong>{status.controller_decision.speed_fraction === 0 ? "Controller requests stop" : `Controller requests ${Math.round(status.controller_decision.speed_fraction * 100)}% speed`}</strong>
+                <span>{status.controller_decision.rule}</span>
+                <small>Measured separation {n(status.feature?.d)} m · closing speed {n(status.feature?.v_proj)} m/s</small>
+              </div>}
               {guidedIndex === 0 && <button className="syncMarker" onClick={() => void post("/api/sync")}>
                 {status.sync_marker_count > 0 ? `✓ Sync marker ${status.sync_marker_count} recorded` : "Record visible shared sync marker"}
               </button>}
@@ -956,10 +977,30 @@ export default function Home() {
               {!automaticWaiting && <button onClick={confirmGuidedAction} disabled={protocolWorking}>{protocolWorking ? protocolBusyLabel : guidedNext}</button>}
               <button className="runAbort" onClick={() => void abortRecording()}>Abort safely &amp; preserve attempt</button>
               <small>{automaticActive ? "Automatic qualification: follow the current instruction above. Task completion requires confirmation. Faults require abort and inspection." : "One press records each real phase boundary. Lift and lower requests stay active while the selected controller gates robot speed from the live participant signal."}</small>
+              <details className="controllerComparison">
+                <summary>Controller comparison and event evidence</summary>
+                <p>Only the assigned controller commands the robot. Other values are calculated from the same input for diagnosis.</p>
+                {status.controller_comparison && <table><thead><tr><th>Controller</th><th>Requested speed</th></tr></thead><tbody>
+                  {Object.entries(status.controller_comparison).map(([name, value]) => <tr key={name}><td>{name}</td><td>{Math.round(value.speed_fraction * 100)}%</td></tr>)}
+                </tbody></table>}
+                <p>Moving event samples: {status.event_exposure?.motion_samples ?? 0} · rapid-closing samples: {status.event_exposure?.rapid_closing_samples ?? 0}</p>
+                {status.event_exposure?.review_reason && <p className="warnText">{status.event_exposure.review_reason}</p>}
+              </details>
             </section>
           )}
 
           <section className="studyLayout">
+            {!status.recording && <aside className="automationReadiness" role="status">
+              <strong>{isQualification
+                ? status.automation?.enabled ? "Automatic rehearsal enabled" : "Automatic rehearsal is off"
+                : "Participant trials: operator-confirmed"}</strong>
+              <p>{isQualification
+                ? status.automation?.enabled
+                  ? "Start once. Grip verification, retreat, lift, lowering and supported release advance automatically. Shared sync and task completion still need your observation."
+                  : "Start the lab with Start-Lab.ps1 to enable automatic rehearsals. Sensor and robot checks remain required."
+                : status.automation?.participant_blocker || "Automatic participant release remains unqualified. Use Qualification to verify the full cycle before release."}</p>
+              {status.model_health?.warnings.map(warning => <p key={warning} className="warnText">{warning}</p>)}
+            </aside>}
             {!status.recording && <article className="panel oneStepCard">
               {!participant ? (
                 <div className="oneStepAction emptyAction">
@@ -1019,12 +1060,12 @@ export default function Home() {
                         <label><span>Motive</span><input value={motiveRecordingReference || defaultMotiveReference} maxLength={500} onChange={event => setMotiveRecordingReference(event.target.value)} /></label>
                         <label><span>Video</span><input value={videoRecordingReference || defaultVideoReference} maxLength={500} onChange={event => setVideoRecordingReference(event.target.value)} /></label>
                       </div>
-                      <button className="stepPrimary" onClick={() => setMvnRecordingConfirmed(true)}>All three recordings are running</button>
+                      <button className="stepPrimary" disabled={startBusy} onClick={() => void startRecording(nextStudySlot, effectiveRecordingReferences, true)}>{startBusy ? "Starting trial…" : "All three recordings are running — start trial"}</button>
                     </>
                   )}
 
                   {currentPreflight.key === "ready" && (
-                    <button className="stepPrimary" onClick={() => void startRecording(nextStudySlot, effectiveRecordingReferences)}>Start Block {nextStudySlot.block} · Trial {nextStudySlot.withinBlockTrial} — suction turns on</button>
+                    <button className="stepPrimary" disabled={startBusy} onClick={() => void startRecording(nextStudySlot, effectiveRecordingReferences)}>Start Block {nextStudySlot.block} · Trial {nextStudySlot.withinBlockTrial} — suction turns on</button>
                   )}
 
                   <details className="preflightDetails">
@@ -1045,7 +1086,8 @@ export default function Home() {
             </article>}
 
             <details className="panel studyDetails">
-              <summary><span>Session map</span><b>{acceptedStudyRuns}/9 trials accepted</b></summary>
+              <summary><span>Session map</span><b>{acceptedStudyRuns}/9 captures passed</b></summary>
+              <p>Capture checks cover labels and tracking. Final analysis eligibility requires a separate trial audit.</p>
               <div className="trialMatrix">
                 {schedule.map(slot => {
                   const matches = participantRuns.filter(run => run.block_label === slot.block && run.within_block_trial === slot.withinBlockTrial);
