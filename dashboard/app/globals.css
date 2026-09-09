@@ -291,7 +291,13 @@ footer{display:flex;justify-content:space-between;border-top:1px solid var(--lin
 .studyDetails>summary b{color:var(--muted);font:800 9px var(--font-geist-mono),monospace;letter-spacing:.07em}
 .studyDetails[open]>summary{border-bottom:1px solid var(--line)}
 .studyDetails>.trialMatrix,.studyDetails>.poseWarn,.studyDetails>.studyRigOk,.studyDetails>.rigBtn,.studyDetails>.studyRecovery{margin:12px 16px}
-.runAbort{margin-top:8px!important;padding:10px!important;background:#421919!important;color:#ffb0ae!important;border:1px solid #a94747!important;font-size:11px!important}
+.trialEndControls{display:flex;align-items:center;justify-content:space-between;gap:24px;margin:16px 0 32px;padding:12px 16px;border:1px solid var(--line)}
+.trialEndControls>span{font-size:12px;font-weight:700}
+.trialEndControls small{display:block;margin-top:4px;color:var(--muted);font-size:11px;font-weight:400}
+.trialEndControls button{flex-shrink:0;padding:10px 16px;border:1px solid #b64a43;background:transparent;color:#ef9188;font-size:12px;font-weight:700;cursor:pointer}
+.studyShell .trialEndControls button{color:#991b14}
+.trialEndControls button:hover:not(:disabled){background:#b64a431a}
+.trialEndControls button:disabled{opacity:.5;cursor:wait}
 
 @media(min-width:901px){
   .trialStep .assignmentTags{margin-top:8px}

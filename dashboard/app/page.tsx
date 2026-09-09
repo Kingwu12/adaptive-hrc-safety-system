@@ -400,6 +400,8 @@ export default function Home() {
   const [completedStudyForms, setCompletedStudyForms] = useState<Record<string, boolean>>({});
   const [protocolWorking, setProtocolWorking] = useState(false);
   const protocolBusy = useRef(false);
+  const abortInFlight = useRef(false);
+  const [abortBusy, setAbortBusy] = useState(false);
 
   useEffect(() => {
     let live = true;
@@ -603,8 +605,17 @@ export default function Home() {
   };
 
   const abortRecording = async () => {
-    const result = await post("/api/session/stop");
-    if (result) setCatalogRefresh(value => value + 1);
+    if (!status.recording || abortInFlight.current) return;
+    if (!window.confirm(`Abort ${status.participant_id} · ${status.trial_id}?\n\nThis ends the current attempt and preserves its recorded data.\n\nChoose Cancel to keep the trial running.`)) return;
+    abortInFlight.current = true;
+    setAbortBusy(true);
+    try {
+      const result = await post("/api/session/stop");
+      if (result) setCatalogRefresh(value => value + 1);
+    } finally {
+      abortInFlight.current = false;
+      setAbortBusy(false);
+    }
   };
 
   const saveParticipant = async () => {
@@ -903,6 +914,11 @@ export default function Home() {
         </div>
       </header>
 
+      {status.recording && <aside className="trialEndControls" aria-label="End current trial">
+        <span>{status.participant_id} · {status.trial_id}<small>Ending a trial requires confirmation</small></span>
+        <button disabled={abortBusy} onClick={() => void abortRecording()}>{abortBusy ? "Ending trial…" : "Abort trial…"}</button>
+      </aside>}
+
       <section className="modeChooser" aria-label="Collection workflow">
         <button className={workspaceMode === "participant_study" ? "modeCard selected" : "modeCard"}
           disabled={status.recording} onClick={() => chooseWorkspaceMode("participant_study")}>
@@ -962,7 +978,6 @@ export default function Home() {
               </button>}
               {guidedIndex >= 3 && guidedIndex <= 8 && <div className="simPanelNote">No top fixture: suction stays ON while the panel is overhead. Never release an unsupported panel.</div>}
               {!automaticWaiting && <button onClick={confirmGuidedAction} disabled={protocolWorking}>{protocolWorking ? protocolBusyLabel : guidedNext}</button>}
-              <button className="runAbort" onClick={() => void abortRecording()}>Abort safely &amp; preserve attempt</button>
               <small>{automaticActive ? "Automatic trial: follow the current instruction above. Task completion requires confirmation. Faults require abort and inspection." : "One press records each real phase boundary. Lift and lower requests stay active while the selected controller gates robot speed from the live participant signal."}</small>
               <details className="controllerComparison">
                 <summary>Operator: controller identity and event evidence</summary>
@@ -989,7 +1004,7 @@ export default function Home() {
                 : "Operator-confirmed mode: automation is off"}</strong>
               <p>{status.automation?.enabled
                 ? (status.automation.supported_collection_modes || ["qualification"]).includes(workspaceMode)
-                  ? "Start once. Grip verification, retreat, lift, lowering and supported release advance automatically. Shared sync and task completion still need your observation."
+                  ? "Start once. Data saves automatically. Grip verification, retreat, lift, lowering and supported release advance automatically. Confirm when the task is complete."
                   : "Restart the updated backend with Start-Lab.ps1. The service currently running supports rehearsals only."
                 : "Start the lab with Start-Lab.ps1 to enable automatic trials. Sensor and robot checks remain required."}</p>
               {status.model_health?.warnings.map(warning => <p key={warning} className="warnText">{warning}</p>)}
@@ -1156,7 +1171,7 @@ export default function Home() {
             <button onClick={() => { setParticipantEditor(null); setParticipantName(""); }}>Cancel</button>
           </div>}
           <div className="actions">
-            {!status.recording ? <button className="primary" disabled={!xsensComplete || !status.optitrack_connected || !participant || status.capture_mode !== "automatic_streams" || calibration == null || calibration > 300} onClick={() => void startRecording()}>Start {nextTrial} development run</button> : <button className="stop" onClick={() => void abortRecording()}>Abort / stop & save</button>}
+            {!status.recording && <button className="primary" disabled={!xsensComplete || !status.optitrack_connected || !participant || status.capture_mode !== "automatic_streams" || calibration == null || calibration > 300} onClick={() => void startRecording()}>Start {nextTrial} development run</button>}
           </div>
           {!status.recording && <p className="startHint">The next trial number comes from the files already saved for this participant. Every attempt is preserved and counted automatically.</p>}
           <p className="feedback">{message}</p>
