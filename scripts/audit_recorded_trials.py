@@ -8,6 +8,7 @@ import argparse
 import collections
 import json
 import math
+import statistics
 from pathlib import Path
 
 
@@ -23,6 +24,7 @@ def audit_trial(path: Path, red_boundary_m: float = .94, closing_gate_m_s: float
     event_min_d = math.inf
     event_max_closing = -math.inf
     event_max_joint_speed = 0.0
+    geometry_errors = []
     identity_names = {'static':'fixed zone', 'fixed_zone':'fixed zone',
                       'dynamic_ssm':'reactive SSM', 'adaptive':'predictive SSM'}
     for line in path.open(encoding='utf-8-sig'):
@@ -68,6 +70,19 @@ def audit_trial(path: Path, red_boundary_m: float = .94, closing_gate_m_s: float
         if isinstance(d,(int,float)) and math.isfinite(d):
             minimum_d = min(minimum_d,d)
             if event: event_min_d = min(event_min_d,d)
+            position, pose = row.get('position'), telemetry.get('actual_tcp_pose')
+            if (isinstance(position,list) and len(position) == 3
+                    and isinstance(pose,list) and len(pose) == 6
+                    and all(isinstance(x,(int,float)) and math.isfinite(x) for x in position+pose)
+                    and telemetry.get('available') is True
+                    and isinstance(age,(int,float)) and 0 <= age <= .25):
+                # Recompute the existing column proxy from same-row inputs.
+                # This is not independently measured physical clearance.
+                nearest = (pose[0],pose[1],min(max(position[2],0),pose[2]))
+                recomputed = math.dist(position,nearest)
+                geometry_errors.append(abs(d-recomputed))
+        if (row.get('geometry_reference') or {}).get('source') != 'live_rtde_tcp':
+            counts['live_geometry_contract_missing'] += 1
         if event and isinstance(v,(int,float)) and math.isfinite(v):
             event_max_closing = max(event_max_closing,v)
         if event and fresh: event_max_joint_speed = max(event_max_joint_speed,max(map(abs,qd)))
@@ -97,6 +112,10 @@ def audit_trial(path: Path, red_boundary_m: float = .94, closing_gate_m_s: float
         blockers.append('recorded decision controller differs from assigned controller')
     if counts['controller_identity_samples'] == 0:
         blockers.append('no identified controller decisions recorded')
+    if geometry_errors and max(geometry_errors) > .01:
+        blockers.append('stored distance differs by more than 1 cm from same-row live TCP column recomputation; geometry review required')
+    if counts['live_geometry_contract_missing']:
+        blockers.append('live geometry reference was not explicitly recorded on every sample')
     if (first or {}).get('planned_event') == 'rapid intrusion' and event_max_closing < closing_gate_m_s:
         blockers.append(f'labelled rapid-intrusion window never reached the audit closing gate ({closing_gate_m_s:g} m/s); independently review exposure')
     if (first or {}).get('planned_event') == 'distractor' and event_min_d <= red_boundary_m:
@@ -116,6 +135,12 @@ def audit_trial(path: Path, red_boundary_m: float = .94, closing_gate_m_s: float
             'event_minimum_proxy_distance_m': event_min_d if math.isfinite(event_min_d) else None,
             'event_maximum_closing_m_s': event_max_closing if math.isfinite(event_max_closing) else None,
             'event_maximum_joint_speed_rad_s': event_max_joint_speed,
+            'geometry_recomputation': {
+                'basis':'Same-row recorded head position and fresh robot TCP; discrepancy diagnostic, not independent physical clearance',
+                'samples':len(geometry_errors),
+                'median_absolute_distance_error_m':statistics.median(geometry_errors) if geometry_errors else None,
+                'maximum_absolute_distance_error_m':max(geometry_errors) if geometry_errors else None,
+            },
             'final_data_status': 'review_required', 'unresolved_evidence': blockers}
 
 

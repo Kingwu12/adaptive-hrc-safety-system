@@ -126,7 +126,9 @@ class RigidBodyMonitor:
                wall_time: float, mean_error_m: float | None = None) -> None:
         p = np.asarray(position, dtype=float).reshape(3)
         q = tuple(float(v) for v in rotation)
-        if np.all(np.isfinite(p)) and len(q) == 4:
+        if (np.all(np.isfinite(p)) and len(q) == 4 and np.all(np.isfinite(q))
+                and np.isfinite(source_time_s) and np.isfinite(wall_time)
+                and (mean_error_m is None or np.isfinite(mean_error_m))):
             with self._lock:
                 self._poses[int(rigid_body_id)] = (p.copy(), q, float(source_time_s),
                                                     float(wall_time),

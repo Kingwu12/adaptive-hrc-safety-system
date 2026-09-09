@@ -75,7 +75,7 @@ class MocapBridge:
         if not tracked:
             return
         pos = np.asarray(pos_xyz, dtype=float).reshape(3)
-        if not np.all(np.isfinite(pos)):
+        if not np.all(np.isfinite(pos)) or not np.isfinite(motive_ts) or not np.isfinite(wall_time):
             return
         with self._lock:
             self._last_pos = pos.copy()

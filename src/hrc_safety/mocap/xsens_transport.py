@@ -23,6 +23,7 @@ spec; the first REAL packet from the lab's MVN Analyze must be checked once
 from __future__ import annotations
 
 import socket
+import math
 import struct
 import threading
 import time
@@ -65,6 +66,8 @@ def parse_mxtp02_frame(data: bytes) -> dict | None:
         if off + _ITEM.size > len(data):
             return None
         seg, x, y, z, q0, q1, q2, q3 = _ITEM.unpack_from(data, off)
+        if str(seg) in segments or not all(math.isfinite(v) for v in (x,y,z,q0,q1,q2,q3)):
+            return None
         segments[str(seg)] = {
             "position_m": [float(x), float(y), float(z)],
             "quaternion_wxyz": [float(q0), float(q1), float(q2), float(q3)],

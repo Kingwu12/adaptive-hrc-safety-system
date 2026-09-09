@@ -37,7 +37,7 @@ from hrc_safety.analysis import build_controller, fit_hmm  # noqa: E402
 from hrc_safety.config import load_config  # noqa: E402
 from hrc_safety.features import FeatureExtractor  # noqa: E402
 from hrc_safety.experiment_diagnostics import (ControllerComparison, EventExposure, model_health,
-                                             release_fingerprint)  # noqa: E402
+                                             release_fingerprint, live_tcp_position)  # noqa: E402
 from hrc_safety.work_locations import WorkLocationVisits  # noqa: E402
 from hrc_safety.simulated_drilling import SimulatedDrilling, aligned_hands  # noqa: E402
 from hrc_safety.lhmm.upper import (STATES, GaussianMixtureEmissions)  # noqa: E402
@@ -314,14 +314,13 @@ class RunCatalog:
         rate_hz = samples / duration_s if duration_s > 0 else 0.0
         stale_ratio = stale / samples if samples else 1.0
         completed = False
-        if execution_mode == "automatic":
-            try:
-                manifest = json.loads(path.with_suffix(".manifest.json").read_text())
-                completed = (manifest.get("session_id") == session_id
-                             and manifest.get("outcome") == "completed"
-                             and manifest.get("execution_mode") == "automatic")
-            except (OSError, ValueError):
-                pass
+        try:
+            manifest = json.loads(path.with_suffix(".manifest.json").read_text())
+            completed = (manifest.get("session_id") == session_id
+                         and manifest.get("outcome") == "completed"
+                         and manifest.get("execution_mode", "operator_confirmed") == execution_mode)
+        except (OSError, ValueError):
+            pass
         quality = self._quality(samples, duration_s, rate_hz, stale_ratio,
                                 label_counts, sequence, invalid, event_counts,
                                 planned_event, automatic=execution_mode == "automatic",
@@ -341,6 +340,7 @@ class RunCatalog:
             "collection_mode": collection_mode,
             "started_at": self._started_at(session_id, stat.st_mtime),
             "execution_mode": execution_mode,
+            "completed": completed,
             "file_name": path.name,
             "samples": samples,
             "duration_s": round(duration_s, 1),
@@ -385,6 +385,7 @@ class RunCatalog:
                          manifest_path.stat().st_mtime_ns if manifest_path.exists() else 0)
                 if cached is None or cached[0] != stat.st_size or cached[1] != stamp:
                     summary = None
+                    manifest = {}
                     if manifest_path.exists():
                         try:
                             manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -421,6 +422,14 @@ class RunCatalog:
                                 temporary.unlink(missing_ok=True)
                             except OSError:
                                 pass
+                    # Capture grades do not prove completion. Derive eligibility
+                    # from the manifest even for summaries cached by old versions;
+                    # leave historical capture grades and source files untouched.
+                    summary = dict(summary)
+                    summary["completed"] = (
+                        manifest.get("session_id") == path.stem
+                        and manifest.get("outcome") == "completed"
+                    )
                     self._cache[key] = (stat.st_size, stamp, summary)
                 runs.append(dict(self._cache[key][2]))
             runs.sort(key=lambda row: row["started_at"], reverse=True)
@@ -557,6 +566,9 @@ class DashboardState:
         self.runtime_release = release_fingerprint(
             Path(__file__).resolve().parents[1], self.model_sha256, self.config)
         self.event_exposure = EventExposure(self.config)
+        self.geometry_reference = {"source": "unavailable", "tcp_position_m": None}
+        self.pipeline_error = None
+        self.feature_status = "unavailable"
         self.packets = 0
         self.last_packet_wall: float | None = None
         self.position: list[float] | None = None
@@ -627,12 +639,47 @@ class DashboardState:
             self.xsens_frame_wall = time.monotonic()
 
     def tick(self) -> None:
+        # Starting/stopping a trial must not race with inference or sample writes.
+        with self.lock:
+            if self.pipeline_error is not None:
+                self._hold_pipeline_fault()
+                return
+            try:
+                self._tick_locked()
+            except Exception as exc:
+                self.pipeline_error = f"{type(exc).__name__}: {exc}"
+                self._hold_pipeline_fault()
+
+    def _hold_pipeline_fault(self):
+        """Keep a failed capture/inference pipeline visibly latched at zero."""
+        self.feature = None
+        self.feature_status = "pipeline_fault"
+        self.controller_comparison = None
+        self.event_exposure.moving = False
+        decision = {"command":"protective_stop", "speed_fraction":0.0,
+                    "rule":"FAIL CLOSED: capture/controller pipeline failed; restart service",
+                    "output_applied":False}
+        self.controller_decision = decision
+        if self.recording:
+            try:
+                self._apply_controller_output_locked(decision)
+            except Exception:
+                # The original error remains visible even if the output or its
+                # journal also fails (for example, a full recording disk).
+                decision['output_applied'] = False
+                decision['output_status'] = 'pipeline_fault_output_unconfirmed'
+
+    def _tick_locked(self) -> None:
         now = time.monotonic()
         xsens_sample = self.bridge.tick(now)
         optitrack_sample = self.optitrack_bridge.tick(now)
         if xsens_sample is None:
             with self.lock:
+                self.feature = None
+                self.feature_status = "unavailable"
+                self.geometry_reference = {"source": "unavailable", "tcp_position_m": None}
                 self.event_exposure.moving = False
+                self.extractor.reset()
                 if self.recording and self.active_controller is not None:
                     decision = {
                         "status": "tracking_unavailable",
@@ -648,9 +695,29 @@ class DashboardState:
             return
         # Absolute operator position comes from the tracked head rigid body in
         # robot-base coordinates. Xsens remains the articulated-motion source.
+        robot_telemetry = (self.rig.telemetry_snapshot(allow_connect=False)
+                           if self.rig is not None else {"available": False})
+        tcp = live_tcp_position(robot_telemetry)
+        if tcp is not None:
+            self.extractor.set_tcp(tcp)
+            self.geometry_reference = {"source": "live_rtde_tcp", "tcp_position_m": tcp,
+                                       "source_timestamp_s": robot_telemetry['source_timestamp_s']}
+        elif self.rig is None and self.collection_mode == "model_development":
+            # Explicit offline development only. Never substitute a configured
+            # reference for a missing live robot pose in a structured run.
+            tcp = list(self.config['scenario']['tcp_position'])
+            self.extractor.set_tcp(tcp)
+            self.geometry_reference = {"source": "configured_development_reference", "tcp_position_m": tcp}
+        else:
+            self.geometry_reference = {"source": "unavailable", "tcp_position_m": None}
         sample = optitrack_sample
-        frame = None if sample is None or sample.stale else self.extractor.push(
-            sample.t, sample.position)
+        if sample is None or sample.stale or xsens_sample.stale or tcp is None:
+            self.extractor.reset()
+            frame = None
+            self.feature_status = "unavailable"
+        else:
+            frame = self.extractor.push(sample.t, sample.position)
+            self.feature_status = "ready" if frame is not None else "warming_up"
         posterior: dict[str, float] = {}
         state = None
         feature = None
@@ -681,7 +748,7 @@ class DashboardState:
                 "status": "tracking_unavailable",
                 "command": "protective_stop",
                 "speed_fraction": 0.0,
-                "rule": "FAIL CLOSED: no fresh validated OptiTrack feature frame",
+                "rule": "FAIL CLOSED: fresh Xsens, OptiTrack and live robot geometry are required",
                 "output_applied": False,
             }
         with self.lock:
@@ -711,11 +778,6 @@ class DashboardState:
                         }
                         for rb_id, body in self.optitrack_monitor.snapshot(now).items()
                     }
-                robot_telemetry = (
-                    self.rig.telemetry_snapshot(allow_connect=False)
-                    if self.rig is not None else
-                    {"available": False, "error": "rig not attached"}
-                )
                 self.event_exposure.observe(feature, robot_telemetry,
                                             self.event_label in {"hazard", "distractor"})
                 record = {
@@ -739,7 +801,10 @@ class DashboardState:
                                               self.optitrack_monitor.marker_snapshot(now)),
                     "xsens_position": self.xsens_position,
                     "xsens_frame": self.xsens_frame,
-                    "stale": self.optitrack_stale,
+                    "stale": self.optitrack_stale or xsens_sample.stale or tcp is None,
+                    "xsens_age_s": round(xsens_sample.age_s, 5),
+                    "optitrack_source_time_s": None if sample is None else sample.motive_timestamp,
+                    "geometry_reference": dict(self.geometry_reference),
                     "age_s": (None if self.optitrack_age_s is None else
                               round(self.optitrack_age_s, 5)),
                     "features": feature,
@@ -762,7 +827,7 @@ class DashboardState:
                     "video_recording_reference": self.video_recording_reference,
                     "robot_telemetry": robot_telemetry,
                 }
-                self.file.write(json.dumps(record, separators=(",", ":")) + "\n")
+                self.file.write(json.dumps(record, separators=(",", ":"), allow_nan=False) + "\n")
                 self.file.flush()
                 self.samples_written += 1
                 sample_t = float(record["t"])
@@ -832,6 +897,8 @@ class DashboardState:
         with self.lock:
             if self.recording:
                 raise ValueError("A recording is already active")
+            if self.pipeline_error is not None:
+                raise ValueError("Capture/controller pipeline failed; restart the service before a new trial")
             current_release = release_fingerprint(
                 Path(__file__).resolve().parents[1], self.model_sha256, self.config)
             for name, digest in self.runtime_release["files"].items():
@@ -944,11 +1011,16 @@ class DashboardState:
                     raise ValueError(
                         "Enter the visible consented video filename for this structured run"
                     )
+                telemetry = (self.rig.telemetry_snapshot(allow_connect=False)
+                             if self.rig is not None else {})
+                if live_tcp_position(telemetry) is None:
+                    raise ValueError("A fresh live robot TCP pose is required for structured separation measurements")
             # Every recorded trial is an independent sequence. Do not let the
             # previous trial's HMM belief or derivative windows leak across it.
             self.hmm.reset()
             self.extractor.reset()
             self.feature = None
+            self.feature_status = "warming_up"
             self.posterior = {}
             self.hmm_state = None
             self.controller_decision = None
@@ -1070,6 +1142,7 @@ class DashboardState:
                 "started_at": RunCatalog._started_at(self.session_id or "", time.time()),
                 "execution_mode": self.execution_mode,
                 "file_name": Path(self.recording_path or "").name,
+                "completed": outcome == "completed",
                 "samples": self.samples_written,
                 "duration_s": round(duration_s, 1),
                 "rate_hz": round(rate_hz, 1),
@@ -1108,9 +1181,11 @@ class DashboardState:
                 "saved_utc": datetime.now(timezone.utc).isoformat(),
                 "catalog_summary": catalog_summary,
             }
-            manifest_path.write_text(
+            temporary_manifest = manifest_path.with_suffix('.json.tmp')
+            temporary_manifest.write_text(
                 json.dumps(manifest, indent=2) + "\n", encoding="utf-8"
             )
+            temporary_manifest.replace(manifest_path)
             self.manifest_path = str(manifest_path.resolve())
             self.recording = False
             if self.file is not None:
@@ -1310,11 +1385,14 @@ class DashboardState:
                 "optitrack_age_s": (None if self.optitrack_age_s is None else
                                     round(self.optitrack_age_s, 4)),
                 "feature": self.feature,
+                "feature_status": self.feature_status,
                 "posterior": self.posterior,
                 "hmm_state": self.hmm_state,
                 "model_source": self.model_source,
                 "model_sha256": self.model_sha256,
                 "model_health": self.model_health,
+                "pipeline_error": self.pipeline_error,
+                "geometry_reference": dict(self.geometry_reference),
                 "event_exposure": self.event_exposure.status(self.planned_event),
                 "controller_comparison": self.controller_comparison,
                 "controller_profile": {
@@ -1470,8 +1548,12 @@ class RigControl:
                     continue
                 value = fn()
                 if isinstance(value, (list, tuple)):
+                    if not all(math.isfinite(float(v)) for v in value):
+                        raise ValueError(f"Invalid RTDE {key}")
                     result[key] = [round(float(v), 6) for v in value]
                 elif value is not None:
+                    if isinstance(value, float) and not math.isfinite(value):
+                        raise ValueError(f"Invalid RTDE {key}")
                     result[key] = float(value) if isinstance(value, float) else value
         except Exception as exc:
             self._recv = None
@@ -2500,6 +2582,16 @@ class AutomaticRunController(GuidedRunController):
             return
         try:
             self._require_unchanged_contract()
+            initial = self.state.snapshot()
+            if (self.phase == "loading" and initial.get("feature_status") == "warming_up"
+                    and initial.get("connected") and not initial.get("stale")
+                    and initial.get("optitrack_connected") and self.clock() - self.since <= .15):
+                # start_session resets derivatives. Wait for its first two fresh
+                # samples before testing separation; no movement or phase advance.
+                self._health(require_grip=False)
+                self.stable_since = None
+                self.reason = "Waiting for fresh separation samples; motion remains held"
+                return
             snap, distance = self._tracking()
             sealed = self._health(require_grip=self.phase != "loading")
             if self.phase == "loading":

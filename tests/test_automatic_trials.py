@@ -139,6 +139,8 @@ def test_full_automatic_cycle_moves_once_each_and_never_releases_overhead(mode):
                                     'collection_mode':mode,'execution_mode':'automatic'}
     begin(clock, runner)
     assert runner.phase == "loading"
+
+
     tick(clock, state, runner)
     tick(clock, state, runner, 1)
     assert runner.phase == "retreat_lift"
@@ -170,6 +172,17 @@ def test_full_automatic_cycle_moves_once_each_and_never_releases_overhead(mode):
     tick(clock, state, runner, 3)
     assert rig.actions.count(("release", "BOTH", 0)) == 1
     assert state.actions == [("event_start", "automatic_lift"), ("event_end", "automatic_lift")]
+
+
+@pytest.mark.parametrize('elapsed,fresh,expected',[(.05,True,'loading'),(.16,True,'fault'),(.05,False,'fault')])
+def test_startup_warmup_is_bounded_and_does_not_mask_tracking_loss(elapsed,fresh,expected):
+    clock,state,rig,runner=setup()
+    original=state.snapshot
+    state.fresh=fresh
+    state.snapshot=lambda:{**original(),'feature':None,'feature_status':'warming_up'}
+    tick(clock,state,runner,elapsed)
+    assert runner.phase == expected
+    assert not any(action[0] == 'goto' for action in rig.actions)
 
 
 @pytest.mark.parametrize("failure", ["pose", "moving", "cancel", "tracking", "health"])

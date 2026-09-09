@@ -37,6 +37,8 @@ type Status = {
   model_source: string;
   model_sha256: string;
   model_health?: { warnings: string[] };
+  pipeline_error?: string | null;
+  geometry_reference?: {source: string; tcp_position_m: number[] | null};
   event_exposure?: {motion_samples: number; rapid_closing_samples: number; review_reason: string | null};
   controller_comparison?: Record<string, {speed_fraction: number; rule: string; shadow_only: boolean}> | null;
   controller_profile?: {red_radius_m: number; predictive_role: string};
@@ -77,6 +79,7 @@ type ParticipantSummary = {
 };
 
 type RunSummary = {
+  completed?: boolean;
   session_id: string;
   participant_id: string;
   participant_name: string;
@@ -751,7 +754,7 @@ export default function Home() {
   const nextTrial = selectedParticipant?.next_trial ?? "T01";
   const schedule = studySchedule(participant || "P01");
   const acceptedStudyKeys = new Set(participantRuns
-    .filter(run => run.quality.grade === "good")
+    .filter(run => run.completed === true && run.quality.grade === "good")
     .map(run => `${run.block_label}-${run.within_block_trial}`));
   const nextStudySlot = schedule.find(slot =>
     !acceptedStudyKeys.has(`${slot.block}-${slot.withinBlockTrial}`));
@@ -975,6 +978,7 @@ export default function Home() {
               </div>
               <h2>{guidedTitle}</h2>
               <p>{guidedCue}</p>
+              {status.pipeline_error && <p className="warnText" role="alert">Capture/controller pipeline failed: {status.pipeline_error}. Abort and restart the service.</p>}
               {status.controller_decision && <div className="controllerWitness" role="status">
                 <strong>{status.controller_decision.speed_fraction === 0 ? "Controller requests stop" : `Controller requests ${Math.round(status.controller_decision.speed_fraction * 100)}% speed`}</strong>
                 <span>{status.controller_decision.rule}</span>
@@ -989,6 +993,7 @@ export default function Home() {
               <small>{automaticActive ? "Automatic trial: follow the current instruction above. Task completion requires confirmation. Faults require abort and inspection." : "One press records each real phase boundary. Lift and lower requests stay active while the selected controller gates robot speed from the live participant signal."}</small>
               <details className="controllerComparison">
                 <summary>Operator: controller identity and event evidence</summary>
+                <p>Separation reference: {status.geometry_reference?.source || "unavailable"}. This is a head-to-column proxy, not whole-body clearance.</p>
                 <p>Recording {status.participant_id} · block {status.block_label}. Assigned controller: <strong>{status.controller_condition || "unavailable"}</strong>.</p>
                 <p>Controller producing the latest decision: <strong>{CONTROLLER_NAMES[status.controller_decision?.condition || ""] || "unavailable — no identified controller decision"}</strong> ({status.controller_decision?.condition || "no identifier"}).</p>
                 {status.controller_decision?.condition && CONTROLLER_NAMES[status.controller_decision.condition] !== status.controller_condition && <p className="warnText">CONTROLLER MISMATCH: abort this attempt and inspect the recorded controller identity.</p>}
@@ -1015,6 +1020,7 @@ export default function Home() {
                   : "Restart the updated backend with Start-Lab.ps1. The service currently running supports rehearsals only."
                 : "Start the lab with Start-Lab.ps1 to enable automatic trials. Sensor and robot checks remain required."}</p>
               {status.model_health?.warnings.map(warning => <p key={warning} className="warnText">{warning}</p>)}
+              {status.pipeline_error && <p className="warnText" role="alert">Capture/controller pipeline failed: {status.pipeline_error}. Restart the service.</p>}
             </aside>}
             {!status.recording && <article className="panel oneStepCard">
               {!participant ? (
@@ -1111,7 +1117,7 @@ export default function Home() {
               <div className="trialMatrix">
                 {schedule.map(slot => {
                   const matches = participantRuns.filter(run => run.block_label === slot.block && run.within_block_trial === slot.withinBlockTrial);
-                  const accepted = matches.some(run => run.quality.grade === "good");
+                  const accepted = matches.some(run => run.completed === true && run.quality.grade === "good");
                   const attempted = matches.length > 0;
                   return <div key={`${slot.block}-${slot.withinBlockTrial}`} className={accepted ? "trialSlot accepted" : attempted ? "trialSlot repeat" : "trialSlot"}>
                     <span>{slot.block}{slot.withinBlockTrial}</span><strong>{slot.event}</strong><small>{accepted ? "✓ accepted" : attempted ? "repeat" : "waiting"}</small>
@@ -1215,7 +1221,7 @@ export default function Home() {
                 <span>{run.samples.toLocaleString()} samples</span><span>{run.duration_s.toFixed(1)} s</span><span>{run.rate_hz.toFixed(1)} Hz</span><span>{run.stale_percent.toFixed(2)}% stale</span>
               </div>
               <div className="labelCoverage">{STATES.map(label => <span key={label}>{label} {run.labels[label] == null ? "—" : `${n(run.labels[label], 1)}s`}</span>)}<span>{run.planned_event || "legacy event"}: {(run.events?.hazard ?? 0) + (run.events?.distractor ?? 0)} frames</span></div>
-              <p>{run.quality.reasons.join(" · ")}</p>
+              <p>{run.completed ? "Completed" : "Completion not evidenced"} · Capture: {run.quality.reasons.join(" · ")}</p>
             </div>)}
           </div>
         </article>

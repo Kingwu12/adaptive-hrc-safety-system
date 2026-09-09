@@ -1,12 +1,10 @@
 """Feature extraction from raw operator position samples.
 
-CRITICAL DESIGN DECISION -- protective separation is measured to the robot's
-OCCUPIED COLUMN, not to the TCP point. The UR10 CB3 holds a ceiling panel ~2.2 m
-overhead; the physical hazard the operator can reach is the whole vertical column
-of space the arm+panel occupies, from the ground under the TCP up to TCP height.
-A human standing directly under the panel has ~0 m of protective separation even
-though the TCP point is 2.2 m away. Measuring distance to the TCP point would
-systematically over-report separation and silently defeat the safety argument.
+The geometric reference is a vertical segment from ground level to the current
+TCP, at its x/y coordinates. The dashboard measures the tracked head against
+this column proxy. It is not a whole-body, arm-link, panel-surface or swept-volume
+clearance calculation, and does not establish protective separation on its own.
+The live caller must refresh the TCP before each sample.
 
 Velocities and accelerations are estimated by a least-squares slope over a short
 window rather than single-frame finite differences, for robustness to sensor jitter.
@@ -25,7 +23,8 @@ class FeatureFrame:
     """One tick of derived features consumed by recognition and control.
 
     d          -- distance (m) to the nearest point of the robot's occupied column.
-    d_dot      -- rate of change of d (m/s); negative means closing (== -v_proj).
+    d_dot      -- negative human projected velocity (== -v_proj). This excludes
+                  robot velocity; it is not the full derivative of d for a moving TCP.
     speed      -- operator speed magnitude (m/s).
     v_proj     -- velocity projected onto the unit vector toward the nearest column
                   point; POSITIVE means closing on the robot.

@@ -36,3 +36,15 @@ def test_old_telemetry_is_not_counted_as_measured_motion(tmp_path):
     result=audit_trial(path)
     assert result['counts']['measured_motion'] == 0
     assert result['counts']['telemetry_unusable'] == 1
+
+
+def test_audit_detects_static_geometry_without_rewriting_the_recording(tmp_path):
+    path=tmp_path/'trial.jsonl'
+    original=json.dumps({'position':[2,0,1], 'features':{'d':2},
+                         'robot_telemetry':{'available':True,'actual_tcp_pose':[1.5,0,2.2,0,0,0],
+                                            'actual_qd':[0]*6,'source_age_s':0}})
+    path.write_text(original)
+    result=audit_trial(path)
+    assert result['geometry_recomputation']['maximum_absolute_distance_error_m'] == 1.5
+    assert any('geometry review' in item for item in result['unresolved_evidence'])
+    assert path.read_text() == original

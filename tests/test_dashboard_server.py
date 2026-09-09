@@ -20,6 +20,16 @@ from scripts.dashboard_server import (ApiHandler, DashboardState,
                                       RunCatalog, safe_id)
 
 
+class TelemetryOnlyRig:
+    """Finite live-pose fixture; deliberately has no working output channel."""
+    def telemetry_snapshot(self, **kwargs):
+        return {'available':True, 'actual_tcp_pose':[0,0,2.2,0,0,0],
+                'source_age_s':0, 'source_timestamp_s':time.monotonic()}
+
+    def apply_research_speed_fraction(self, fraction):
+        return {'applied':False,'status':'test_output_unavailable'}
+
+
 def test_create_participant_does_not_wait_for_cold_recording_scan(tmp_path, monkeypatch):
     from concurrent.futures import ThreadPoolExecutor
 
@@ -416,6 +426,7 @@ def test_study_metadata_and_clean_event_are_logged_without_fake_hazard(tmp_path,
         tmp_path, segment_id=1, model_path=Path("data/models/pilot_hmm.json"),
         enable_research_output=True,
     )
+    state.rig = TelemetryOnlyRig()
     state.on_xsens_frame(_full_xsens_frame())
     now = time.monotonic()
     state.on_sample(0.0, (2.0, 0.0, 1.0), True, now)
@@ -496,6 +507,7 @@ def test_qualification_uses_separate_ids_and_structured_schedule(tmp_path):
         tmp_path, segment_id=1, model_path=Path("data/models/pilot_hmm.json"),
         enable_research_output=True,
     )
+    state.rig = TelemetryOnlyRig()
     state.on_xsens_frame(_full_xsens_frame())
     now = time.monotonic()
     state.on_sample(0.0, (2.0, 0.0, 1.0), True, now)

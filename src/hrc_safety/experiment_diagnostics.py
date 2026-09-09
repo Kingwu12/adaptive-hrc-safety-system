@@ -13,6 +13,20 @@ CONTROLLERS = {"fixed zone": "fixed_zone", "reactive SSM": "dynamic_ssm",
                "predictive SSM": "adaptive"}
 
 
+def live_tcp_position(telemetry):
+    """Accept only a finite live robot pose with a fresh RTDE source clock."""
+    pose = telemetry.get('actual_tcp_pose')
+    age = telemetry.get('source_age_s')
+    stamp = telemetry.get('source_timestamp_s')
+    if (telemetry.get('available') is True and isinstance(pose, (list, tuple))
+            and len(pose) == 6
+            and all(isinstance(v, (int, float)) and math.isfinite(v) for v in pose)
+            and isinstance(age, (int, float)) and 0 <= age <= .25
+            and isinstance(stamp, (int, float)) and math.isfinite(stamp)):
+        return list(pose[:3])
+    return None
+
+
 class EventExposure:
     """Observe cued-window exposure, never invent human ground truth or actuate."""
     def __init__(self, config):
