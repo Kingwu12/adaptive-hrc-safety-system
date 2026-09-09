@@ -19,6 +19,15 @@ venv/
 data/xsens/.control_key
 data/xsens/.form_completion_url
 data/xsens/dashboard.log
+data/xsens/*.catalog.json
+
+# Local participant captures and backup packages — store in the research Drive,
+# never in the source repository. Previously committed synthetic/pilot fixtures
+# remain tracked, but new session files are ignored.
+data/xsens/P*-T*-20*.jsonl
+data/xsens/P*-T*-20*.manifest.json
+exports/
+outputs/
 
 # LaTeX build artifacts
 paper/*.pdf

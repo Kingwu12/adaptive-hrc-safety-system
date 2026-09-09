@@ -337,6 +337,22 @@ footer{display:flex;justify-content:space-between;border-top:1px solid var(--lin
   color:var(--ink);background:#f4f6f4;
 }
 .developmentShell{background:#09100d}
+/* Live trials use the same light surface as the participant workspace. */
+.studyShell .runDirector{color:#17211c;background:#fff;border:1px solid #d8dfdb;border-left:4px solid #087a50;box-shadow:none}
+.studyShell .runDirector h2{color:#17211c;line-height:1.15}
+.studyShell .runDirector p{color:#35473d}
+.studyShell .runDirectorHead{color:#087a50;flex-wrap:wrap}
+.studyShell .runDirector small{display:block;color:#617068;line-height:1.5}
+.studyShell .runDirector button{min-height:52px;border-radius:6px;background:#087a50;color:#fff}
+.studyShell .runDirector button:hover:not(:disabled){background:#096b49}
+.studyShell .runDirector .syncMarker{background:#eef5f1;color:#175c3e;border:1px solid #9bbbab}
+.studyShell .runDirector .syncMarker:hover:not(:disabled){background:#dfeee5}
+.studyShell .runDirector button:focus-visible{outline:3px solid #315bb5;outline-offset:3px}
+.studyShell .runDirector.label-hazard{background:#fff;border-color:#e2aaa5;border-left-color:#b42318}
+.studyShell .runDirector.label-hazard .runDirectorHead{color:#b42318}
+.studyShell .runDirector.label-hazard button:not(.runAbort):not(.syncMarker){background:#b42318;color:#fff}
+.studyShell .runDirector .runAbort{background:#fff2f1!important;color:#991b14!important;border-color:#d65a51!important}
+.studyShell .runDirector .runAbort:hover:not(:disabled){background:#ffe4e1!important}
 .studyShell .topbar{height:64px;background:#fff;border-color:#dfe5e1;box-shadow:none}
 .studyShell .brandMark{border-radius:9px;background:#0a7f54;color:#fff}
 .studyShell .brand strong{font-size:16px}.studyShell .brand small{color:#6c7972}

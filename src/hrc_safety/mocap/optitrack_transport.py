@@ -23,6 +23,40 @@ NATNET_DATA_PORT = 1511
 NATNET_MULTICAST = "239.255.42.99"
 
 
+def parse_natnet4_marker_sets(data: bytes):
+    """Retain named marker positions from the existing NatNet 4.0 stream.
+
+    Positions remain in raw OptiTrack metres. This is independent of the
+    rigid-body parser, so malformed marker geometry cannot change head input.
+    Marker indices are the order in the named set, not the global 'all' set.
+    """
+    try:
+        message_id, size = struct.unpack_from("<HH", data)
+        if message_id != NAT_FRAMEOFDATA or size + 4 > len(data):
+            return None
+        data = data[:size + 4]
+        frame, count = struct.unpack_from("<ii", data, 4)
+        if not 0 <= count <= 10000:
+            return None
+        offset, sets = 12, {}
+        for _ in range(count):
+            end = data.index(0, offset)
+            name = data[offset:end].decode("utf-8")
+            offset = end + 1
+            n, = struct.unpack_from("<i", data, offset)
+            offset += 4
+            if not 0 <= n <= 10000 or offset + 12 * n > len(data) or name in sets:
+                return None
+            points = tuple(struct.unpack_from("<3f", data, offset + 12 * i) for i in range(n))
+            offset += 12 * n
+            if not all(np.isfinite(point).all() for point in points):
+                return None
+            sets[name] = points
+        return frame, sets
+    except (ValueError, IndexError, struct.error):
+        return None
+
+
 def parse_natnet4_frame(data: bytes):
     """Parse frame number and rigid bodies from a NatNet 4 FrameOfData.
 
@@ -83,6 +117,7 @@ class RigidBodyMonitor:
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
+        self._marker_frame = None
         self._poses: dict[
             int, tuple[np.ndarray, tuple[float, ...], float, float, float | None]
         ] = {}
@@ -97,6 +132,21 @@ class RigidBodyMonitor:
                                                     float(wall_time),
                                                     (None if mean_error_m is None else
                                                      float(mean_error_m)))
+
+    def update_marker_sets(self, sets, source_time_s, wall_time):
+        with self._lock:
+            self._marker_frame = (sets, source_time_s, wall_time)
+
+    def marker_snapshot(self, now_s: float | None = None) -> dict:
+        now = time.monotonic() if now_s is None else float(now_s)
+        with self._lock:
+            frame = self._marker_frame
+        if frame is None:
+            return {}
+        sets, source_time, received = frame
+        return {"frame": "optitrack", "units": "m", "source_time_s": source_time,
+                "age_s": max(0.0, now - received),
+                "sets": {name: [list(p) for p in points] for name, points in sets.items()}}
 
     def snapshot(self, now_s: float | None = None) -> dict[int, RigidBodySample]:
         now = time.monotonic() if now_s is None else float(now_s)
@@ -227,6 +277,9 @@ class NatNetV4Listener:
             frame_number, bodies = parsed
             now = time.monotonic()
             source_t = frame_number / self.nominal_rate_hz
+            markers = parse_natnet4_marker_sets(data)
+            # Replacing the whole frame also removes sets absent from this packet.
+            self.monitor.update_marker_sets({} if markers is None else markers[1], source_t, now)
             for rb_id, position, rotation, mean_error, tracked in bodies:
                 if not tracked:
                     continue

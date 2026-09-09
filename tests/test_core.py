@@ -204,6 +204,48 @@ def test_adaptive_full_speed_when_retreating_in_yellow():
     assert rec.speed_fraction == 1.0
 
 
+@pytest.mark.parametrize(
+    ("target_state", "v_proj", "v_lat_frac"),
+    [
+        ("working", 0.0, 0.0),
+        ("approaching", 0.1, 0.0),
+        ("approaching", 0.0, 1.2),
+    ],
+)
+def test_adaptive_does_not_slow_safe_low_closing_motion_in_yellow(
+    target_state, v_proj, v_lat_frac,
+):
+    frame = _frame(d=1.2, v_proj=v_proj, v_lat_frac=v_lat_frac)
+    hmm = _forced_hmm(target_state, frame.as_vector())
+    ctrl = EnvelopeAdaptiveController(
+        _zone_model(), hmm, speed_reduced=0.35,
+        min_closing_speed=0.6,
+    )
+
+    rec = ctrl.decide(frame)
+
+    assert rec.inferred_state == target_state
+    assert rec.zone == "yellow"
+    assert rec.envelope_max_speed == pytest.approx(1.0)
+    assert rec.speed_fraction == pytest.approx(1.0)
+
+
+def test_adaptive_adds_caution_for_fast_closing_approach_in_yellow():
+    frame = _frame(d=1.5, v_proj=0.7)
+    hmm = _forced_hmm("approaching", frame.as_vector())
+    ctrl = EnvelopeAdaptiveController(
+        _zone_model(), hmm, speed_reduced=0.35,
+        hazard_dwell_ticks=2, min_closing_speed=0.6,
+    )
+
+    rec = ctrl.decide(frame)
+
+    assert rec.inferred_state == "approaching"
+    assert rec.zone == "yellow"
+    assert rec.envelope_max_speed == pytest.approx(1.0)
+    assert rec.speed_fraction == pytest.approx(0.35)
+
+
 # --- 9. v_proj sign convention ---------------------------------------------
 
 def test_v_proj_sign_convention_closing_positive():

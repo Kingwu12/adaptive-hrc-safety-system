@@ -1,5 +1,19 @@
 # Automatic panel trial: qualification handoff
 
+## Windows revision: supported low release (2026-09-09)
+
+`automatic-panel-v4-supported-low` replaces the automatic mode's final manual
+release confirmation. The operator confirmed that the panel rests on the rigid
+gripper support at `pose1_low` with vacuum off. This revision is specific to that
+support arrangement; it does not infer panel support from suction pressure.
+After reaching the low pose, the runner verifies stationary telemetry and the low
+joint pose throughout a two-second dwell, then commands release once and saves.
+Tracking/health loss, pose drift, motion, cancellation or release failure latches
+a fault. A failed release is not retried or counted as a completed trial.
+The support assumption and dwell are included in the versioned task contract.
+Manual mode is unchanged. The instructions below describe this supported
+automatic release revision.
+
 Status: software implementation, not physical participant release. The server
 rejects automatic participant runs. Only Q-code qualification can opt in.
 Existing participant runs remain explicitly operator-confirmed; do not pool
@@ -9,7 +23,7 @@ those timings with future automatic runs without addressing the protocol change.
 
 One server-owned cycle, independent of which of the three safety controllers is
 assigned. Browser refresh does not restart or advance the cycle.
-The current runner is `automatic-panel-v3`: the server supplies the seven-stage
+The current source runner is `automatic-panel-v4-supported-low`: the server supplies the seven-stage
 instruction and the dashboard shows a button only when confirmation is needed.
 It no longer presents the old ten-step manual sequence as the automatic workflow.
 
@@ -32,10 +46,11 @@ It no longer presents the old ten-step manual sequence as the automatic workflow
    the agreed task. Operator confirms **Task complete**; the system cannot sense
    successful assembly from vacuum or the HMM.
 6. Sustained retreat triggers automatic lowering. Suction stays on.
-7. At the verified low pose, the participant supports the panel. Arm and confirm
-   **Panel supported — release & save**. There is no unattended repeat loop.
+7. At the verified low pose, the panel rests on the established rigid gripper
+   support. After two stationary seconds at that pose, release once and save.
+   There is no unattended repeat loop.
 
-Only supported release retains the deliberate two-press suction confirmation.
+The shared sync marker and task-complete confirmation remain explicit.
 The safety comparison still exercises controller response during motion.
 
 ## Short spoken script for the rehearsal
@@ -43,8 +58,9 @@ The safety comparison still exercises controller response during motion.
 Explain before starting: “The suction will already be on when you place the
 panel. Once the grip is confirmed, let go and step back to the start marker.
 The robot will lift automatically. Stay there until we invite you to approach.
-After the task, step back again; it will lower automatically. At the end, support
-the panel and wait for us to release it. Only perform the agreed movement when
+After task completion is confirmed, step back again; it will lower automatically.
+At the bottom it waits two stationary seconds on the rigid support, then releases
+suction. Only perform the agreed movement when
 we give its cue. You can ask us to stop at any time.”
 
 During the run, use the current dashboard instruction. Do not add another grip,

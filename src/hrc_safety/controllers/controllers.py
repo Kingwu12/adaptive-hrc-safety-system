@@ -340,15 +340,23 @@ class EnvelopeAdaptiveController:
                 "-> pre-emptive stop request (horizon + activity evidence)",
             )
 
-        # ---- Learned caution cap: the state layer may only REDUCE below envelope --
+        # ---- Learned caution cap: require both phase and measured closing evidence --
+        # A task-phase label alone is not a hazard signal.  In particular, a
+        # stationary worker or lateral movement can look like "working" or
+        # "approaching" to the HMM while v_proj is near zero.  Let the dynamic
+        # envelope govern those cases.  The phase layer adds early caution only
+        # for an objectively fast closing approach; the horizon can still stop
+        # an imminent breach and the fixed RED boundary remains absolute.
         cap = 1.0
         cap_reason = "no state caution"
         if self.use_state_layer and zone == Zone.YELLOW:
             if inferred == "retreating":
                 cap, cap_reason = 1.0, "retreating -> no extra caution (envelope governs)"
-            elif inferred in ("working", "approaching"):
+            elif inferred == "approaching" and closing_fast:
                 cap = self.speed_reduced
-                cap_reason = f"{inferred} in yellow -> cap at reduced speed"
+                cap_reason = "fast closing approach in yellow -> cap at reduced speed"
+            else:
+                cap_reason = f"{inferred} without fast closing -> envelope governs"
 
         # ---- final = min(envelope floor, learned caution cap) --------------------
         speed = min(float(envelope_max), float(cap))

@@ -20,6 +20,39 @@ from scripts.dashboard_server import (ApiHandler, DashboardState,
                                       RunCatalog, safe_id)
 
 
+def test_create_participant_does_not_wait_for_cold_recording_scan(tmp_path, monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+
+    # Legacy recording IDs must remain reserved even before history is indexed.
+    (tmp_path / "legacy.jsonl").write_text(
+        json.dumps({"participant_id": "P12", "t": 0}) + "\n",
+        encoding="utf-8",
+    )
+    catalog = RunCatalog(tmp_path)
+    entered = threading.Event()
+    release = threading.Event()
+    original = catalog._summarize
+
+    def slow_summary(path, stat):
+        entered.set()
+        assert release.wait(5)
+        return original(path, stat)
+
+    monkeypatch.setattr(catalog, "_summarize", slow_summary)
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        scanning = pool.submit(catalog.catalog)
+        try:
+            assert entered.wait(2)
+            creation = pool.submit(catalog.save_participant, "", None, "participant_study")
+            created = creation.result(timeout=2)["participant"]
+            assert created["id"] == "P13"
+            assert created["run_count"] == 0
+            assert created["next_trial"] == "T01"
+        finally:
+            release.set()
+        assert any(row["id"] == "P13" for row in scanning.result()["participants"])
+
+
 def _full_xsens_frame() -> dict:
     segments = {
         str(segment_id): {
@@ -619,6 +652,7 @@ class FakeGuidedState:
         self.distance = distance
         self.stopped = False
         self.label = "unlabelled" if step in (None, 0, 4, 9) else "retreating"
+        self.controller_updated_at = 100.0
 
     def snapshot(self):
         return {
@@ -627,7 +661,14 @@ class FakeGuidedState:
             "connected": True,
             "stale": False,
             "optitrack_connected": True,
+            "xsens_segment_count": 23,
             "feature": {"d": self.distance},
+            "controller_output_enabled": True,
+            "controller_decision": {
+                "command": "protective_stop" if self.distance < 1.5 else "full_speed",
+                "speed_fraction": 0.0 if self.distance < 1.5 else 1.0,
+                "output_applied": True,
+            },
             "sync_marker_count": 1,
         }
 
@@ -709,10 +750,17 @@ class FakeGuidedRig:
             },
         }
 
-    def goto_pose(self, name):
+    def goto_pose(self, name, **kwargs):
+        guard = kwargs.get("guard")
+        if guard is not None:
+            guard()
         self.actions.append(("goto", name))
         self.current_q = list(self._poses[name]["q"])
         return {"pose": name, "completed": True}
+
+    def apply_research_speed_fraction(self, fraction):
+        self.actions.append(("speed", fraction))
+        return {"applied": True, "status": "applied", "speed_fraction": fraction}
 
 
 class FakeClock:
@@ -726,77 +774,89 @@ class FakeClock:
         self.now += seconds
 
 
-def arm_and_confirm(guided, clock, vacuum=60):
-    guided.arm_step()
-    clock.advance(1.0)
-    return guided.complete_step(vacuum)
-
-
 def test_integrated_guided_actions_grip_lift_lower_release_and_save():
     state = FakeGuidedState(step=2, distance=2.0)
-    rig = FakeGuidedRig()
+    rig = FakeGuidedRig(vacuum=(600, 650))
     clock = FakeClock()
-    guided = GuidedRunController(state, rig, clock=clock)
+    guided = GuidedRunController(state, rig, clock=clock, sleeper=lambda _: None)
 
-    arm_and_confirm(guided, clock)
+    guided.complete_step()
     assert state.step == 3
-    assert rig.actions[-1] == ("grip", "BOTH", 60)
+    assert not rig.actions
 
-    arm_and_confirm(guided, clock)
-    assert state.step == 4
+    guided.complete_step()
+    assert state.step == 5
     assert rig.actions[-1] == ("goto", "pose2_top")
     assert state.actions == [
         ("event_start", "robot_lift"), ("event_end", "robot_lift"),
     ]
 
     state.step = 8
-    arm_and_confirm(guided, clock)
-    assert state.step == 9
-    assert rig.actions[-1] == ("goto", "pose1_low")
-
-    # Once the robot is stationary at low pose, the participant must be able
-    # to approach and physically support the panel before suction releases.
-    state.distance = 0.5
-    result = arm_and_confirm(guided, clock)
+    result = guided.complete_step()
     assert result["completed"] is True
     assert state.stopped is True
     assert rig.actions[-1] == ("release", "BOTH", 0)
 
 
-def test_integrated_guided_motion_is_blocked_inside_clearance_zone():
+def test_integrated_guided_motion_request_is_accepted_inside_controller_zone():
     state = FakeGuidedState(step=3, distance=1.0)
     rig = FakeGuidedRig(vacuum=(600, 650))
     clock = FakeClock()
     guided = GuidedRunController(state, rig, clock=clock)
 
-    with pytest.raises(ValueError, match="move beyond"):
-        arm_and_confirm(guided, clock)
-    assert state.step == 3
-    assert not rig.actions
+    result = guided.complete_step()
+
+    assert result["guided_step"] == 5
+    assert rig.actions[-1] == ("goto", "pose2_top")
+    assert state.snapshot()["controller_decision"]["speed_fraction"] == 0.0
 
 
-def test_integrated_guided_failed_grip_is_released_and_does_not_advance():
+def test_manual_motion_guard_holds_zero_through_tracking_dropout():
+    state = FakeGuidedState(step=3, distance=2.0)
+    rig = FakeGuidedRig(vacuum=(600, 650))
+    guided = GuidedRunController(state, rig)
+    original_snapshot = state.snapshot
+
+    def stale_snapshot():
+        snap = original_snapshot()
+        snap["optitrack_connected"] = False
+        snap["controller_decision"] = {
+            "command": "protective_stop",
+            "speed_fraction": 0.0,
+            "output_applied": True,
+        }
+        return snap
+
+    state.snapshot = stale_snapshot
+
+    guided._manual_motion_guard()
+
+    assert rig.actions == [("speed", 0.0)]
+
+
+def test_manual_motion_guard_holds_zero_during_rtde_connect_refresh_delay():
+    state = FakeGuidedState(step=3, distance=2.0)
+    rig = FakeGuidedRig(vacuum=(600, 650))
+    clock = FakeClock()
+    state.controller_updated_at = clock.now - 1.0
+    guided = GuidedRunController(state, rig, clock=clock)
+
+    guided._manual_motion_guard()
+
+    assert rig.actions == [("speed", 0.0)]
+
+
+def test_integrated_guided_weak_seal_stays_on_and_does_not_advance():
     state = FakeGuidedState(step=2, distance=2.0)
-    rig = FakeGuidedRig()
-
-    def weak_grip(action, channel, vacuum):
-        rig.actions.append((action, channel, vacuum))
-        if action == "grip":
-            return {"ok": True, "stats": {
-                "vacuum_A_permille": 600, "vacuum_B_permille": 200,
-            }}
-        return {"ok": True, "stats": {
-            "vacuum_A_permille": 0, "vacuum_B_permille": 0,
-        }}
-
-    rig.gripper_action = weak_grip
+    rig = FakeGuidedRig(vacuum=(600, 200))
     clock = FakeClock()
     guided = GuidedRunController(state, rig, clock=clock)
 
-    with pytest.raises(ValueError, match="not verified"):
-        arm_and_confirm(guided, clock)
+    with pytest.raises(ValueError, match="Suction remains on"):
+        guided.complete_step()
     assert state.step == 2
-    assert rig.actions[-1] == ("release", "BOTH", 0)
+    assert not rig.actions
+    assert rig.vacuum == (600, 200)
 
 
 def test_integrated_guided_start_requires_released_low_rig():
@@ -820,35 +880,28 @@ def test_integrated_guided_start_requires_released_low_rig():
     assert state.recording is True
 
 
-def test_integrated_guided_physical_action_requires_deliberate_second_press():
+def test_integrated_guided_physical_action_uses_one_press():
     state = FakeGuidedState(step=2, distance=2.0)
-    rig = FakeGuidedRig()
+    rig = FakeGuidedRig(vacuum=(600, 650))
     clock = FakeClock()
     guided = GuidedRunController(state, rig, clock=clock)
 
-    with pytest.raises(ValueError, match="not armed"):
-        guided.complete_step(60)
+    result = guided.complete_step(60)
+
+    assert result["guided_step"] == 3
     assert not rig.actions
 
-    guided.arm_step()
-    with pytest.raises(ValueError, match="too fast"):
-        guided.complete_step(60)
-    assert not rig.actions
 
-    clock.advance(1.0)
-    guided.complete_step(60)
-    assert rig.actions[-1] == ("grip", "BOTH", 60)
-
-
-def test_integrated_guided_physical_arm_expires_without_actuating():
+def test_integrated_guided_old_arm_request_does_not_add_another_press():
     state = FakeGuidedState(step=3, distance=2.0)
-    rig = FakeGuidedRig()
+    rig = FakeGuidedRig(vacuum=(600, 650))
     clock = FakeClock()
     guided = GuidedRunController(state, rig, clock=clock)
 
     guided.arm_step()
     clock.advance(5.1)
-    with pytest.raises(ValueError, match="expired"):
-        guided.complete_step()
-    assert not rig.actions
-    assert state.step == 3
+    state.controller_updated_at = clock.now
+    result = guided.complete_step()
+
+    assert result["guided_step"] == 5
+    assert rig.actions[-1] == ("goto", "pose2_top")

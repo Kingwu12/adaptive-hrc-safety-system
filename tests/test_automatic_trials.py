@@ -68,6 +68,66 @@ def begin(clock, runner):
     runner.state.sync_count = 1
 
 
+def test_work_visits_are_recorded_in_task_without_commanding_lowering():
+    clock = FakeClock()
+    state, rig = State(clock), Rig()
+    points = [(0, 0, 1.6), (1, 0, 1.6), (1, 1, 1.6), (0, 1, 1.6)]
+    state.config["work_location_observation"] = {
+        "frame": "robot_base", "units": "m", "head_positions": points}
+    runner = AutomaticRunController(state, rig, clock, enabled=True)
+    runner.start("Q01", "T01", True, "Q01-T01.mvn",
+                 collection_mode="qualification", block_label="A", automatic=True)
+    state.step = 7
+    runner._phase("task", "Perform task")
+    original_snapshot = state.snapshot
+    for point in points:
+        state.snapshot = lambda: {**original_snapshot(), "position": point,
+                                  "feature": {"d": 2.0, "t": clock()}}
+        for _ in range(17):
+            tick(clock, state, runner, 0.125)
+    assert runner.status()["work_locations"]["visited_count"] == 4
+    assert len([e for e in state.events if e["event"] == "work_location_visited"]) == 4
+    assert runner.phase == "task"
+    assert rig.actions == [("grip", "BOTH", 60)]
+    state.recording = False
+    rig.gripper_action("release", "BOTH", 0)
+    runner.start("Q01", "T02", True, "Q01-T02.mvn",
+                 collection_mode="qualification", block_label="A", automatic=True)
+    assert runner.status()["work_locations"]["visited_count"] == 0
+
+
+def test_work_locations_reject_an_unspecified_coordinate_frame():
+    clock = FakeClock()
+    state, rig = State(clock), Rig()
+    state.config["work_location_observation"] = {"units": "m"}
+    with pytest.raises(ValueError, match="robot_base"):
+        AutomaticRunController(state, rig, clock)
+    assert rig.actions == []
+
+
+def test_simulated_drilling_uses_marker_packets_and_both_hand_segments():
+    clock, state, rig, runner = setup()
+    state.config["simulated_drilling_alignment"] = {
+        "accepted": True, "from_frame": "xsens", "to_frame": "optitrack", "units": "m",
+        "rotation": [[1, 0, 0], [0, 1, 0], [0, 0, 1]], "translation": [0, 0, 0]}
+    points = [[0, 0, 1], [0.6, 0, 1], [0.6, 0.5, 1], [0, 0.5, 1]]
+    state.step = 7
+    runner._phase("task", "Perform simulated drilling")
+    original = state.snapshot
+    for point in points:
+        state.snapshot = lambda: {**original(), "hand_tracking": {
+            "xsens_sample_counter": clock(), "xsens_age_s": 0,
+            "xsens_hands": {"11": {"position_m": point}, "15": {"position_m": [5, 5, 5]}},
+            "panel": {"age_s": 0, "source_time_s": clock()},
+            "optitrack_markers": {"age_s": 0, "source_time_s": clock(), "sets": {"PANEL": points}}}}
+        for _ in range(17):
+            tick(clock, state, runner, 0.125)
+    assert runner.status()["simulated_drilling"]["simulated_task_complete"]
+    assert len([e for e in state.events if e["event"] == "simulated_drilling_marker_complete"]) == 4
+    assert runner.phase == "task"  # observation commissioning never initiates motion
+    assert rig.actions == [("grip", "BOTH", 60)]
+
+
 def test_full_automatic_cycle_moves_once_each_and_never_releases_overhead():
     clock, state, rig, runner = setup()
     begin(clock, runner)
@@ -91,15 +151,55 @@ def test_full_automatic_cycle_moves_once_each_and_never_releases_overhead():
     tick(clock, state, runner, 2)
     assert runner.phase == "supported_release"
     assert rig.actions.count(("goto", "pose1_low")) == 1
-    with pytest.raises(ValueError, match="not armed"):
+    with pytest.raises(ValueError, match="automatically"):
         runner.complete_step()
-    runner.arm_step()
-    clock.advance(1)
-    result = runner.complete_step()
-    assert result["completed"] and state.stopped
+    tick(clock, state, runner)
+    tick(clock, state, runner, 1.9)
+    assert not any(a[0] == "release" for a in rig.actions)
+    tick(clock, state, runner, 0.1)
+    assert state.stopped
     assert rig.actions[-1] == ("release", "BOTH", 0)
     assert runner.phase == "complete"
+    tick(clock, state, runner, 3)
+    assert rig.actions.count(("release", "BOTH", 0)) == 1
     assert state.actions == [("event_start", "automatic_lift"), ("event_end", "automatic_lift")]
+
+
+@pytest.mark.parametrize("failure", ["pose", "moving", "cancel", "tracking", "health"])
+def test_low_release_dwell_fault_never_vents(failure):
+    clock, state, rig, runner = setup()
+    state.step = 9
+    runner._phase("supported_release", "Waiting on low support")
+    tick(clock, state, runner)
+    if failure == "pose":
+        rig.current_q = list(rig._poses["pose2_top"]["q"])
+    elif failure == "moving":
+        rig.telemetry_snapshot = lambda: {"available": True, "actual_qd": [0.1] * 6, "source_age_s": 0}
+    elif failure == "cancel":
+        runner.request_stop()
+    elif failure == "tracking":
+        state.fresh = False
+    if failure == "health":
+        clock.advance(3)
+        runner.tick()
+    else:
+        tick(clock, state, runner, 2)
+    assert runner.phase == "fault"
+    assert state.recording
+    assert not any(a[0] == "release" for a in rig.actions)
+
+
+def test_failed_low_release_is_not_retried_or_saved_as_complete():
+    clock, state, rig, runner = setup()
+    state.step = 9
+    runner._phase("supported_release", "Waiting on low support")
+    attempts = []
+    rig.gripper_action = lambda *args: attempts.append(args) or {"ok": False}
+    tick(clock, state, runner)
+    tick(clock, state, runner, 2)
+    tick(clock, state, runner, 3)
+    assert attempts == [("release", "BOTH", 0)]
+    assert runner.phase == "fault" and state.recording
 
 
 def test_clearance_dwell_resets_on_reentry():
@@ -278,6 +378,7 @@ def request(runner, state, rig, path, body, remote=False, key=""):
     import json
     handler = ApiHandler.__new__(ApiHandler)
     handler.guided, handler.state, handler.rig = runner, state, rig
+    handler.catalog = types.SimpleNamespace(next_trial=lambda participant: "T01")
     handler.path = path
     handler.client_address = ("192.0.2.1" if remote else "127.0.0.1", 1234)
     payload = json.dumps(body).encode()
@@ -289,6 +390,48 @@ def request(runner, state, rig, path, body, remote=False, key=""):
     handler._json = lambda result, code=200: replies.append((code, result))
     handler.do_POST()
     return replies[0]
+
+
+def test_dashboard_api_sequence_start_to_saved_release_with_fake_hardware():
+    clock = FakeClock()
+    state, rig = State(clock), Rig()
+    runner = AutomaticRunController(state, rig, clock, enabled=True)
+
+    def sync():
+        state.sync_count += 1
+        return {"sync_marker_count": state.sync_count}
+
+    state.mark_sync_event = sync
+    body = {"participant_id": "Q01", "automatic": True,
+            "collection_mode": "qualification", "block_label": "A",
+            "mvn_recording_confirmed": True, "mvn_recording_reference": "api-test.mvn"}
+    assert request(runner, state, rig, "/api/protocol/start", body)[0] == 200
+    assert request(runner, state, rig, "/api/protocol/start", body)[0] == 400
+    assert rig.actions == [("grip", "BOTH", 60)]
+    assert request(runner, state, rig, "/api/sync", {})[0] == 200
+    for seconds in (0, 1, 0, 2):
+        tick(clock, state, runner, seconds)
+    assert runner.phase == "task"
+    assert request(runner, state, rig, "/api/protocol/complete", {})[0] == 200
+    assert request(runner, state, rig, "/api/protocol/complete", {})[0] == 400
+    # Re-entry must reset the lowering clearance dwell.
+    tick(clock, state, runner)
+    state.distance = 0.5
+    tick(clock, state, runner, 1)
+    state.distance = 2.0
+    tick(clock, state, runner, 1)
+    tick(clock, state, runner, 1)
+    assert runner.phase == "retreat_lower"
+    tick(clock, state, runner, 1)
+    assert runner.phase == "supported_release"
+    tick(clock, state, runner)
+    tick(clock, state, runner, 1.9)
+    assert not state.stopped
+    tick(clock, state, runner, 0.1)
+    tick(clock, state, runner, 5)
+    assert state.stopped and runner.phase == "complete"
+    assert rig.actions == [("grip", "BOTH", 60), ("goto", "pose2_top"),
+                           ("goto", "pose1_low"), ("release", "BOTH", 0)]
 
 
 @pytest.mark.parametrize("path,body", [
@@ -368,10 +511,9 @@ def test_release_is_blocked_without_stationary_telemetry(qd, age):
     state.step = 9
     runner.phase = "supported_release"
     rig.telemetry_snapshot = lambda: {"available": True, "actual_qd": [qd] * 6, "source_age_s": age}
-    runner.arm_step()
-    clock.advance(1)
-    with pytest.raises(ValueError, match="stationary"):
-        runner.complete_step()
+    tick(clock, state, runner)
+    assert runner.phase == "fault"
+    assert "stationary" in runner.reason
     assert not any(a[0] == "release" for a in rig.actions)
 
 
@@ -402,7 +544,7 @@ def test_trial_start_turns_suction_on_once_without_any_arm_or_complete_request()
     with pytest.raises(ValueError, match="already active"):
         runner.start("Q01", "T01", True, "another.mvn", automatic=True,
                      collection_mode="qualification")
-    with pytest.raises(ValueError, match="Only supported release"):
+    with pytest.raises(ValueError, match="do not need arming"):
         runner.arm_step()
     assert rig.actions == [("grip", "BOTH", 60)]
 
@@ -471,9 +613,8 @@ def test_script_contract_is_independent_of_controller_and_event():
             runner.complete_step()
             tick(clock, state, runner)
             tick(clock, state, runner, 2)
-            runner.arm_step()
-            clock.advance(1)
-            runner.complete_step()
+            tick(clock, state, runner)
+            tick(clock, state, runner, 2)
             traces.append(list(rig.actions))
             assert any(e["event"] == "automation_task_contract" for e in state.events)
     assert all(c == contracts[0] for c in contracts)
@@ -499,11 +640,11 @@ def test_instructions_are_read_only_and_only_request_real_manual_confirmations()
     clock, state, rig, runner = setup()
     before = list(rig.actions)
     assert runner.status()["presentation"]["sync_required"]
-    for phase in ("loading", "retreat_lift", "lifting", "retreat_lower", "lowering", "fault"):
+    for phase in ("loading", "retreat_lift", "lifting", "retreat_lower", "lowering", "supported_release", "releasing", "fault"):
         runner.phase = phase
         cue = runner.status()["presentation"]
         assert cue["action_label"] is None and cue["automatic_wait"]
-    for phase in ("task", "supported_release"):
+    for phase in ("task",):
         runner.phase = phase
         cue = runner.status()["presentation"]
         assert cue["action_label"] and not cue["automatic_wait"]

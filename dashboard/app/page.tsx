@@ -13,6 +13,8 @@ type Status = {
     enabled: boolean; active: boolean; qualification_only: boolean;
     version: string; phase: string; reason: string; fault: boolean;
     task_sha256?: string | null;
+    work_locations?: { configured: boolean; visited_count?: number; total_locations?: number };
+    simulated_drilling?: { completed_count: number; simulated_task_complete: boolean; reason: string; dwell_s: number };
     presentation?: {
       stage: number | null; stages_total: number; title: string;
       instruction: string; action_label: string | null;
@@ -33,6 +35,7 @@ type Status = {
   hmm_state: string | null;
   model_source: string;
   model_sha256: string;
+  controller_output_enabled: boolean;
   recording: boolean;
   session_id: string | null;
   participant_id: string | null;
@@ -106,6 +109,7 @@ const EMPTY: Status = {
   feature: null, posterior: {}, hmm_state: null,
   model_source: "synthetic baseline", recording: false, session_id: null,
   model_sha256: "synthetic-baseline",
+  controller_output_enabled: false,
   participant_id: null, trial_id: null, label: "unlabelled", event_label: "none",
   block_label: null, within_block_trial: null, controller_condition: null, planned_event: null,
   collection_mode: "model_development",
@@ -157,7 +161,7 @@ function studySchedule(participantId: string): StudySlot[] {
 const GUIDED_PROTOCOL = [
   {
     label: "unlabelled", title: "GET READY",
-    cue: "EXPERIMENTER: confirm the arm is low and suction is off. PARTICIPANT: pick up the panel, stand on the marked start position, and wait.",
+    cue: "Suction is already on. PARTICIPANT: pick up the panel, stand on the marked start position, and wait.",
     next: "READY — START APPROACH",
   },
   {
@@ -167,18 +171,18 @@ const GUIDED_PROTOCOL = [
   },
   {
     label: "working", title: "PLACE AND ALIGN ON THE GRIPPER",
-    cue: "PARTICIPANT: hold the panel flat against both suction cups. EXPERIMENTER: when aligned, press once to arm suction, then press again to grip and verify both cups.",
-    next: "PANEL ALIGNED — SUCTION ON & VERIFY",
+    cue: "PARTICIPANT: seat the panel flat against both running suction cups. Press once when both cups have sealed; a weak seal stays on so the panel can be reseated.",
+    next: "PANEL SEALED — VERIFY GRIP",
   },
   {
     label: "retreating", title: "RETREAT TO THE START MARKER",
-    cue: "PARTICIPANT: let go and return fully to the marked start position. EXPERIMENTER: once tracking confirms the cell is clear, press twice to start the robot lift and the assigned event window together.",
-    next: "CELL CLEAR — START LIFT + EVENT WINDOW",
+    cue: "Press once to request the lift. The selected experiment controller will hold, slow, stop, or resume the robot continuously from the live participant-zone signal.",
+    next: "REQUEST LIFT — CONTROLLER GATES MOTION",
   },
   {
     label: "unlabelled", title: "SIMULATED INSTALLED PANEL — PREPARE",
-    cue: "The robot is holding the panel at the top because this setup has no top retaining fixture. Suction intentionally stays ON. PARTICIPANT: wait at the start marker.",
-    next: "ROBOT UP — BEGIN APPROACH",
+    cue: "The robot reached the top and suction remains on. The participant may begin the second approach immediately.",
+    next: "AUTOMATICALLY CONTINUING",
   },
   {
     label: "approaching", title: "APPROACH THE RAISED PANEL",
@@ -186,9 +190,9 @@ const GUIDED_PROTOCOL = [
     next: "AT RAISED PANEL — START WORK",
   },
   {
-    label: "working", title: "WORK ON THE RAISED PANEL",
-    cue: "PARTICIPANT: perform the panel task normally on the panel held at the top. The assigned motion event already occurred during the robot lift.",
-    next: "WORK INTERVAL COMPLETE",
+    label: "working", title: "COMPLETE ONE LAP",
+    cue: "PARTICIPANT: complete the lap and simulated drilling gestures. EXPERIMENTER: press Lap complete once when finished, then have the participant retreat.",
+    next: "LAP COMPLETE — RETREAT",
   },
   {
     label: "working", title: "COMPLETE THE PANEL TASK",
@@ -197,17 +201,15 @@ const GUIDED_PROTOCOL = [
   },
   {
     label: "retreating", title: "CONTROLLED RECOVERY AND RETREAT",
-    cue: "PARTICIPANT: recover, turn away, and return fully to the start marker. EXPERIMENTER: when clear, press once to arm and again to lower. Suction stays ON during lowering.",
-    next: "CELL CLEAR — LOWER ROBOT",
+    cue: "Press once to request lowering. The selected controller gates the motion continuously. Suction stays on while moving and releases automatically 1.5 seconds after the verified low pose.",
+    next: "REQUEST LOWER — CONTROLLER GATES MOTION",
   },
   {
     label: "unlabelled", title: "ROBOT LOW — READY TO RELEASE",
-    cue: "The robot is stationary at the verified low pose. PARTICIPANT: approach and firmly support the panel. EXPERIMENTER: press once to arm, then again to release suction and save the run.",
-    next: "PANEL SUPPORTED — RELEASE & SAVE",
+    cue: "The robot is at the verified low support. Suction is releasing and the run is saving automatically.",
+    next: "RELEASING & SAVING",
   },
 ] as const;
-
-const PHYSICAL_STEPS = new Set([2, 3, 8, 9]);
 
 type ParticipantFormStage = "intake" | "block" | "end";
 type FormAccess = Record<ParticipantFormStage, {
@@ -362,6 +364,9 @@ export default function Home() {
   const [catalogRefresh, setCatalogRefresh] = useState(0);
   const [participantEditor, setParticipantEditor] = useState<"new" | "rename" | null>(null);
   const [participantName, setParticipantName] = useState("");
+  const [participantSaving, setParticipantSaving] = useState(false);
+  const participantSaveBusy = useRef(false);
+  const participantRevision = useRef(0);
   const [mvnRecordingConfirmed, setMvnRecordingConfirmed] = useState(false);
   const [mvnRecordingReference, setMvnRecordingReference] = useState("");
   const [motiveRecordingReference, setMotiveRecordingReference] = useState("");
@@ -386,12 +391,7 @@ export default function Home() {
   const [formCompletion, setFormCompletion] = useState<FormCompletion | null>(null);
   const [completedStudyForms, setCompletedStudyForms] = useState<Record<string, boolean>>({});
   const [protocolWorking, setProtocolWorking] = useState(false);
-  const [armedStep, setArmedStep] = useState<number | null>(null);
   const protocolBusy = useRef(false);
-  const armedStepRef = useRef<number | null>(null);
-  const armedAtRef = useRef(0);
-  const armedUntilRef = useRef(0);
-  const armedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     let live = true;
@@ -445,11 +445,12 @@ export default function Home() {
     if (status.recording) return;
     let live = true;
     const pollCatalog = async () => {
+      const revision = participantRevision.current;
       try {
         const res = await fetch(`${apiBase()}/api/catalog`, { cache: "no-store" });
         if (!res.ok) return;
         const next = await res.json() as Catalog;
-        if (live) {
+        if (live && revision === participantRevision.current && !participantSaveBusy.current) {
           setCatalog(next);
           setParticipant(current => {
             const available = next.participants.filter(row => row.collection_mode === workspaceMode);
@@ -597,38 +598,58 @@ export default function Home() {
   };
 
   const saveParticipant = async () => {
-    const result = await post("/api/participants", {
-      name: participantName,
-      participant_id: participantEditor === "rename" ? participant : undefined,
-      collection_mode: workspaceMode,
-    });
-    if (!result?.participant) return;
-    const saved = result.participant;
-    setCatalog(old => ({
-      ...old,
-      participants: [...old.participants.filter(row => row.id !== saved.id), saved]
-        .sort((a, b) => a.id.localeCompare(b.id)),
-    }));
-    setParticipant(saved.id);
-    setParticipantEditor(null);
-    setParticipantName("");
-    setCatalogRefresh(value => value + 1);
+    if (participantSaveBusy.current) return;
+    participantSaveBusy.current = true;
+    participantRevision.current += 1;
+    setParticipantSaving(true);
+    try {
+      const result = await post("/api/participants", {
+        name: participantName,
+        participant_id: participantEditor === "rename" ? participant : undefined,
+        collection_mode: workspaceMode,
+      });
+      if (!result?.participant) return;
+      const saved = result.participant;
+      setCatalog(old => ({
+        ...old,
+        participants: [...old.participants.filter(row => row.id !== saved.id), saved]
+          .sort((a, b) => a.id.localeCompare(b.id)),
+      }));
+      setParticipant(saved.id);
+      setParticipantEditor(null);
+      setParticipantName("");
+      setCatalogRefresh(value => value + 1);
+    } finally {
+      participantRevision.current += 1;
+      participantSaveBusy.current = false;
+      setParticipantSaving(false);
+    }
   };
 
   const createStructuredParticipant = async () => {
-    const result = await post("/api/participants", {
-      name: "",
-      collection_mode: workspaceMode,
-    });
-    if (!result?.participant) return;
-    const saved = result.participant;
-    setCatalog(old => ({
-      ...old,
-      participants: [...old.participants.filter(row => row.id !== saved.id), saved]
-        .sort((a, b) => a.id.localeCompare(b.id)),
-    }));
-    setParticipant(saved.id);
-    setCatalogRefresh(value => value + 1);
+    if (participantSaveBusy.current || status.recording) return;
+    participantSaveBusy.current = true;
+    participantRevision.current += 1;
+    setParticipantSaving(true);
+    try {
+      const result = await post("/api/participants", {
+        name: "",
+        collection_mode: workspaceMode,
+      });
+      if (!result?.participant) return;
+      const saved = result.participant;
+      setCatalog(old => ({
+        ...old,
+        participants: [...old.participants.filter(row => row.id !== saved.id), saved]
+          .sort((a, b) => a.id.localeCompare(b.id)),
+      }));
+      setParticipant(saved.id);
+      setCatalogRefresh(value => value + 1);
+    } finally {
+      participantRevision.current += 1;
+      participantSaveBusy.current = false;
+      setParticipantSaving(false);
+    }
   };
 
   const advanceProtocol = async () => {
@@ -636,7 +657,13 @@ export default function Home() {
     protocolBusy.current = true;
     setProtocolWorking(true);
     try {
-      const result = await post("/api/protocol/complete", { vacuum });
+      const combineWorkConfirmations = !status.automation?.active && status.guided_step === 6;
+      let result = await post("/api/protocol/complete", { vacuum });
+      // Steps 6 and 7 label the same work interval and issue no hardware command.
+      // Only combine the expected adjacent annotation; never skip a motion step.
+      if (combineWorkConfirmations && result?.guided_step === 7) {
+        result = await post("/api/protocol/complete", { vacuum });
+      }
       if (result?.completed) {
         setMessage(`${result.message || "Run saved."} Checking quality and preparing the next trial…`);
         setCatalogRefresh(value => value + 1);
@@ -647,54 +674,11 @@ export default function Home() {
     }
   };
 
-  const clearArmedAction = () => {
-    armedStepRef.current = null;
-    armedAtRef.current = 0;
-    armedUntilRef.current = 0;
-    setArmedStep(null);
-    if (armedTimerRef.current) clearTimeout(armedTimerRef.current);
-    armedTimerRef.current = null;
-  };
-
-  const armGuidedAction = async (step: number) => {
-    protocolBusy.current = true;
-    setProtocolWorking(true);
-    try {
-      if (!await post("/api/protocol/arm")) return;
-      const now = Date.now();
-      armedStepRef.current = step;
-      armedAtRef.current = now;
-      armedUntilRef.current = now + 5000;
-      setArmedStep(step);
-      armedTimerRef.current = setTimeout(clearArmedAction, 5000);
-    } finally {
-      protocolBusy.current = false;
-      setProtocolWorking(false);
-    }
-  };
-
   const confirmGuidedAction = () => {
     if (!status.recording || status.guided_step == null || protocolBusy.current) return;
     const step = status.guided_step;
     if (status.automation?.active && (status.automation.fault || ![7, 9].includes(step))) return;
-    if (!(status.automation?.active ? step === 9 : PHYSICAL_STEPS.has(step))) {
-      clearArmedAction();
-      void advanceProtocol();
-      return;
-    }
-    const now = Date.now();
-    if (
-      armedStepRef.current === step
-      && now - armedAtRef.current >= 750
-      && now < armedUntilRef.current
-    ) {
-      clearArmedAction();
-      void advanceProtocol();
-      return;
-    }
-    if (armedStepRef.current === step && now < armedUntilRef.current) return;
-    clearArmedAction();
-    void armGuidedAction(step);
+    void advanceProtocol();
   };
 
   useEffect(() => {
@@ -730,6 +714,10 @@ export default function Home() {
   const dominant = useMemo(() => status.hmm_state || "waiting", [status.hmm_state]);
   const guidedIndex = Math.min(status.guided_step ?? 0, GUIDED_PROTOCOL.length - 1);
   const guided = GUIDED_PROTOCOL[guidedIndex];
+  const manualStepNumber = [1, 2, 3, 4, 4, 5, 6, 6, 7, 8][guidedIndex] ?? 1;
+  const protocolBusyLabel = [3, 8].includes(guidedIndex)
+    ? "MOTION REQUEST ACTIVE — CONTROLLER GATING…"
+    : "CHECKING / WORKING…";
   const modeParticipants = catalog.participants.filter(row => row.collection_mode === workspaceMode);
   const selectedParticipant = modeParticipants.find(row => row.id === participant);
   const participantRuns = catalog.runs.filter(run =>
@@ -777,11 +765,11 @@ export default function Home() {
   const currentFlowLabel = currentFlowStep.label.replace(/^\d+\s*·\s*/, "");
   const activePlannedEvent = status.recording ? (status.planned_event || plannedEvent) : plannedEvent;
   const automaticActive = status.automation?.active === true;
-  const automaticWaiting = automaticActive && (status.automation?.fault === true || ![7, 9].includes(guidedIndex));
   const automaticPresentation = status.automation?.presentation;
+  const automaticWaiting = automaticActive && (status.automation?.fault === true || !automaticPresentation?.action_label);
   const guidedProgress = automaticActive
     ? automaticPresentation?.stage != null ? `STAGE ${automaticPresentation.stage}/${automaticPresentation.stages_total}` : "AUTOMATIC TRIAL"
-    : `STEP ${guidedIndex + 1}/${GUIDED_PROTOCOL.length}`;
+    : `STEP ${manualStepNumber}/8`;
   const guidedTitle = automaticActive ? automaticPresentation?.title || "Automatic trial — waiting for instruction"
     : guidedIndex === 3
     ? activePlannedEvent === "rapid intrusion" ? "PERFORM THE APPROVED RAPID INTRUSION"
@@ -791,10 +779,10 @@ export default function Home() {
   const guidedCue = automaticActive ? automaticPresentation?.instruction || status.automation?.reason || "Waiting for trial state"
     : guidedIndex === 3
     ? activePlannedEvent === "rapid intrusion"
-      ? "After the second confirmation starts the robot lift, give the synchronized cue. The pre-briefed operator performs only the approved rapid movement toward the validated protected volume, then immediately retreats. Keep the E-stop in reach."
+      ? "Request the lift once, then give the synchronized cue when motion begins. The selected controller governs the robot continuously while the pre-briefed operator performs the approved rapid movement and retreats."
       : activePlannedEvent === "distractor"
-        ? "After the second confirmation starts the robot lift, give the synchronized cue for the pre-briefed distractor that stays outside the protected volume."
-        : "Start the same robot lift but give no event cue; the participant remains at the marked start position."
+        ? "Request the lift once, then give the synchronized cue for the pre-briefed distractor when motion begins. The selected controller governs the robot continuously."
+        : "Request the lift once and give no event cue. The selected controller governs the same motion continuously."
     : guided.cue;
   const guidedNext = automaticActive
     ? automaticWaiting ? "AUTOMATIC — FOLLOW THE INSTRUCTION ABOVE"
@@ -867,7 +855,7 @@ export default function Home() {
     video: videoRecordingReference.trim() || defaultVideoReference,
   };
   const preflightChecks = [
-    { key: "service", label: "Sensor service", value: reachable ? "Online" : "Offline", ready: reachable },
+    { key: "service", label: "Trial control", value: !reachable ? "Offline" : status.controller_output_enabled ? "Enabled" : "Robot control switched off", ready: reachable && status.controller_output_enabled },
     { key: "xsens", label: "Xsens body", value: xsensComplete ? "23/23 segments" : `${status.xsens_segment_count}/23 segments`, ready: xsensComplete },
     { key: "optitrack", label: "OptiTrack", value: status.optitrack_connected ? "Fresh stream" : "Waiting", ready: status.optitrack_connected },
     { key: "robot", label: "Robot pose", value: robotPose.ok ? "Live pose" : robotPose.label, ready: robotPose.ok },
@@ -877,6 +865,9 @@ export default function Home() {
   const currentPreflight = !reachable ? {
     key: "service", owner: "SYSTEM SETUP", title: "Start the sensor service",
     detail: "Run the local sensor service on this lab PC. This page will continue automatically when it is online.",
+  } : !status.controller_output_enabled ? {
+    key: "control", owner: "SYSTEM SETUP", title: "Robot control is switched off",
+    detail: "The dashboard can monitor tracking, but this server cannot send trial speed or stop commands. This is a lab-PC setup issue; moving the participant farther away will not resolve it.",
   } : !xsensComplete ? {
     key: "xsens", owner: "YOUR ACTION", title: "Connect the Xsens suit",
     detail: "In MVN Analyze, start Network Streamer and wait for a complete 23-segment body stream.",
@@ -894,7 +885,7 @@ export default function Home() {
     detail: "Start MVN, Motive and video with the matching filenames below, then confirm that all three timers are moving.",
   } : {
     key: "ready", owner: "READY", title: `Start ${nextTrial}`,
-    detail: "All live systems and recordings are ready. Start the trial only when the participant and cell are clear.",
+    detail: "Tracking, robot control and recording confirmations are ready. Start checks the low pose and clearance, then switches loading suction on.",
   };
 
   return (
@@ -940,7 +931,7 @@ export default function Home() {
                 {modeParticipants.length > 0 && <select aria-label="Participant code" value={participant} onChange={event => setParticipant(event.target.value)}>
                   {modeParticipants.map(row => <option key={row.id} value={row.id}>{row.id}</option>)}
                 </select>}
-                <button onClick={() => void createStructuredParticipant()}>+ New {isQualification ? "Q code" : "participant"}</button>
+                <button disabled={participantSaving || status.recording} onClick={() => void createStructuredParticipant()}>{participantSaving ? "Creating…" : `+ New ${isQualification ? "Q code" : "participant"}`}</button>
               </div>
             </div>
             <div className="currentStepChip">
@@ -962,9 +953,9 @@ export default function Home() {
                 {status.sync_marker_count > 0 ? `✓ Sync marker ${status.sync_marker_count} recorded` : "Record visible shared sync marker"}
               </button>}
               {guidedIndex >= 3 && guidedIndex <= 8 && <div className="simPanelNote">No top fixture: suction stays ON while the panel is overhead. Never release an unsupported panel.</div>}
-              {!automaticWaiting && <button onClick={confirmGuidedAction} disabled={protocolWorking}>{protocolWorking ? "CHECKING / WORKING…" : armedStep === guidedIndex ? `PRESS AGAIN NOW — ${guidedNext}` : guidedNext}</button>}
+              {!automaticWaiting && <button onClick={confirmGuidedAction} disabled={protocolWorking}>{protocolWorking ? protocolBusyLabel : guidedNext}</button>}
               <button className="runAbort" onClick={() => void abortRecording()}>Abort safely &amp; preserve attempt</button>
-              <small>{automaticActive ? "Automatic qualification: grip and retreat advance the robot. Task completion and supported release remain explicit. Faults require abort and inspection." : "Operator-confirmed mode: advance only at the real phase boundary. Robot motion and suction actions require a deliberate second press."}</small>
+              <small>{automaticActive ? "Automatic qualification: follow the current instruction above. Task completion requires confirmation. Faults require abort and inspection." : "One press records each real phase boundary. Lift and lower requests stay active while the selected controller gates robot speed from the live participant signal."}</small>
             </section>
           )}
 
@@ -977,7 +968,7 @@ export default function Home() {
                   <p>{isQualification
                     ? "Use a Q-code for this rehearsal. Qualification runs stay separate from participant results."
                     : "This anonymous code links every trial file and questionnaire. No participant name is required."}</p>
-                  <button className="stepPrimary" onClick={() => void createStructuredParticipant()}>Create next {isQualification ? "Q code" : "participant"}</button>
+                  <button className="stepPrimary" disabled={participantSaving} onClick={() => void createStructuredParticipant()}>{participantSaving ? "Creating…" : `Create next ${isQualification ? "Q code" : "participant"}`}</button>
                 </div>
               ) : dueStudyForm ? (
                 <div className="oneStepAction formStep">
@@ -1015,7 +1006,7 @@ export default function Home() {
                   </div>
                   <small>{isQualification && status.automation?.enabled
                     ? "Automatic qualification: load → seal → retreat → lift → task → retreat → lower. Supported release is confirmed."
-                    : "Operator-confirmed sequence. Automatic participant release remains unqualified."}</small>
+                    : "Single-press sequence. The selected controller gates lift/lower continuously, and suction releases only at the verified low support."}</small>
 
                   {currentPreflight.key === "calibration" && (
                     <button className="stepPrimary" onClick={() => post("/api/calibration/mark")}>Calibration complete</button>
@@ -1033,7 +1024,7 @@ export default function Home() {
                   )}
 
                   {currentPreflight.key === "ready" && (
-                    <button className="stepPrimary" onClick={() => void startRecording(nextStudySlot, effectiveRecordingReferences)}>Start Block {nextStudySlot.block} · Trial {nextStudySlot.withinBlockTrial}{isQualification && status.automation?.enabled ? " — suction turns on" : ""}</button>
+                    <button className="stepPrimary" onClick={() => void startRecording(nextStudySlot, effectiveRecordingReferences)}>Start Block {nextStudySlot.block} · Trial {nextStudySlot.withinBlockTrial} — suction turns on</button>
                   )}
 
                   <details className="preflightDetails">
@@ -1098,7 +1089,7 @@ export default function Home() {
       {tab === "operate" && status.recording && (
         <section className={`runDirector label-${status.event_label === "hazard" ? "hazard" : guided.label}`} aria-live="polite">
           <div className="runDirectorHead">
-            <span>LIVE RUN DIRECTOR · {status.block_label} / {status.controller_condition} / TRIAL {status.within_block_trial} · STEP {guidedIndex + 1}/{GUIDED_PROTOCOL.length}</span>
+            <span>LIVE RUN DIRECTOR · {status.block_label} / {status.controller_condition} / TRIAL {status.within_block_trial} · STEP {manualStepNumber}/8</span>
             <strong>PHASE: {status.label.toUpperCase()} · EVENT: {status.event_label.toUpperCase()}</strong>
           </div>
           <h2>{guidedTitle}</h2>
@@ -1107,8 +1098,8 @@ export default function Home() {
             {status.sync_marker_count > 0 ? `✓ Sync marker ${status.sync_marker_count} recorded` : "Record visible shared sync marker"}
           </button>}
           {guidedIndex >= 3 && guidedIndex <= 8 && <div className="simPanelNote">SIMULATION RULE: no top fixture means suction stays ON while the panel is at the top. Never release an unsupported panel overhead.</div>}
-          <button onClick={confirmGuidedAction} disabled={protocolWorking}>{protocolWorking ? "CHECKING / WORKING…" : armedStep === guidedIndex ? `PRESS AGAIN NOW — ${guidedNext}` : guidedNext}</button>
-          <small>The dashboard operator advances each real phase. Suction and robot motion require two separate presses within five seconds.</small>
+          <button onClick={confirmGuidedAction} disabled={protocolWorking}>{protocolWorking ? protocolBusyLabel : guidedNext}</button>
+          <small>One press records each phase boundary. Lift and lower requests remain active while the assigned controller gates motion.</small>
         </section>
       )}
 
@@ -1131,7 +1122,7 @@ export default function Home() {
           </div>
           {participantEditor && <div className="participantEditor">
             <input autoFocus value={participantName} maxLength={80} placeholder={participantEditor === "new" ? "New participant name" : `Name for ${participant}`} onChange={e => setParticipantName(e.target.value)} onKeyDown={e => { if (e.key === "Enter") void saveParticipant(); }} />
-            <button className="primary" disabled={!participantName.trim()} onClick={() => void saveParticipant()}>{participantEditor === "new" ? "Create participant" : "Save name"}</button>
+            <button className="primary" disabled={participantSaving || !participantName.trim()} onClick={() => void saveParticipant()}>{participantSaving ? "Saving…" : participantEditor === "new" ? "Create participant" : "Save name"}</button>
             <button onClick={() => { setParticipantEditor(null); setParticipantName(""); }}>Cancel</button>
           </div>}
           <div className="actions">
@@ -1223,12 +1214,12 @@ export default function Home() {
           <div className="panelHead"><div><p className="kicker">03 · GROUND TRUTH</p><h2>Phase + independent event</h2></div><span className="currentLabel">{status.label} · {status.event_label}</span></div>
           <p className="help">The experimenter advances the protocol at each real phase onset. The active label then persists on every frame until the next cue; the participant never touches this console.</p>
           <div className="guidedRun">
-            <span>GUIDED RUN · STEP {guidedIndex + 1}/{GUIDED_PROTOCOL.length} · {status.label.toUpperCase()}</span>
+            <span>GUIDED RUN · STEP {manualStepNumber}/8 · {status.label.toUpperCase()}</span>
             <strong>{guidedTitle}</strong>
             <p>{guidedCue}</p>
             <small>Hold each labelled state for at least 2 seconds. Press Enter or use the button.</small>
             <button className="protocolNext" disabled={!status.recording || status.guided_step == null || protocolWorking} onClick={confirmGuidedAction}>
-              {protocolWorking ? "CHECKING / WORKING…" : armedStep === guidedIndex ? `PRESS AGAIN NOW — ${guidedNext}` : guidedNext}
+              {protocolWorking ? protocolBusyLabel : guidedNext}
             </button>
           </div>
           <p className="manualLabelTitle">Manual label override — recovery/debugging only</p>
