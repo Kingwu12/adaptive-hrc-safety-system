@@ -1,6 +1,18 @@
 import json
 
+import pytest
+
 from scripts.audit_recorded_trials import audit_trial
+
+
+@pytest.mark.parametrize('identity,mismatch', [('static',1),('dynamic_ssm',0)])
+def test_audit_checks_decision_identity_not_just_assigned_label(tmp_path,identity,mismatch):
+    path=tmp_path/'trial.jsonl'
+    path.write_text(json.dumps({'controller_condition':'reactive SSM',
+                                'controller_decision':{'condition':identity}}))
+    result=audit_trial(path)
+    assert result['counts'].get('controller_identity_mismatch',0) == mismatch
+    assert any('differs from assigned' in s for s in result['unresolved_evidence']) == bool(mismatch)
 
 
 def test_planned_hazard_label_does_not_prove_robot_motion(tmp_path):

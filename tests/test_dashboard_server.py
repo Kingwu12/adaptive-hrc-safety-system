@@ -405,7 +405,12 @@ def test_guided_protocol_persists_and_applies_labels(tmp_path):
     assert stopped["label"] == "unlabelled"
 
 
-def test_study_metadata_and_clean_event_are_logged_without_fake_hazard(tmp_path):
+@pytest.mark.parametrize('block,within,controller,identity', [
+    ('A',1,'fixed zone','static'),
+    ('B',1,'reactive SSM','dynamic_ssm'),
+    ('C',2,'predictive SSM','adaptive'),
+])
+def test_study_metadata_and_clean_event_are_logged_without_fake_hazard(tmp_path,block,within,controller,identity):
     state = DashboardState(
         tmp_path, segment_id=1, model_path=Path("data/models/pilot_hmm.json"),
         enable_research_output=True,
@@ -419,8 +424,8 @@ def test_study_metadata_and_clean_event_are_logged_without_fake_hazard(tmp_path)
     state.start_session(
         "P07", "T01", mvn_recording_confirmed=True,
         mvn_recording_reference=r"C:\MVN\P07-T01.mvn",
-        block_label="A", within_block_trial=1,
-        controller_condition="fixed zone", planned_event="clean",
+        block_label=block, within_block_trial=within,
+        controller_condition=controller, planned_event="clean",
         collection_mode="participant_study",
         motive_recording_reference="P07-T01.tak",
         video_recording_reference="P07-T01.mp4")
@@ -447,13 +452,13 @@ def test_study_metadata_and_clean_event_are_logged_without_fake_hazard(tmp_path)
     rows = [json.loads(line) for line in Path(result["path"]).read_text().splitlines()]
     row = next(item for item in rows
                if (item.get("controller_decision") or {}).get("condition"))
-    assert row["block_label"] == "A"
-    assert row["within_block_trial"] == 1
-    assert row["controller_condition"] == "fixed zone"
+    assert row["block_label"] == block
+    assert row["within_block_trial"] == within
+    assert row["controller_condition"] == controller
     assert row["planned_event"] == "clean"
     assert row["collection_mode"] == "participant_study"
     assert row["ground_truth_event"] == "none"
-    assert row["controller_decision"]["condition"] == "static"
+    assert row["controller_decision"]["condition"] == identity
     assert row["controller_decision"]["command"] in {
         "full_speed", "reduced_speed", "protective_stop",
     }

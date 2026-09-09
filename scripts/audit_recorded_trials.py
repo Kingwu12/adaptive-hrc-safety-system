@@ -23,6 +23,8 @@ def audit_trial(path: Path, red_boundary_m: float = .94, closing_gate_m_s: float
     event_min_d = math.inf
     event_max_closing = -math.inf
     event_max_joint_speed = 0.0
+    identity_names = {'static':'fixed zone', 'fixed_zone':'fixed zone',
+                      'dynamic_ssm':'reactive SSM', 'adaptive':'predictive SSM'}
     for line in path.open(encoding='utf-8-sig'):
         if not line.strip():
             continue
@@ -37,6 +39,10 @@ def audit_trial(path: Path, red_boundary_m: float = .94, closing_gate_m_s: float
         last = row
         counts['samples'] += 1
         decision = row.get('controller_decision') or {}
+        if decision.get('condition'):
+            counts['controller_identity_samples'] += 1
+            if decision['condition'] not in identity_names or identity_names[decision['condition']] != row.get('controller_condition'):
+                counts['controller_identity_mismatch'] += 1
         telemetry = row.get('robot_telemetry') or {}
         qd = telemetry.get('actual_qd')
         valid_qd = (isinstance(qd, list) and len(qd) == 6
@@ -87,6 +93,10 @@ def audit_trial(path: Path, red_boundary_m: float = .94, closing_gate_m_s: float
     if (first or {}).get('planned_event') in ('rapid intrusion','distractor') and counts['event_during_motion'] == 0:
         blockers.append('no overlap between the cued event window and fresh measured robot motion')
     if counts['invalid_json']: blockers.append('invalid JSON rows')
+    if counts['controller_identity_mismatch']:
+        blockers.append('recorded decision controller differs from assigned controller')
+    if counts['controller_identity_samples'] == 0:
+        blockers.append('no identified controller decisions recorded')
     if (first or {}).get('planned_event') == 'rapid intrusion' and event_max_closing < closing_gate_m_s:
         blockers.append(f'labelled rapid-intrusion window never reached the audit closing gate ({closing_gate_m_s:g} m/s); independently review exposure')
     if (first or {}).get('planned_event') == 'distractor' and event_min_d <= red_boundary_m:
@@ -95,6 +105,7 @@ def audit_trial(path: Path, red_boundary_m: float = .94, closing_gate_m_s: float
     blockers.append('native recordings and independently annotated event onset require verification')
     return {'session_id': (first or {}).get('session_id',path.stem),
             'participant_id': (first or {}).get('participant_id'),
+            'block': (first or {}).get('block_label'),
             'controller': (first or {}).get('controller_condition'),
             'planned_event': (first or {}).get('planned_event'),
             'execution_mode': (first or {}).get('execution_mode'),

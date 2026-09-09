@@ -41,7 +41,7 @@ type Status = {
   controller_comparison?: Record<string, {speed_fraction: number; rule: string; shadow_only: boolean}> | null;
   controller_profile?: {red_radius_m: number; predictive_role: string};
   controller_output_enabled: boolean;
-  controller_decision?: {speed_fraction: number; rule: string} | null;
+  controller_decision?: {condition?: string; speed_fraction: number; rule: string} | null;
   recording: boolean;
   session_id: string | null;
   participant_id: string | null;
@@ -136,6 +136,10 @@ const CONTROLLER_ORDERS = [
   ["predictive SSM", "fixed zone", "reactive SSM"],
   ["predictive SSM", "reactive SSM", "fixed zone"],
 ] as const;
+const CONTROLLER_NAMES: Record<string, StudySlot["controller"]> = {
+  static: "fixed zone", fixed_zone: "fixed zone",
+  dynamic_ssm: "reactive SSM", adaptive: "predictive SSM",
+};
 const EVENT_ORDERS = [
   ["clean", "distractor", "rapid intrusion"],
   ["clean", "rapid intrusion", "distractor"],
@@ -378,8 +382,6 @@ export default function Home() {
   const [motiveRecordingReference, setMotiveRecordingReference] = useState("");
   const [videoRecordingReference, setVideoRecordingReference] = useState("");
   const blockLabel = "A";
-  const [withinBlockTrial] = useState("1");
-  const [controllerCondition] = useState("fixed zone");
   const [plannedEvent] = useState("clean");
   const [message, setMessage] = useState("");
   const [rig, setRig] = useState<Rig>({});
@@ -582,14 +584,18 @@ export default function Home() {
     setStartBusy(true);
     try {
     const isStructuredRun = workspaceMode !== "model_development";
+    if (isStructuredRun && !slot) {
+      setMessage("No assigned study slot is selected. Refresh the session before starting.");
+      return;
+    }
     const result = await post("/api/protocol/start", {
       participant_id: participant,
       mvn_recording_confirmed: recordingsConfirmed,
       mvn_recording_reference: references?.mvn ?? mvnRecordingReference.trim(),
-      block_label: isStructuredRun ? (slot?.block ?? blockLabel) : undefined,
-      within_block_trial: isStructuredRun ? (slot?.withinBlockTrial ?? Number(withinBlockTrial)) : undefined,
-      controller_condition: isStructuredRun ? (slot?.controller ?? controllerCondition) : undefined,
-      planned_event: isStructuredRun ? (slot?.event ?? plannedEvent) : undefined,
+      block_label: isStructuredRun ? slot?.block : undefined,
+      within_block_trial: isStructuredRun ? slot?.withinBlockTrial : undefined,
+      controller_condition: isStructuredRun ? slot?.controller : undefined,
+      planned_event: isStructuredRun ? slot?.event : undefined,
       collection_mode: workspaceMode,
       automatic: workspaceMode === "qualification" && status.automation?.enabled === true,
       vacuum,
@@ -944,7 +950,7 @@ export default function Home() {
             <div className="studyContextIdentity">
               <span>{isQualification ? "QUALIFICATION" : "PARTICIPANT STUDY"}</span>
               <div className="contextParticipantControl">
-                {modeParticipants.length > 0 && <select aria-label="Participant code" value={participant} onChange={event => setParticipant(event.target.value)}>
+                {modeParticipants.length > 0 && <select aria-label="Participant code" disabled={status.recording || startBusy} value={participant} onChange={event => setParticipant(event.target.value)}>
                   {modeParticipants.map(row => <option key={row.id} value={row.id}>{row.id}</option>)}
                 </select>}
                 <button disabled={participantSaving || status.recording} onClick={() => void createStructuredParticipant()}>{participantSaving ? "Creating…" : `+ New ${isQualification ? "Q code" : "participant"}`}</button>
@@ -978,7 +984,10 @@ export default function Home() {
               <button className="runAbort" onClick={() => void abortRecording()}>Abort safely &amp; preserve attempt</button>
               <small>{automaticActive ? "Automatic qualification: follow the current instruction above. Task completion requires confirmation. Faults require abort and inspection." : "One press records each real phase boundary. Lift and lower requests stay active while the selected controller gates robot speed from the live participant signal."}</small>
               <details className="controllerComparison">
-                <summary>Controller comparison and event evidence</summary>
+                <summary>Operator: controller identity and event evidence</summary>
+                <p>Recording {status.participant_id} · block {status.block_label}. Assigned controller: <strong>{status.controller_condition || "unavailable"}</strong>.</p>
+                <p>Controller producing the latest decision: <strong>{CONTROLLER_NAMES[status.controller_decision?.condition || ""] || "unavailable — no identified controller decision"}</strong> ({status.controller_decision?.condition || "no identifier"}).</p>
+                {status.controller_decision?.condition && CONTROLLER_NAMES[status.controller_decision.condition] !== status.controller_condition && <p className="warnText">CONTROLLER MISMATCH: abort this attempt and inspect the recorded controller identity.</p>}
                 <p>Only the assigned controller commands the robot. Other values are calculated from the same input for diagnosis.</p>
                 {status.controller_comparison && <table><thead><tr><th>Controller</th><th>Requested speed</th></tr></thead><tbody>
                   {Object.entries(status.controller_comparison).map(([name, value]) => <tr key={name}><td>{name}</td><td>{Math.round(value.speed_fraction * 100)}%</td></tr>)}
@@ -1088,6 +1097,11 @@ export default function Home() {
             <details className="panel studyDetails">
               <summary><span>Session map</span><b>{acceptedStudyRuns}/9 captures passed</b></summary>
               <p>Capture checks cover labels and tracking. Final analysis eligibility requires a separate trial audit.</p>
+              <details>
+                <summary>Operator: controller order for {participant || "no participant selected"}</summary>
+                <p>Block names always progress A → B → C. The assigned controllers change with participant code. Keep this operator information out of the participant briefing.</p>
+                {participant && <ol>{schedule.filter(slot => slot.withinBlockTrial === 1).map(slot => <li key={slot.block}>Block {slot.block}: <strong>{slot.controller}</strong></li>)}</ol>}
+              </details>
               <div className="trialMatrix">
                 {schedule.map(slot => {
                   const matches = participantRuns.filter(run => run.block_label === slot.block && run.within_block_trial === slot.withinBlockTrial);
