@@ -28,9 +28,10 @@ For the complete participant workflow in team-readable language, start with
 three controllers, three scenarios, nine-trial schedule, five questionnaire handoffs,
 operator roles, measurements, analysis logic and no-go boundaries in one place.
 
-Automatic grip/retreat/lift/lower sequencing is implemented for **Q-code
-qualification only**. Read [the automatic-trial handoff](docs/automatic-trial-qualification.md)
-for its controls, tests, fault behaviour and the still-required physical release.
+Automatic grip/retreat/lift/lower sequencing supports **P-code participant studies
+and Q-code rehearsals**, using the same checks and sequence. Run `Start-Lab.ps1`
+on Windows. Read [the automatic-trial handoff](docs/automatic-trial-qualification.md)
+for operation, physical setup assumptions, tests and fault behaviour.
 
 **Participant-day materials:** print the [participant handout](output/pdf/participant-handout.pdf)
 for participants and the [operator session script](output/pdf/operator-session-script.pdf)

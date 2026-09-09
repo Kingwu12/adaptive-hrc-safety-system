@@ -25,6 +25,9 @@ class State(FakeGuidedState):
                 "controller_decision": {"output_applied": self.output}}
 
     def start_session(self, *args, **kwargs):
+        self.start_metadata = {'participant_id':args[0],
+                               'collection_mode':args[8] if len(args) > 8 else kwargs.get('collection_mode'),
+                               'execution_mode':kwargs.get('execution_mode')}
         return super().start_session(*args[:4])
 
     def journal_event(self, kind, **payload):
@@ -46,12 +49,13 @@ class Rig(FakeGuidedRig):
         return {"action": action}
 
 
-def setup():
+def setup(mode="qualification"):
     clock = FakeClock()
     state, rig = State(clock), Rig()
     runner = AutomaticRunController(state, rig, clock, enabled=True)
-    runner.start("Q01", "T01", True, "Q01-T01.mvn",
-                 collection_mode="qualification", block_label="A", automatic=True)
+    participant = "P01" if mode == "participant_study" else "Q01"
+    runner.start(participant, "T01", True, f"{participant}-T01.mvn",
+                 collection_mode=mode, block_label="A", automatic=True)
     return clock, state, rig, runner
 
 
@@ -128,8 +132,11 @@ def test_simulated_drilling_uses_marker_packets_and_both_hand_segments():
     assert rig.actions == [("grip", "BOTH", 60)]
 
 
-def test_full_automatic_cycle_moves_once_each_and_never_releases_overhead():
-    clock, state, rig, runner = setup()
+@pytest.mark.parametrize('mode', ['qualification','participant_study'])
+def test_full_automatic_cycle_moves_once_each_and_never_releases_overhead(mode):
+    clock, state, rig, runner = setup(mode)
+    assert state.start_metadata == {'participant_id':'P01' if mode == 'participant_study' else 'Q01',
+                                    'collection_mode':mode,'execution_mode':'automatic'}
     begin(clock, runner)
     assert runner.phase == "loading"
     tick(clock, state, runner)
@@ -166,8 +173,9 @@ def test_full_automatic_cycle_moves_once_each_and_never_releases_overhead():
 
 
 @pytest.mark.parametrize("failure", ["pose", "moving", "cancel", "tracking", "health"])
-def test_low_release_dwell_fault_never_vents(failure):
-    clock, state, rig, runner = setup()
+@pytest.mark.parametrize('mode', ['qualification','participant_study'])
+def test_low_release_dwell_fault_never_vents(failure,mode):
+    clock, state, rig, runner = setup(mode)
     state.step = 9
     runner._phase("supported_release", "Waiting on low support")
     tick(clock, state, runner)
@@ -220,8 +228,9 @@ def test_clearance_dwell_resets_on_reentry():
 
 
 @pytest.mark.parametrize("failure", ["grip", "tracking", "nan", "stale_health", "output"])
-def test_faults_latch_without_release_or_restart(failure):
-    clock, state, rig, runner = setup()
+@pytest.mark.parametrize('mode', ['qualification','participant_study'])
+def test_faults_latch_without_release_or_restart(failure,mode):
+    clock, state, rig, runner = setup(mode)
     begin(clock, runner)
     tick(clock, state, runner)
     tick(clock, state, runner, 1)
@@ -271,13 +280,32 @@ def test_auto_start_gate_and_manual_step_bypass():
     with pytest.raises(ValueError, match="automatically"):
         runner.complete_step()
     state.recording = False
-    with pytest.raises(ValueError, match="participant release is not validated"):
-        runner.start("P01", "T01", True, "P01.mvn", automatic=True,
+    with pytest.raises(ValueError, match="requires a P-code"):
+        runner.start("Q01", "T01", True, "Q01.mvn", automatic=True,
                      collection_mode="participant_study")
     runner.enabled = False
     with pytest.raises(ValueError, match="enable-automatic-trials"):
         runner.start("Q01", "T01", True, "Q01.mvn", automatic=True,
                      collection_mode="qualification")
+
+
+def test_participant_and_rehearsal_share_the_same_physical_contract():
+    rehearsal = setup('qualification')[-1]
+    participant = setup('participant_study')[-1]
+    assert rehearsal.contract == participant.contract
+    assert participant.status()['supported_collection_modes'] == ['qualification','participant_study']
+    assert participant.status()['qualification_only'] is False
+
+
+@pytest.mark.parametrize('mode,participant', [('qualification','Q01'),('participant_study','P01')])
+def test_disabled_automatic_service_rejects_both_modes_before_hardware(mode,participant):
+    clock=FakeClock()
+    state,rig=State(clock),Rig()
+    runner=AutomaticRunController(state,rig,clock,enabled=False)
+    with pytest.raises(ValueError,match='enable-automatic-trials'):
+        runner.start(participant,'T01',True,'test.mvn',automatic=True,collection_mode=mode)
+    assert rig.actions == []
+    assert not state.recording
 
 
 def test_loading_timeout_stops_without_venting():

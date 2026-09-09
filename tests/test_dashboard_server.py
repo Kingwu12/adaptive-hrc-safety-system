@@ -410,7 +410,8 @@ def test_guided_protocol_persists_and_applies_labels(tmp_path):
     ('B',1,'reactive SSM','dynamic_ssm'),
     ('C',2,'predictive SSM','adaptive'),
 ])
-def test_study_metadata_and_clean_event_are_logged_without_fake_hazard(tmp_path,block,within,controller,identity):
+@pytest.mark.parametrize('execution_mode',['operator_confirmed','automatic'])
+def test_study_metadata_and_clean_event_are_logged_without_fake_hazard(tmp_path,block,within,controller,identity,execution_mode):
     state = DashboardState(
         tmp_path, segment_id=1, model_path=Path("data/models/pilot_hmm.json"),
         enable_research_output=True,
@@ -427,6 +428,7 @@ def test_study_metadata_and_clean_event_are_logged_without_fake_hazard(tmp_path,
         block_label=block, within_block_trial=within,
         controller_condition=controller, planned_event="clean",
         collection_mode="participant_study",
+        execution_mode=execution_mode,
         motive_recording_reference="P07-T01.tak",
         video_recording_reference="P07-T01.mp4")
     marker = state.mark_sync_event()
@@ -448,6 +450,8 @@ def test_study_metadata_and_clean_event_are_logged_without_fake_hazard(tmp_path,
     manifest = json.loads(Path(result["manifest_path"]).read_text())
     assert manifest["native_motive"] == "P07-T01.tak"
     assert manifest["consented_video"] == "P07-T01.mp4"
+    assert manifest['collection_mode'] == 'participant_study'
+    assert manifest['execution_mode'] == execution_mode
 
     rows = [json.loads(line) for line in Path(result["path"]).read_text().splitlines()]
     row = next(item for item in rows
@@ -457,6 +461,9 @@ def test_study_metadata_and_clean_event_are_logged_without_fake_hazard(tmp_path,
     assert row["controller_condition"] == controller
     assert row["planned_event"] == "clean"
     assert row["collection_mode"] == "participant_study"
+    assert row['execution_mode'] == execution_mode
+    if execution_mode == 'automatic':
+        assert all(item['ground_truth_phase'] == 'unlabelled' for item in rows)
     assert row["ground_truth_event"] == "none"
     assert row["controller_decision"]["condition"] == identity
     assert row["controller_decision"]["command"] in {

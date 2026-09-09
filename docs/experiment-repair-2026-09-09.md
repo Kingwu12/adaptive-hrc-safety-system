@@ -1,5 +1,10 @@
 # Experiment review — 9 September 2026
 
+Later update: the v5 automatic engine now supports participant and rehearsal
+collection modes with identical physical checks. The Q-only capability statements
+below describe the earlier repair. See [the current automatic-trial handoff](automatic-trial-qualification.md).
+The historical data audit and model-validation findings below are unchanged.
+
 ## Decision
 
 Preserve today's recordings as the original study version. Do not label the entire session final or discard it wholesale. Capture completion is different from valid event exposure and a valid controller comparison. Eligibility needs a documented trial-level audit, native recording verification, and independent event annotation. Do not silently relabel trials, choose exclusions from favourable outcomes, or pool later patched runs as if the implementation were unchanged.

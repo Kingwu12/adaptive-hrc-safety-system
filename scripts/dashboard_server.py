@@ -2200,11 +2200,13 @@ class AutomaticRunController(GuidedRunController):
     """Single-cycle automation for the *current*, suction-held panel task.
 
     Unlike the legacy ceiling-fastening demo this never releases overhead.
-    Qualification-only until the physical release evidence is supplied. No
-    model belief chooses a task transition or becomes ground-truth labels.
+    Rehearsals and participant studies use the same guarded sequence. Collection
+    mode identifies the dataset; no model belief chooses a task transition or
+    becomes ground-truth labels.
     """
 
-    VERSION = "automatic-panel-v4-supported-low"
+    VERSION = "automatic-panel-v5-study-and-rehearsal"
+    COLLECTION_PREFIXES = {"qualification": "Q", "participant_study": "P"}
     SEAL_DWELL_S = 1.0
     LOW_RELEASE_DWELL_S = 2.0
     CLEAR_DWELL_S = 2.0
@@ -2217,8 +2219,8 @@ class AutomaticRunController(GuidedRunController):
         self.automatic = False
         self.cancel = threading.Event()
         self.phase = "idle"
-        self.reason = ("Automatic qualification available; hardware preflight required" if enabled
-                       else "Automatic qualification is disabled on this server")
+        self.reason = ("Automatic trials available; hardware preflight required" if enabled
+                       else "Automatic trials are disabled on this server")
         self.since = self.clock()
         self.stable_since = None
         self.health = None
@@ -2278,7 +2280,7 @@ class AutomaticRunController(GuidedRunController):
             "fault": (None, "Trial stopped — do not restart", None),
             "complete": (7, "Trial saved", None),
         }
-        number, title, action = cues.get(phase, (None, "Automatic qualification", None))
+        number, title, action = cues.get(phase, (None, "Automatic trial", None))
         cue_instruction = None
         if phase == "lifting":
             snap = self.state.snapshot()
@@ -2299,12 +2301,12 @@ class AutomaticRunController(GuidedRunController):
 
     def status(self):
         return {"enabled": self.enabled, "active": self.automatic,
-                "availability": "qualification_ready" if self.enabled else "service_disabled",
-                "participant_blocker": "Automatic participant release requires a witnessed lab qualification. Participant trials currently use operator confirmations.",
+                "availability": "automatic_ready" if self.enabled else "service_disabled",
+                "supported_collection_modes": list(self.COLLECTION_PREFIXES),
                 "work_locations": ({"configured": False} if self.work_visits is None else
                                    {"configured": True, **self.work_visits.status()}),
                 "simulated_drilling": self.drilling.status(),
-                "qualification_only": True, "version": self.VERSION,
+                "qualification_only": False, "version": self.VERSION,
                 "phase": self.phase, "reason": self.reason,
                 "fault": self.phase == "fault", "presentation": self.presentation(),
                 "task_sha256": None if self.contract is None else self.contract["sha256"]}
@@ -2324,10 +2326,16 @@ class AutomaticRunController(GuidedRunController):
     def _start(self, *args, automatic=False, vacuum=60, **kwargs):
         if self.state.snapshot().get("recording"):
             raise ValueError("A recording is already active")
-        if automatic and (not self.enabled or kwargs.get("collection_mode") != "qualification"
-                          or not re.fullmatch(r"Q\d+", str(args[0] if args else ""))):
-            raise ValueError("Automatic trials require --enable-automatic-trials and a Q-code qualification run; participant release is not validated")
         if automatic:
+            if not self.enabled:
+                raise ValueError("Automatic trials require --enable-automatic-trials; restart the service with Start-Lab.ps1")
+            mode = kwargs.get("collection_mode")
+            prefix = self.COLLECTION_PREFIXES.get(mode)
+            if prefix is None:
+                raise ValueError("Automatic trials require participant study or qualification mode; model development is labelled separately")
+            participant = str(args[0] if args else "")
+            if not re.fullmatch(rf"{prefix}\d+", participant):
+                raise ValueError(f"{mode} requires a {prefix}-code so participant and rehearsal data stay separate")
             if not 10 <= int(vacuum) <= 80:
                 raise ValueError("Loading vacuum must be between 10 and 80 percent")
             self._require_stationary()
@@ -2968,7 +2976,7 @@ def main() -> int:
     parser.add_argument("--segment", type=int, default=PELVIS)
     parser.add_argument("--out", default="data/xsens")
     parser.add_argument("--enable-automatic-trials", action="store_true",
-                        help="enable Q-code automatic qualification only; not participant release")
+                        help="enable the guarded automatic sequence for P-code participant studies and Q-code rehearsals")
     parser.add_argument(
         "--enable-research-speed-output", action="store_true",
         help=(

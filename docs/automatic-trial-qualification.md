@@ -1,4 +1,22 @@
-# Automatic panel trial: qualification handoff
+# Automatic panel trials: participant and rehearsal handoff
+
+## Shared participant/rehearsal engine (v5, 2026-09-09)
+
+`automatic-panel-v5-study-and-rehearsal` runs the same guarded sequence in
+Participant study (P-codes) and Qualification (Q-codes). The earlier Q-only
+restriction was an administrative software gate, not a different physical
+algorithm. Collection mode determines data classification; it does not weaken
+grip, tracking, pose, supported-release, stop or watchdog checks.
+
+Start the updated service with `Start-Lab.ps1`, select the desired collection
+mode, and use the recording-confirmation/start button. Shared sync and observed
+task completion remain explicit actions. The dashboard reports if an older
+rehearsal-only backend is still running instead of silently switching to manual.
+The launcher does not stop an unknown existing service.
+
+This implementation was tested locally with simulated hardware and a real local
+HTTP service. It has not been deployed to or physically checked on the offline
+lab PC. Earlier operator-confirmed data stays unchanged and separately identified.
 
 ## Windows revision: supported low release (2026-09-09)
 
@@ -14,16 +32,15 @@ The support assumption and dwell are included in the versioned task contract.
 Manual mode is unchanged. The instructions below describe this supported
 automatic release revision.
 
-Status: software implementation, not physical participant release. The server
-rejects automatic participant runs. Only Q-code qualification can opt in.
-Existing participant runs remain explicitly operator-confirmed; do not pool
+The supported-low release sequence is shared by both v5 collection modes.
+Earlier participant runs remain explicitly operator-confirmed; do not pool
 those timings with future automatic runs without addressing the protocol change.
 
 ## What is implemented
 
 One server-owned cycle, independent of which of the three safety controllers is
 assigned. Browser refresh does not restart or advance the cycle.
-The current source runner is `automatic-panel-v4-supported-low`: the server supplies the seven-stage
+The current source runner is `automatic-panel-v5-study-and-rehearsal`: the server supplies the seven-stage
 instruction and the dashboard shows a button only when confirmation is needed.
 It no longer presents the old ten-step manual sequence as the automatic workflow.
 
@@ -81,7 +98,7 @@ clearance and seal dwells, one-sided grip loss, invalid distance, stale readings
 failed controller output, timeouts, cancellation, supported-only release,
 watchdog setup, target-pose checks, remote abort authentication, and API bypasses.
 
-## Enable a controlled lab rehearsal
+## Enable an automatic trial
 
 Only after the team has set up the physical safeguards, known payload/centre of
 gravity, supported loading/release positions and marked participant route:
@@ -90,8 +107,9 @@ gravity, supported loading/release positions and marked participant route:
 python scripts/dashboard_server.py --share --enable-research-speed-output --enable-automatic-trials
 ```
 
-Open **Qualification** in the dashboard. It identifies this as automatic mode;
-Q-codes stay separate from participant results and model-development data.
+Open **Participant study** for a P-code study run or **Qualification** for a
+Q-code rehearsal. Both use the same automatic engine. Their collection modes
+stay separate in samples, events and manifests, alongside `execution_mode=automatic`.
 Starting the service alone never activates suction or motion.
 
 ## Fault behaviour and limitations
@@ -140,7 +158,7 @@ Automatic capture grading checks completion, recording quality and the assigned
 event-window labels, not model accuracy or safety. Missing/aborted manifests fail
 completion. Preserve native MVN, Motive and video alongside the dashboard trace.
 
-Before lifting the participant gate, witness the full cycle on the actual setup
+Physical verification applies to both modes: witness the full cycle on the actual setup
 under all three conditions, repeat grip/communication/tracking/stop fault tests,
 verify bounded stop response, hand/body and swept-volume protection, payload,
 panel retention and release support, and confirm cues do not invite approach

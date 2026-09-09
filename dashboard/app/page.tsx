@@ -11,7 +11,7 @@ type Feature = {
 type Status = {
   automation?: {
     enabled: boolean; active: boolean; qualification_only: boolean;
-    availability?: string; participant_blocker?: string;
+    availability?: string; supported_collection_modes?: string[];
     version: string; phase: string; reason: string; fault: boolean;
     task_sha256?: string | null;
     work_locations?: { configured: boolean; visited_count?: number; total_locations?: number };
@@ -588,6 +588,10 @@ export default function Home() {
       setMessage("No assigned study slot is selected. Refresh the session before starting.");
       return;
     }
+    if (isStructuredRun && status.automation?.enabled && !(status.automation.supported_collection_modes || ["qualification"]).includes(workspaceMode)) {
+      setMessage("This running backend does not support automatic participant trials. Restart the updated backend with Start-Lab.ps1.");
+      return;
+    }
     const result = await post("/api/protocol/start", {
       participant_id: participant,
       mvn_recording_confirmed: recordingsConfirmed,
@@ -597,7 +601,7 @@ export default function Home() {
       controller_condition: isStructuredRun ? slot?.controller : undefined,
       planned_event: isStructuredRun ? slot?.event : undefined,
       collection_mode: workspaceMode,
-      automatic: workspaceMode === "qualification" && status.automation?.enabled === true,
+      automatic: isStructuredRun && status.automation?.enabled === true,
       vacuum,
       motive_recording_reference: isStructuredRun ? (references?.motive ?? motiveRecordingReference.trim()) : undefined,
       video_recording_reference: isStructuredRun ? (references?.video ?? videoRecordingReference.trim()) : undefined,
@@ -982,7 +986,7 @@ export default function Home() {
               {guidedIndex >= 3 && guidedIndex <= 8 && <div className="simPanelNote">No top fixture: suction stays ON while the panel is overhead. Never release an unsupported panel.</div>}
               {!automaticWaiting && <button onClick={confirmGuidedAction} disabled={protocolWorking}>{protocolWorking ? protocolBusyLabel : guidedNext}</button>}
               <button className="runAbort" onClick={() => void abortRecording()}>Abort safely &amp; preserve attempt</button>
-              <small>{automaticActive ? "Automatic qualification: follow the current instruction above. Task completion requires confirmation. Faults require abort and inspection." : "One press records each real phase boundary. Lift and lower requests stay active while the selected controller gates robot speed from the live participant signal."}</small>
+              <small>{automaticActive ? "Automatic trial: follow the current instruction above. Task completion requires confirmation. Faults require abort and inspection." : "One press records each real phase boundary. Lift and lower requests stay active while the selected controller gates robot speed from the live participant signal."}</small>
               <details className="controllerComparison">
                 <summary>Operator: controller identity and event evidence</summary>
                 <p>Recording {status.participant_id} · block {status.block_label}. Assigned controller: <strong>{status.controller_condition || "unavailable"}</strong>.</p>
@@ -1000,14 +1004,16 @@ export default function Home() {
 
           <section className="studyLayout">
             {!status.recording && <aside className="automationReadiness" role="status">
-              <strong>{isQualification
-                ? status.automation?.enabled ? "Automatic rehearsal enabled" : "Automatic rehearsal is off"
-                : "Participant trials: operator-confirmed"}</strong>
-              <p>{isQualification
-                ? status.automation?.enabled
+              <strong>{status.automation?.enabled
+                ? (status.automation.supported_collection_modes || ["qualification"]).includes(workspaceMode)
+                  ? isQualification ? "Automatic rehearsal enabled" : "Automatic participant trials enabled"
+                  : "Backend update required for participant automation"
+                : "Operator-confirmed mode: automation is off"}</strong>
+              <p>{status.automation?.enabled
+                ? (status.automation.supported_collection_modes || ["qualification"]).includes(workspaceMode)
                   ? "Start once. Grip verification, retreat, lift, lowering and supported release advance automatically. Shared sync and task completion still need your observation."
-                  : "Start the lab with Start-Lab.ps1 to enable automatic rehearsals. Sensor and robot checks remain required."
-                : status.automation?.participant_blocker || "Automatic participant release remains unqualified. Use Qualification to verify the full cycle before release."}</p>
+                  : "Restart the updated backend with Start-Lab.ps1. The service currently running supports rehearsals only."
+                : "Start the lab with Start-Lab.ps1 to enable automatic trials. Sensor and robot checks remain required."}</p>
               {status.model_health?.warnings.map(warning => <p key={warning} className="warnText">{warning}</p>)}
             </aside>}
             {!status.recording && <article className="panel oneStepCard">
