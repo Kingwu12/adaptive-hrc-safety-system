@@ -1,16 +1,17 @@
 # Automatic panel trials: participant and rehearsal handoff
 
-## Shared participant/rehearsal engine (v5, 2026-09-09)
+## Shared participant/rehearsal engine with automatic capture (v6, 2026-09-09)
 
-`automatic-panel-v5-study-and-rehearsal` runs the same guarded sequence in
+`automatic-panel-v6-stream-capture` runs the same guarded sequence in
 Participant study (P-codes) and Qualification (Q-codes). The earlier Q-only
 restriction was an administrative software gate, not a different physical
 algorithm. Collection mode determines data classification; it does not weaken
 grip, tracking, pose, supported-release, stop or watchdog checks.
 
 Start the updated service with `Start-Lab.ps1`, select the desired collection
-mode, and use the recording-confirmation/start button. Shared sync and observed
-task completion remain explicit actions. The dashboard reports if an older
+mode, and press Start trial. Sample and event files are created automatically;
+observed task completion remains explicit. No native recording, filename entry
+or manual shared-sync marker is required. The dashboard reports if an older
 rehearsal-only backend is still running instead of silently switching to manual.
 The launcher does not stop an unknown existing service.
 
@@ -32,7 +33,7 @@ The support assumption and dwell are included in the versioned task contract.
 Manual mode is unchanged. The instructions below describe this supported
 automatic release revision.
 
-The supported-low release sequence is shared by both v5 collection modes.
+The supported-low release sequence is shared by both collection modes.
 Earlier participant runs remain explicitly operator-confirmed; do not pool
 those timings with future automatic runs without addressing the protocol change.
 
@@ -40,17 +41,17 @@ those timings with future automatic runs without addressing the protocol change.
 
 One server-owned cycle, independent of which of the three safety controllers is
 assigned. Browser refresh does not restart or advance the cycle.
-The current source runner is `automatic-panel-v5-study-and-rehearsal`: the server supplies the seven-stage
+The current source runner is `automatic-panel-v6-stream-capture`: the server supplies the seven-stage
 instruction and the dashboard shows a button only when confirmation is needed.
 It no longer presents the old ten-step manual sequence as the automatic workflow.
 
 1. Press **Start trial — suction turns on** with its assigned controller/event
-   and unique native files. After verifying the robot is stationary at the low
+   and server-generated trial files. After verifying the robot is stationary at the low
    pose, suction is off initially and the operator is clear, this single action
    starts recording and enables loading suction. There is no separate suction
    confirmation. Starting the service alone still never activates the gripper.
-2. Record the shared sync marker while suction is already on. Missing sync blocks
-   advancement and motion, not suction availability. A failed suction start
+2. The backend automatically journals trial start using its local clock and saves
+   streamed data. This does not claim hardware synchronization. A failed suction start
    latches a fault and retains the recording for abort/save; it never vents.
 3. Participant approaches and places the panel against both cups. The robot stays
    stationary. Suction is already running; both measured pressures must remain
@@ -67,7 +68,7 @@ It no longer presents the old ten-step manual sequence as the automatic workflow
    support. After two stationary seconds at that pose, release once and save.
    There is no unattended repeat loop.
 
-The shared sync marker and task-complete confirmation remain explicit.
+Only start and task-complete confirmation are routine dashboard actions for an automatic trial.
 The safety comparison still exercises controller response during motion.
 
 ## Short spoken script for the rehearsal
@@ -156,7 +157,9 @@ fault rather than adapting its task to make the attempt succeed.
 
 Automatic capture grading checks completion, recording quality and the assigned
 event-window labels, not model accuracy or safety. Missing/aborted manifests fail
-completion. Preserve native MVN, Motive and video alongside the dashboard trace.
+completion. Native MVN/Motive files and video are optional external sources, not
+prerequisites for stream capture. The manifest explicitly records that the backend
+does not create those formats or record a camera. Existing references remain metadata.
 
 Physical verification applies to both modes: witness the full cycle on the actual setup
 under all three conditions, repeat grip/communication/tracking/stop fault tests,

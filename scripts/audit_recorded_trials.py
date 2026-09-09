@@ -103,7 +103,9 @@ def audit_trial(path: Path, red_boundary_m: float = .94, closing_gate_m_s: float
     blockers = []
     if manifest.get('outcome') != 'completed': blockers.append('completion not evidenced')
     if not manifest.get('study_release'): blockers.append('per-trial code/config fingerprint not recorded')
-    if (last or {}).get('sync_marker_count',0) < 1: blockers.append('shared sync marker missing')
+    if ((first or {}).get('capture_mode') != 'automatic_streams'
+            and (last or {}).get('sync_marker_count',0) < 1):
+        blockers.append('recording clock alignment requires review; no shared marker or automatic-stream capture contract')
     if counts['measured_motion'] == 0: blockers.append('no fresh measured robot-motion samples')
     if (first or {}).get('planned_event') in ('rapid intrusion','distractor') and counts['event_during_motion'] == 0:
         blockers.append('no overlap between the cued event window and fresh measured robot motion')
@@ -121,13 +123,14 @@ def audit_trial(path: Path, red_boundary_m: float = .94, closing_gate_m_s: float
     if (first or {}).get('planned_event') == 'distractor' and event_min_d <= red_boundary_m:
         blockers.append(f'labelled distractor window entered the audit red boundary ({red_boundary_m:g} m); independently review exposure')
     # References and confirmations are not file-existence or synchronisation proof.
-    blockers.append('native recordings and independently annotated event onset require verification')
+    blockers.append('cue labels alone do not independently verify event onset; assess timing and exposure evidence for the planned outcome measures')
     return {'session_id': (first or {}).get('session_id',path.stem),
             'participant_id': (first or {}).get('participant_id'),
             'block': (first or {}).get('block_label'),
             'controller': (first or {}).get('controller_condition'),
             'planned_event': (first or {}).get('planned_event'),
             'execution_mode': (first or {}).get('execution_mode'),
+            'capture_mode': (first or {}).get('capture_mode'),
             'capture_grade': manifest.get('catalog_summary',{}).get('quality',{}).get('grade'),
             'counts': dict(counts), 'durations': {k:round(v,3) for k,v in durations.items()},
             'decision_conditions': dict(conditions), 'top_rules': reasons.most_common(5),

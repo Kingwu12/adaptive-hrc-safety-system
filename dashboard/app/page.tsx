@@ -60,6 +60,7 @@ type Status = {
   recording_path: string | null;
   samples_written: number;
   calibration_elapsed_s: number | null;
+  capture_mode?: "automatic_streams";
   mvn_native_recording_reference: string | null;
   motive_recording_reference: string | null;
   video_recording_reference: string | null;
@@ -380,10 +381,6 @@ export default function Home() {
   const [participantSaving, setParticipantSaving] = useState(false);
   const participantSaveBusy = useRef(false);
   const participantRevision = useRef(0);
-  const [mvnRecordingConfirmed, setMvnRecordingConfirmed] = useState(false);
-  const [mvnRecordingReference, setMvnRecordingReference] = useState("");
-  const [motiveRecordingReference, setMotiveRecordingReference] = useState("");
-  const [videoRecordingReference, setVideoRecordingReference] = useState("");
   const blockLabel = "A";
   const [plannedEvent] = useState("clean");
   const [message, setMessage] = useState("");
@@ -413,10 +410,6 @@ export default function Home() {
         const next = await res.json() as Status;
         if (!live) return;
         setStatus(next); setReachable(true);
-        if (!next.connected || next.xsens_segment_count < 23 || !next.optitrack_connected
-          || next.calibration_elapsed_s == null || next.calibration_elapsed_s > 300) {
-          setMvnRecordingConfirmed(false);
-        }
         if (next.feature) {
           setHistory(old => ({
             distance: [...old.distance, next.feature!.d].slice(-90),
@@ -427,7 +420,6 @@ export default function Home() {
       } catch {
         if (live) {
           setReachable(false);
-          setMvnRecordingConfirmed(false);
         }
       }
     };
@@ -444,7 +436,6 @@ export default function Home() {
         const next = await res.json() as Rig;
         if (live) {
           setRig(next);
-          if (!poseTrust(next).ok) setMvnRecordingConfirmed(false);
         }
       } catch { /* rig offline is non-fatal */ }
     };
@@ -577,16 +568,16 @@ export default function Home() {
 
   const startInFlight = useRef(false);
   const [startBusy, setStartBusy] = useState(false);
-  const startRecording = async (slot?: StudySlot, references?: {
-    mvn: string;
-    motive: string;
-    video: string;
-  }, recordingsConfirmed = mvnRecordingConfirmed) => {
+  const startRecording = async (slot?: StudySlot) => {
     if (startInFlight.current) return;
     startInFlight.current = true;
     setStartBusy(true);
     try {
     const isStructuredRun = workspaceMode !== "model_development";
+    if (status.capture_mode !== "automatic_streams") {
+      setMessage("Restart the updated backend with Start-Lab.ps1 to enable automatic data capture.");
+      return;
+    }
     if (isStructuredRun && !slot) {
       setMessage("No assigned study slot is selected. Refresh the session before starting.");
       return;
@@ -595,10 +586,8 @@ export default function Home() {
       setMessage("This running backend does not support automatic participant trials. Restart the updated backend with Start-Lab.ps1.");
       return;
     }
-    const result = await post("/api/protocol/start", {
+    await post("/api/protocol/start", {
       participant_id: participant,
-      mvn_recording_confirmed: recordingsConfirmed,
-      mvn_recording_reference: references?.mvn ?? mvnRecordingReference.trim(),
       block_label: isStructuredRun ? slot?.block : undefined,
       within_block_trial: isStructuredRun ? slot?.withinBlockTrial : undefined,
       controller_condition: isStructuredRun ? slot?.controller : undefined,
@@ -606,15 +595,7 @@ export default function Home() {
       collection_mode: workspaceMode,
       automatic: isStructuredRun && status.automation?.enabled === true,
       vacuum,
-      motive_recording_reference: isStructuredRun ? (references?.motive ?? motiveRecordingReference.trim()) : undefined,
-      video_recording_reference: isStructuredRun ? (references?.video ?? videoRecordingReference.trim()) : undefined,
     });
-    if (result) {
-      setMvnRecordingConfirmed(false);
-      setMvnRecordingReference("");
-      setMotiveRecordingReference("");
-      setVideoRecordingReference("");
-    }
     } finally {
       startInFlight.current = false;
       setStartBusy(false);
@@ -875,14 +856,6 @@ export default function Home() {
     && (dueFormStage !== "block" || formCompletion.block === dueFormBlock)
     ? formCompletion
     : null;
-  const defaultMvnReference = `${participant}-${nextTrial}.mvn`;
-  const defaultMotiveReference = `${participant}-${nextTrial}.tak`;
-  const defaultVideoReference = `${participant}-${nextTrial}.mp4`;
-  const effectiveRecordingReferences = {
-    mvn: mvnRecordingReference.trim() || defaultMvnReference,
-    motive: motiveRecordingReference.trim() || defaultMotiveReference,
-    video: videoRecordingReference.trim() || defaultVideoReference,
-  };
   const preflightChecks = [
     { key: "service", label: "Trial control", value: !reachable ? "Offline" : status.controller_output_enabled ? "Enabled" : "Robot control switched off", ready: reachable && status.controller_output_enabled },
     { key: "xsens", label: "Xsens body", value: xsensComplete ? "23/23 segments" : `${status.xsens_segment_count}/23 segments`, ready: xsensComplete },
@@ -894,6 +867,9 @@ export default function Home() {
   const currentPreflight = !reachable ? {
     key: "service", owner: "SYSTEM SETUP", title: "Start the sensor service",
     detail: "Run the local sensor service on this lab PC. This page will continue automatically when it is online.",
+  } : status.capture_mode !== "automatic_streams" ? {
+    key: "capture", owner: "SYSTEM SETUP", title: "Update the data capture service",
+    detail: "Restart the updated backend with Start-Lab.ps1. It creates and saves trial files automatically.",
   } : !status.controller_output_enabled ? {
     key: "control", owner: "SYSTEM SETUP", title: "Robot control is switched off",
     detail: "The dashboard can monitor tracking, but this server cannot send trial speed or stop commands. This is a lab-PC setup issue; moving the participant farther away will not resolve it.",
@@ -909,12 +885,9 @@ export default function Home() {
   } : !calibrationReady ? {
     key: "calibration", owner: "YOUR ACTION", title: "Calibrate the Xsens suit",
     detail: "Complete the MVN calibration, then confirm it here. Calibration expires after five minutes.",
-  } : !mvnRecordingConfirmed ? {
-    key: "recordings", owner: "YOUR ACTION", title: "Start the three recordings",
-    detail: "Start MVN, Motive and video with the matching filenames below, then confirm that all three timers are moving.",
   } : {
     key: "ready", owner: "READY", title: `Start ${nextTrial}`,
-    detail: "Tracking, robot control and recording confirmations are ready. Start checks the low pose and clearance, then switches loading suction on.",
+    detail: "Start trial automatically saves sensor streams, robot data and trial events. It checks the low pose and clearance, then switches loading suction on.",
   };
 
   return (
@@ -984,7 +957,7 @@ export default function Home() {
                 <span>{status.controller_decision.rule}</span>
                 <small>Measured separation {n(status.feature?.d)} m · closing speed {n(status.feature?.v_proj)} m/s</small>
               </div>}
-              {guidedIndex === 0 && <button className="syncMarker" onClick={() => void post("/api/sync")}>
+              {guidedIndex === 0 && status.capture_mode !== "automatic_streams" && <button className="syncMarker" onClick={() => void post("/api/sync")}>
                 {status.sync_marker_count > 0 ? `✓ Sync marker ${status.sync_marker_count} recorded` : "Record visible shared sync marker"}
               </button>}
               {guidedIndex >= 3 && guidedIndex <= 8 && <div className="simPanelNote">No top fixture: suction stays ON while the panel is overhead. Never release an unsupported panel.</div>}
@@ -1074,19 +1047,8 @@ export default function Home() {
                     <button className="stepPrimary" onClick={() => post("/api/calibration/mark")}>Calibration complete</button>
                   )}
 
-                  {currentPreflight.key === "recordings" && (
-                    <>
-                      <div className="recordingFiles" aria-label="Required recording filenames">
-                        <label><span>MVN</span><input value={mvnRecordingReference || defaultMvnReference} maxLength={500} onChange={event => setMvnRecordingReference(event.target.value)} /></label>
-                        <label><span>Motive</span><input value={motiveRecordingReference || defaultMotiveReference} maxLength={500} onChange={event => setMotiveRecordingReference(event.target.value)} /></label>
-                        <label><span>Video</span><input value={videoRecordingReference || defaultVideoReference} maxLength={500} onChange={event => setVideoRecordingReference(event.target.value)} /></label>
-                      </div>
-                      <button className="stepPrimary" disabled={startBusy} onClick={() => void startRecording(nextStudySlot, effectiveRecordingReferences, true)}>{startBusy ? "Starting trial…" : "All three recordings are running — start trial"}</button>
-                    </>
-                  )}
-
                   {currentPreflight.key === "ready" && (
-                    <button className="stepPrimary" disabled={startBusy} onClick={() => void startRecording(nextStudySlot, effectiveRecordingReferences)}>Start Block {nextStudySlot.block} · Trial {nextStudySlot.withinBlockTrial} — suction turns on</button>
+                    <button className="stepPrimary" disabled={startBusy} onClick={() => void startRecording(nextStudySlot)}>{startBusy ? "Starting trial…" : `Start Block ${nextStudySlot.block} · Trial ${nextStudySlot.withinBlockTrial} — suction turns on`}</button>
                   )}
 
                   <details className="preflightDetails">
@@ -1194,10 +1156,8 @@ export default function Home() {
             <button onClick={() => { setParticipantEditor(null); setParticipantName(""); }}>Cancel</button>
           </div>}
           <div className="actions">
-            {!status.recording ? <button className="primary" disabled={!xsensComplete || !status.optitrack_connected || !participant || !mvnRecordingConfirmed || !mvnRecordingReference.trim() || calibration == null || calibration > 300} onClick={() => void startRecording()}>Start {nextTrial} development run</button> : <button className="stop" onClick={() => void abortRecording()}>Abort / stop & save</button>}
+            {!status.recording ? <button className="primary" disabled={!xsensComplete || !status.optitrack_connected || !participant || status.capture_mode !== "automatic_streams" || calibration == null || calibration > 300} onClick={() => void startRecording()}>Start {nextTrial} development run</button> : <button className="stop" onClick={() => void abortRecording()}>Abort / stop & save</button>}
           </div>
-          {!status.recording && <label className="nativeReference"><span>Visible native MVN file name/path for this run</span><input value={mvnRecordingReference} maxLength={500} placeholder="e.g. C:\\MVN\\P06-T01.mvn" onChange={event => setMvnRecordingReference(event.target.value)} /></label>}
-          {!status.recording && <label className="preflightCheck"><input type="checkbox" checked={mvnRecordingConfirmed} onChange={event => setMvnRecordingConfirmed(event.target.checked)} /><span>Native recording is active in MVN Analyze and its file path is visible.</span></label>}
           {!status.recording && <p className="startHint">The next trial number comes from the files already saved for this participant. Every attempt is preserved and counted automatically.</p>}
           <p className="feedback">{message}</p>
           <dl className="sessionFacts"><div><dt>Samples</dt><dd>{status.samples_written.toLocaleString()}</dd></div><div><dt>Packet age</dt><dd>{n(status.age_s, 3)} s</dd></div><div><dt>Calibration</dt><dd className={calibrationClass}>{calibration == null ? "Not marked" : `${Math.floor(calibration / 60)}:${String(Math.floor(calibration % 60)).padStart(2, "0")}`}</dd></div><div><dt>Model</dt><dd title={status.model_sha256}>{status.model_sha256 === "synthetic-baseline" ? "SYNTHETIC" : status.model_sha256.slice(0, 12)}</dd></div></dl>

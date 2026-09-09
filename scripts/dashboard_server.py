@@ -589,6 +589,7 @@ class DashboardState:
         self.controller_output_applied = False
         self._last_controller_output_signature = None
         self.recording = False
+        self.capture_mode = "automatic_streams"
         self.session_id: str | None = None
         self.participant_id: str | None = None
         self.trial_id: str | None = None
@@ -782,6 +783,7 @@ class DashboardState:
                                             self.event_label in {"hazard", "distractor"})
                 record = {
                     "schema_version": 3,
+                    "capture_mode": self.capture_mode,
                     "session_id": self.session_id,
                     "participant_id": self.participant_id,
                     "trial_id": self.trial_id,
@@ -926,36 +928,11 @@ class DashboardState:
                     f"Xsens calibration is {calibration_age:.0f}s old; recalibrate "
                     "and mark it complete again before starting."
                 )
-            if mvn_recording_confirmed is not True:
-                raise ValueError(
-                    "Confirm that native recording is active in MVN Analyze "
-                    "before starting the participant run."
-                )
+            # External references are optional legacy metadata. Stream capture
+            # starts here, with server-generated filenames, for every trial.
             native_reference = str(mvn_recording_reference or "").strip()
-            if len(native_reference) < 3:
-                raise ValueError(
-                    "Enter the visible Windows MVN recording filename or path."
-                )
             motive_reference = str(motive_recording_reference or "").strip()
             video_reference = str(video_recording_reference or "").strip()
-            reference_key = native_reference.replace("\\", "/").casefold()
-            for prior_path in self.output_dir.glob("*.jsonl"):
-                if prior_path.name.endswith(".events.jsonl"):
-                    continue
-                try:
-                    with prior_path.open(encoding="utf-8") as prior_file:
-                        prior_row = json.loads(next(
-                            line for line in prior_file if line.strip()))
-                except (OSError, StopIteration, json.JSONDecodeError):
-                    continue
-                prior_reference = str(
-                    prior_row.get("mvn_native_recording_reference") or ""
-                ).strip().replace("\\", "/").casefold()
-                if prior_reference and prior_reference == reference_key:
-                    raise ValueError(
-                        "That native MVN filename/path was already used by "
-                        f"{prior_path.name}; create a unique native recording."
-                    )
             supplied_metadata = any(value is not None for value in (
                 block_label, within_block_trial, controller_condition, planned_event
             ))
@@ -1002,14 +979,6 @@ class DashboardState:
                 if self.model_sha256 == "synthetic-baseline":
                     raise ValueError(
                         "Structured controller runs require a real fitted model artifact"
-                    )
-                if len(motive_reference) < 3:
-                    raise ValueError(
-                        "Enter the visible Motive take filename for this structured run"
-                    )
-                if len(video_reference) < 3:
-                    raise ValueError(
-                        "Enter the visible consented video filename for this structured run"
                     )
                 telemetry = (self.rig.telemetry_snapshot(allow_connect=False)
                              if self.rig is not None else {})
@@ -1063,15 +1032,16 @@ class DashboardState:
             self._catalog_event_counts = {}
             self._catalog_sequence = []
             self._catalog_previous_label = None
-            self.mvn_recording_confirmed = True
-            self.mvn_recording_reference = native_reference[:500]
+            self.mvn_recording_confirmed = bool(mvn_recording_confirmed is True and native_reference)
+            self.mvn_recording_reference = native_reference[:500] or None
             self.motive_recording_reference = motive_reference[:500] or None
             self.video_recording_reference = video_reference[:500] or None
             self.label = "unlabelled"
             self.event_label = "none"
             self.guided_step = 0
             self.recording = True
-            self._journal_event_locked("trial_started")
+            self._journal_event_locked("trial_started", capture_mode=self.capture_mode,
+                                       clock_basis="local_monotonic", external_sync_verified=False)
             return {
                 "message": f"Recording {self.session_id}",
                 "path": self.recording_path,
@@ -1154,6 +1124,13 @@ class DashboardState:
             }
             manifest = {
                 "schema_version": 1,
+                "capture_mode": self.capture_mode,
+                "capture_contents": {
+                    "sampled_streams": ["xsens_segments", "optitrack_tracking", "robot_telemetry"],
+                    "derived": ["features", "controller_decisions", "task_events"],
+                    "native_files_created": False, "video_recorded": False,
+                    "external_sync_verified": False,
+                },
                 "session_id": self.session_id,
                 "participant_id": self.participant_id,
                 "trial_id": self.trial_id,
@@ -1314,7 +1291,7 @@ class DashboardState:
                 raise ValueError("Start guided recording before advancing the protocol")
             if self.guided_step is None:
                 raise ValueError("This recording has no guided protocol state")
-            if self.guided_step == 0 and self.sync_marker_count < 1:
+            if self.capture_mode != "automatic_streams" and self.guided_step == 0 and self.sync_marker_count < 1:
                 raise ValueError(
                     "Record the shared sync marker before starting the approach"
                 )
@@ -1426,6 +1403,7 @@ class DashboardState:
                 "controller_output_applied": self.controller_output_applied,
                 "controller_output_enabled": self.controller_output_enabled,
                 "sync_marker_count": self.sync_marker_count,
+                "capture_mode": self.capture_mode,
             }
 
 
@@ -2185,7 +2163,8 @@ class GuidedRunController:
                 raise ValueError("No guided recording is active")
             step = int(snap["guided_step"])
             self._clear_arm()
-            if step == 0 and int(snap.get("sync_marker_count", 0)) < 1:
+            if (snap.get("capture_mode") != "automatic_streams"
+                    and step == 0 and int(snap.get("sync_marker_count", 0)) < 1):
                 raise ValueError(
                     "Record the shared sync marker before starting the approach"
                 )
@@ -2287,7 +2266,7 @@ class AutomaticRunController(GuidedRunController):
     becomes ground-truth labels.
     """
 
-    VERSION = "automatic-panel-v5-study-and-rehearsal"
+    VERSION = "automatic-panel-v6-stream-capture"
     COLLECTION_PREFIXES = {"qualification": "Q", "participant_study": "P"}
     SEAL_DWELL_S = 1.0
     LOW_RELEASE_DWELL_S = 2.0
@@ -2373,6 +2352,7 @@ class AutomaticRunController(GuidedRunController):
                              event, "Motion underway: clean trial, no event cue")
                 cue_instruction = "Use only the pre-briefed movement and route. The event window ends when lifting finishes."
         sync_required = (self.automatic and phase == "loading"
+                         and self.state.snapshot().get("capture_mode") != "automatic_streams"
                          and self.state.snapshot().get("sync_marker_count", 0) < 1)
         if sync_required:
             title = "Suction on — record shared sync"
@@ -2452,7 +2432,7 @@ class AutomaticRunController(GuidedRunController):
                 self.refresh_health()
                 self._health(require_grip=False)
                 self._journal("automation_loading_suction_enabled", vacuum_percent=int(vacuum))
-                self._phase("loading", "Suction on. Record shared sync, then place the panel against both cups")
+                self._phase("loading", "Data capture started. Suction on; place the panel against both cups")
             except Exception as exc:
                 self.request_stop(str(exc))
                 # Preserve this failed attempt and never vent automatically.
@@ -2595,7 +2575,7 @@ class AutomaticRunController(GuidedRunController):
             snap, distance = self._tracking()
             sealed = self._health(require_grip=self.phase != "loading")
             if self.phase == "loading":
-                synced = snap.get("sync_marker_count", 0) >= 1
+                synced = snap.get("capture_mode") == "automatic_streams" or snap.get("sync_marker_count", 0) >= 1
                 self.reason = ("Place panel against both cups; suction is on and seal detection is automatic" if synced
                                else "Suction on. Record shared sync before approaching; motion remains blocked")
                 if synced and snap.get("guided_step") == 0:

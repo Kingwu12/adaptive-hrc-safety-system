@@ -83,11 +83,10 @@ def test_api_to_saved_automatic_cycle(tmp_path,monkeypatch,mode,prefix,block,wit
     state.mark_calibrated()
     participant=prefix+'07'
     post('/api/protocol/start',{'participant_id':participant,'automatic':True,
-         'collection_mode':mode,'mvn_recording_confirmed':True,
-         'mvn_recording_reference':participant+'.mvn','motive_recording_reference':participant+'.tak',
-         'video_recording_reference':participant+'.mp4','block_label':block,
+         'collection_mode':mode,'block_label':block,
          'within_block_trial':within,'controller_condition':condition,'planned_event':'clean'})
-    post('/api/sync',{})
+    assert state.snapshot()['capture_mode'] == 'automatic_streams'
+    assert not runner.status()['presentation']['sync_required']
     tick()
     assert runner.phase == 'loading'  # derivative warm-up cannot advance motion
     tick()
@@ -109,10 +108,21 @@ def test_api_to_saved_automatic_cycle(tmp_path,monkeypatch,mode,prefix,block,wit
     assert manifest['outcome'] == 'completed'
     assert manifest['collection_mode'] == mode
     assert manifest['execution_mode'] == 'automatic'
+    assert manifest['capture_mode'] == 'automatic_streams'
+    assert manifest['native_mvn'] is None
+    assert manifest['native_motive'] is None
+    assert manifest['consented_video'] is None
+    assert manifest['sync_marker_count'] == 0
+    assert manifest['capture_contents']['video_recorded'] is False
     rows=[json.loads(line) for line in Path(state.recording_path).read_text().splitlines()]
     assert all(row['participant_id'] == participant for row in rows)
     assert all(row['geometry_reference']['source'] == 'live_rtde_tcp' for row in rows)
     assert all(row['ground_truth_phase'] == 'unlabelled' for row in rows)
+    assert all(len(row['xsens_frame']['segments']) == 23 for row in rows)
+    assert all(row['robot_telemetry']['available'] for row in rows)
+    assert all(row['mvn_native_recording_confirmed'] is False for row in rows)
     assert {row['controller_decision'].get('condition') for row in rows} == {None,identity}
     events=[json.loads(line) for line in Path(state.event_path).read_text().splitlines()]
     assert any(event['event'] == 'automation_task_contract' for event in events)
+    assert any(event['event'] == 'trial_started' and event['capture_mode'] == 'automatic_streams' for event in events)
+    assert not any(event['event'] == 'shared_sync_marker' for event in events)

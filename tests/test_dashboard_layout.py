@@ -66,9 +66,11 @@ def test_trial_preflight_reveals_only_the_first_unmet_action():
     assert '} : !status.optitrack_connected ? {' in page
     assert '} : !robotPose.ok ? {' in page
     assert '} : !calibrationReady ? {' in page
-    assert '} : !mvnRecordingConfirmed ? {' in page
+    assert 'status.capture_mode !== "automatic_streams"' in page
     assert '<details className="preflightDetails">' in page
-    assert 'All three recordings are running' in page
+    assert 'All three recordings are running' not in page
+    assert 'Required recording filenames' not in page
+    assert 'automatically saves sensor streams' in page
     assert ".studyShell .preflightList{display:grid;grid-template-columns:1fr" in css
 
 

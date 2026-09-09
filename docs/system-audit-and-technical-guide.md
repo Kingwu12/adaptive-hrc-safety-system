@@ -89,11 +89,11 @@ This geometry is a proxy. It does not measure minimum distance from every body p
 
 `Start-Lab.ps1` starts the local backend with research output and automatic trials enabled, starts the dashboard, and checks their API connection. It detects an already-running old or disabled backend instead of silently claiming automation is enabled. Starting these services does not start a trial or move the robot.
 
-For a participant: select/create the P-code, complete intake, establish tracking/calibration, start native recordings, supply their filenames, and start the scheduled trial. Record the shared sync marker. The common automatic cycle turns on suction, verifies sealing, waits for clearance, lifts, waits through the task, accepts the operator's task-complete confirmation, waits for clearance, lowers, verifies low stationary support and releases. There remain deliberate human actions for consent/forms, native recording, sync, the planned event cue and task completion.
+For a participant: select/create the P-code, complete intake, establish tracking/calibration, and press Start trial. The backend generates filenames, opens the sample/event files and journals the start timestamp itself. No native recording, filename confirmation or manual sync step is required. The common automatic cycle turns on suction, verifies sealing, waits for clearance, lifts, waits through the task, accepts the operator's task-complete confirmation, waits for clearance, lowers, verifies low stationary support and releases. Consent/forms, the planned event cue and task completion remain human actions.
 
 Faults do not automatically vent suction or restart motion. The brief derivative warm-up is now handled before motion; it is not a bypass of the tracking or robot checks. This is why removing the historical rehearsal-only restriction was appropriate, but simply labeling a run “participant” cannot make missing live inputs or a failed output check valid.
 
-The current integration **does not remotely start or verify `.mvn`, `.tak` or video recording**. The entered filename is a reference, even when the operator confirms recording. The simulated drilling detector can log visits/hand proximity; it does not independently prove that a real fastening task was completed. Survey links and optional completion integration support workflow; a displayed/opened form is not itself evidence of a submitted response.
+The automatic capture mode saves streamed Xsens segments, OptiTrack tracking, robot telemetry, derived features, controller decisions and task events at the capture cadence. It **does not create `.mvn`, `.tak` or video files**; those formats are not prerequisites. Legacy supplied references are retained without claiming that their files exist. The simulated drilling detector can log visits/hand proximity; it does not independently prove that a real fastening task was completed. Survey links and optional completion integration support workflow; a displayed/opened form is not itself evidence of a submitted response.
 
 ## How one trial is saved
 
@@ -102,7 +102,7 @@ The current integration **does not remotely start or verify `.mvn`, `.tak` or vi
 | `session.jsonl` | One row per captured ticker sample: IDs, assignment, sensor data, features, model state, actual and shadow decisions, output acknowledgment, robot telemetry, timestamps, geometry reference and event/phase labels | Capture rate and source rates differ; cued labels are not independent human annotations |
 | `session.events.jsonl` | Start/stop, automation contract, task transitions, command changes, sync markers and exposure/task observations | Records software events, not an independent physical observer |
 | `session.manifest.json` | Outcome, filenames, counts, condition, execution mode, model/code/config fingerprint, exposure review and capture summary | File references do not prove native files exist or are synchronized |
-| Native `.mvn`, `.tak`, `.mp4` | Recording applications' original data/video, on their respective devices | Must be collected and synchronized separately |
+| Optional native `.mvn`, `.tak`, `.mp4` | External sources if deliberately collected | Not created or required by automatic stream capture |
 
 The sample file is flushed each tick. The final manifest uses a temporary write and replacement. Capture grading checks duration/rate, stale fraction, labels/events and completion rules. It is not a scientific acceptance decision. Preserve raw originals, then produce separately versioned derived data and documented exclusions/annotations.
 
@@ -128,7 +128,7 @@ Keep today as the original implementation version. Some recordings may support d
 
 ## Verification and remaining limits
 
-This audit passed **265 Python tests**, with the UDP-listener test deliberately deselected, plus dashboard production build and lint. Six new integrated cases exercise API dispatch, parsed MVN/NatNet packets, live-geometry extraction, all three controller assignments, both P/Q modes, automatic task progression, output mocks and saved trial files. No network listeners or hardware were used for those six tests. Three synthetic controller witnesses also passed with the active pilot model.
+The updated audit passed **266 Python tests**, with the UDP-listener test deliberately deselected, plus dashboard production build and lint. Six integrated cases exercise API dispatch, parsed MVN/NatNet packets, live-geometry extraction, all three controller assignments, both P/Q modes, automatic task progression, output mocks and saved trial files, without supplying any native recording confirmation, filenames or manual sync marker. No network listeners or hardware were used for those six tests. Three synthetic controller witnesses also passed with the active pilot model.
 
 Commands, from the repository using its Python environment:
 

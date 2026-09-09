@@ -332,7 +332,7 @@ def test_dashboard_rejects_incomplete_xsens_body_stream(tmp_path):
         state.start_session("P01", "T08")
 
 
-def test_dashboard_rejects_unmarked_calibration_and_missing_native_reference(tmp_path):
+def test_dashboard_requires_calibration_but_not_native_recording(tmp_path):
     state = DashboardState(tmp_path, segment_id=1)
     now = time.monotonic()
     state.on_xsens_frame(_full_xsens_frame())
@@ -344,11 +344,14 @@ def test_dashboard_rejects_unmarked_calibration_and_missing_native_reference(tmp
             "P01", "T09", mvn_recording_confirmed=True,
             mvn_recording_reference=r"C:\MVN\P01-T09.mvn")
     state.mark_calibrated()
-    with pytest.raises(ValueError, match="filename"):
-        state.start_session("P01", "T09", mvn_recording_confirmed=True)
+    state.start_session("P01", "T09")
+    assert state.recording
+    assert state.mvn_recording_reference is None
+    assert not state.mvn_recording_confirmed
+    state.stop_session()
 
 
-def test_dashboard_rejects_reused_native_recording_reference(tmp_path):
+def test_server_generated_trial_files_are_unique_without_native_references(tmp_path):
     state = DashboardState(tmp_path, segment_id=1)
     now = time.monotonic()
     state.on_xsens_frame(_full_xsens_frame())
@@ -356,20 +359,18 @@ def test_dashboard_rejects_reused_native_recording_reference(tmp_path):
     state.optitrack_bridge.on_sample(0.0, (1.0, 0.0, 1.0), True, now)
     state.tick()
     state.mark_calibrated()
-    reference = r"C:\MVN\P01-T10.mvn"
-    state.start_session(
-        "P01", "T10", mvn_recording_confirmed=True,
-        mvn_recording_reference=reference)
+    first = state.start_session("P01", "T10")
     later = now + 1 / 60.0
     state.on_sample(1 / 60.0, (0.99, 0.0, 1.0), True, later)
     state.optitrack_bridge.on_sample(
         1 / 60.0, (0.99, 0.0, 1.0), True, later)
     state.tick()
     state.stop_session()
-    with pytest.raises(ValueError, match="already used"):
-        state.start_session(
-            "P01", "T11", mvn_recording_confirmed=True,
-            mvn_recording_reference=reference.lower())
+    original = Path(first['path']).read_bytes()
+    second = state.start_session("P01", "T10")
+    state.stop_session()
+    assert second['path'] != first['path']
+    assert Path(first['path']).read_bytes() == original
 
 
 def test_guided_protocol_persists_and_applies_labels(tmp_path):
@@ -711,10 +712,6 @@ class FakeGuidedState:
     def start_session(self, participant, trial,
                       mvn_recording_confirmed=False,
                       mvn_recording_reference=None):
-        if not mvn_recording_confirmed:
-            raise ValueError("Confirm that native recording is active")
-        if not mvn_recording_reference:
-            raise ValueError("Enter the visible Windows MVN recording filename")
         self.recording = True
         self.step = 0
         return {"message": "recording", "path": "fake.jsonl"}
@@ -905,13 +902,7 @@ def test_integrated_guided_start_requires_released_low_rig():
     assert state.recording is False
 
     rig.vacuum = (0, 0)
-    with pytest.raises(ValueError, match="native recording"):
-        guided.start("P01", "T01")
-    with pytest.raises(ValueError, match="filename"):
-        guided.start("P01", "T01", mvn_recording_confirmed=True)
-    result = guided.start(
-        "P01", "T01", mvn_recording_confirmed=True,
-        mvn_recording_reference=r"C:\MVN\P01-T01.mvn")
+    result = guided.start("P01", "T01")
     assert result["message"] == "recording"
     assert state.recording is True
 

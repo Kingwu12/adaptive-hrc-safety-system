@@ -48,3 +48,11 @@ def test_audit_detects_static_geometry_without_rewriting_the_recording(tmp_path)
     assert result['geometry_recomputation']['maximum_absolute_distance_error_m'] == 1.5
     assert any('geometry review' in item for item in result['unresolved_evidence'])
     assert path.read_text() == original
+
+
+def test_automatic_stream_capture_does_not_require_external_recordings_or_sync_click(tmp_path):
+    path=tmp_path/'trial.jsonl'
+    path.write_text(json.dumps({'capture_mode':'automatic_streams','sync_marker_count':0}))
+    result=audit_trial(path)
+    assert not any('shared marker' in item or 'native recordings' in item for item in result['unresolved_evidence'])
+    assert any('event onset' in item for item in result['unresolved_evidence'])

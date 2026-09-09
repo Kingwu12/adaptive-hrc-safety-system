@@ -13,6 +13,9 @@ if (-not (Test-Path -LiteralPath (Join-Path $labDashboard 'node_modules/vinext/d
 try { $labStatus = Invoke-RestMethod 'http://127.0.0.1:8765/api/status' -TimeoutSec 3 }
 catch { $labStatus = $null }
 if ($labStatus) {
+    if ($labStatus.capture_mode -ne 'automatic_streams') {
+        throw 'An older backend is running with manual recording requirements. Finish/abort any active trial, stop that service, then run this launcher again.'
+    }
     if (-not $labStatus.automation.enabled -or -not $labStatus.controller_output_enabled) {
         throw 'A sensor service is already running without automatic trials enabled. Finish/abort any trial, stop that service, then run this launcher again. It will not kill an unknown service.'
     }
@@ -35,7 +38,7 @@ if (-not $labStatus) {
         if ($labServer.HasExited) { throw "Sensor service exited. Read data/service-logs/$labStamp-sensors.err.log" }
         try { $labStatus = Invoke-RestMethod 'http://127.0.0.1:8765/api/status' -TimeoutSec 2; break } catch {}
     }
-    if (-not $labStatus -or -not $labStatus.automation.enabled -or -not $labStatus.controller_output_enabled) {
+    if (-not $labStatus -or -not $labStatus.automation.enabled -or -not $labStatus.controller_output_enabled -or $labStatus.capture_mode -ne 'automatic_streams') {
         throw 'Sensor service did not confirm automatic trials. Inspect the service logs.'
     }
 }
@@ -51,7 +54,8 @@ if (-not $labPage) {
 }
 if (-not $labPage) { throw 'Dashboard did not become ready. Sensor service remains running; inspect the logs.' }
 $labProxy = Invoke-RestMethod 'http://localhost:3000/api/status' -TimeoutSec 5
-if (-not $labProxy.automation.enabled -or $labProxy.automation.supported_collection_modes -notcontains 'participant_study') { throw 'The dashboard is not connected to the updated automatic-trial service.' }
+if (-not $labProxy.automation.enabled -or $labProxy.automation.supported_collection_modes -notcontains 'participant_study' -or $labProxy.capture_mode -ne 'automatic_streams') { throw 'The dashboard is not connected to the updated automatic-trial service.' }
 Start-Process 'http://localhost:3000'
 Write-Host 'Automatic trials enabled. Choose Participant study for P-codes or Qualification for Q-codes.'
 Write-Host 'Start trial begins the guarded cycle. Starting the service alone does not move the robot.'
+Write-Host 'Trial files, sensor streams and events save automatically. No native filenames or recording confirmation required.'
