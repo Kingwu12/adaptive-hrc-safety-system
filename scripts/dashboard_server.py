@@ -2316,7 +2316,7 @@ class AutomaticRunController(GuidedRunController):
         self.contract = None
         task = state.config.get('drilling_task', {})
         self.drilling = SimulatedDrilling(radius_m=task.get('radius_m', .12),
-                                         dwell_s=task.get('dwell_s', 2.0),
+                                         dwell_s=task.get('dwell_s', 1.0),
                                          max_gap_s=task.get('max_gap_s', .15))
         visit_config = state.config.get("work_location_observation")
         self.work_visits = None

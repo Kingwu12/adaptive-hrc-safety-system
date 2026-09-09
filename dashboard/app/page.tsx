@@ -985,7 +985,7 @@ export default function Home() {
               {automaticActive && status.automation?.phase === "task" && <div role="status">
                 <strong>Drilling gestures: {status.automation.simulated_drilling?.completed_count ?? 0}/4</strong>
                 <p>{[0, 1, 2, 3].map(i => `Corner ${i + 1}: ${status.automation?.simulated_drilling?.completed_markers?.includes(i) ? "done" : `waiting (${n(status.automation?.simulated_drilling?.nearest_hand_distances_m?.[i])} m)`}`).join(" · ")}</p>
-                <small>{status.automation.simulated_drilling?.reason} · Hold either hand at each corner for {status.automation.simulated_drilling?.dwell_s ?? 2} seconds.</small>
+                <small>{status.automation.simulated_drilling?.reason} · Hold either hand at each corner for {status.automation.simulated_drilling?.dwell_s ?? 1} s.</small>
               </div>}
               <small>{automaticActive ? "Automatic trial: follow the instruction above. Four tracked drilling gestures complete the task; move clear before lowering. Faults require abort and inspection." : "One press records each real phase boundary. Lift and lower requests stay active while the selected controller gates robot speed from the live participant signal."}</small>
               <details className="controllerComparison">
@@ -1015,7 +1015,7 @@ export default function Home() {
                 : "Operator-confirmed mode: automation is off"}</strong>
               <p>{status.automation?.enabled
                 ? (status.automation.supported_collection_modes || ["qualification"]).includes(workspaceMode)
-                  ? "Start once. Data saves automatically. Grip verification, retreat and lift advance automatically. Hold a hand at each of the four tracked corners for two seconds, then move clear for lowering and supported release."
+                  ? "Start once. Data saves automatically. Grip verification, retreat and lift advance automatically. Hold a hand at each of the four tracked corners for one second, then move clear for lowering and supported release."
                   : "Restart the updated backend with Start-Lab.ps1. The service currently running supports rehearsals only."
                 : "Start the lab with Start-Lab.ps1 to enable automatic trials. Sensor and robot checks remain required."}</p>
               {status.model_health?.warnings.map(warning => <p key={warning} className="warnText">{warning}</p>)}

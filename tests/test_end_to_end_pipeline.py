@@ -116,7 +116,7 @@ def test_api_to_saved_automatic_cycle(tmp_path,monkeypatch,mode,prefix,block,wit
     assert runner.status()['presentation']['action_label'] is None
     for index, corner in enumerate(corners):
         hand[0]=(corner - [2,0,0]).tolist()
-        for _ in range(23):
+        for _ in range(12):
             tick(.1)
         assert runner.drilling.status()['completed_count'] == index + 1
         if index < 3:

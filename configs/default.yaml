@@ -28,7 +28,7 @@ drilling_task:
   automatic_completion: true
   marker_set: PANEL
   radius_m: 0.12
-  dwell_s: 2.0
+  dwell_s: 1.0
   max_gap_s: 0.15
 
 features:

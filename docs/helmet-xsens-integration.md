@@ -40,7 +40,7 @@ Control distance is the minimum distance from any tracked segment origin to the 
 | Fixed-zone controller | Closest anchored segment origin selects its fixed distance zone. |
 | Reactive SSM controller | Body distance and measured segment closing motion feed the dynamic envelope. |
 | Predictive SSM controller | The same body geometry feeds envelope and kinematic prediction. The existing HMM phase estimate retains its trained head-input meaning. |
-| Drilling task | Either anchored hand must remain within 0.12 m of each panel corner for 2 seconds. All four must complete. |
+| Drilling task | Either anchored hand must remain within 0.12 m of each panel corner for 1 second. All four must complete. |
 | Automatic retreat | All tracked segment origins must clear the configured launch distance before lift or lowering. |
 | Recording | Raw streamed poses, transformed body poses, body features, controller geometry source and task events are saved together. |
 

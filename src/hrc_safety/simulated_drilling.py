@@ -14,7 +14,7 @@ class SimulatedDrilling:
     rehearsed gesture, not fastening. Reset at the beginning of every task.
     """
 
-    def __init__(self, radius_m=0.12, dwell_s=2.0, max_gap_s=0.15):
+    def __init__(self, radius_m=0.12, dwell_s=1.0, max_gap_s=0.15):
         self.radius, self.dwell, self.max_gap = map(float, (radius_m, dwell_s, max_gap_s))
         if not all(math.isfinite(v) and v > 0 for v in (self.radius, self.dwell, self.max_gap)):
             raise ValueError("Positive finite radius, dwell and sample gap required")

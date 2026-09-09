@@ -61,7 +61,7 @@ def test_four_hand_dwells_follow_moving_panel_without_real_fastening_claim():
     events = []
     t = 0
     for target in [3, 1, 0, 2]:
-        for j in range(17):
+        for j in range(9):
             t += 0.125
             angle = t * 0.05
             r = np.array([[np.cos(angle), -np.sin(angle), 0],
@@ -76,24 +76,33 @@ def test_four_hand_dwells_follow_moving_panel_without_real_fastening_claim():
     assert detector.status()["completed_count"] == 0
 
 
+def test_default_dwell_completes_at_one_second_but_not_before():
+    detector = SimulatedDrilling()
+    for i in range(8):
+        assert feed(detector, i * .125, POINTS[0]) == []
+    assert detector.status()['completed_count'] == 0
+    assert feed(detector, 1.0, POINTS[0]) == [0]
+
+
 @pytest.mark.parametrize("interruption", ["stale", "gap", "outside", "duplicate", "missing"])
 def test_a_pass_or_interrupted_dwell_never_completes_marker(interruption):
     detector = SimulatedDrilling()
-    for i in range(9):
+    for i in range(5):
         feed(detector, i * 0.125, POINTS[0])
     if interruption == "stale":
-        feed(detector, 1.125, POINTS[0], fresh=False)
+        feed(detector, .625, POINTS[0], fresh=False)
     elif interruption == "outside":
-        feed(detector, 1.125, [5, 5, 5])
+        feed(detector, .625, [5, 5, 5])
     elif interruption == "missing":
-        feed(detector, 1.125, POINTS[0], markers=[])
+        feed(detector, .625, POINTS[0], markers=[])
     elif interruption == "duplicate":
         for i in range(20):
-            feed(detector, 1.125 + i * 0.125, POINTS[0], ids=(1, 1))
+            feed(detector, .625 + i * .125, POINTS[0], ids=(.5, .5))
         assert detector.status()["completed_count"] == 0
         return
-    for i in range(9):
-        feed(detector, 1.5 + i * 0.125, POINTS[0])
+    restart = 1.0 if interruption == 'gap' else .75
+    for i in range(5):
+        feed(detector, restart + i * .125, POINTS[0])
     assert detector.status()["completed_count"] == 0
 
 
