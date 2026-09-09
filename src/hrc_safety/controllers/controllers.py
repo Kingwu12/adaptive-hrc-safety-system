@@ -94,6 +94,7 @@ class FixedZoneController:
         self.condition = condition
 
     def decide(self, frame: FeatureFrame, robot_mode: str = _SSM) -> DecisionRecord:
+        frame = frame.for_control()
         # MODE-BLIND by design: the fixed-zone baseline sees only distance. The
         # configured mode is recorded for traceability but never changes the decision --
         # which is exactly why hand-guiding (contact range) is infeasible under it.
@@ -132,6 +133,7 @@ class FixedZoneController:
             command=command.value,
             speed_fraction=speed,
             robot_mode=robot_mode,
+            geometry_source="anchored_segment_origins" if frame.body_geometry else "head_column_proxy",
         )
 
 
@@ -203,6 +205,8 @@ class EnvelopeAdaptiveController:
         self._working_streak = 0
 
     def decide(self, frame: FeatureFrame, robot_mode: str = _SSM) -> DecisionRecord:
+        recognition_frame = frame
+        frame = frame.for_control()
         zone = self.zones.update(frame.d)
 
         # ---- deterministic prototype bound: geometry + measured approach speed ----
@@ -210,7 +214,7 @@ class EnvelopeAdaptiveController:
 
         # ---- Recognise: streaming state posterior (state layer) ------------------
         if self.use_state_layer and self.hmm is not None:
-            posterior = self.hmm.step(frame.as_vector())
+            posterior = self.hmm.step(recognition_frame.as_vector(self.hmm.feature_order))
             inferred = STATES[int(np.argmax(posterior))]
             posterior_list = [float(x) for x in posterior]
         else:
@@ -278,6 +282,7 @@ class EnvelopeAdaptiveController:
             risk=float(risk),
             time_to_breach_s=ttb_out,
             robot_mode=robot_mode,
+            geometry_source="anchored_segment_origins" if frame.body_geometry else "head_column_proxy",
         )
 
     def _decide_command(

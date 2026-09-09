@@ -6,6 +6,7 @@ import { QRCodeSVG } from "qrcode.react";
 type Feature = {
   d: number; d_dot: number; speed: number; v_proj: number;
   v_lat_frac: number; a_proj: number; torso_facing: number;
+  body_geometry?: {d: number; v_proj: number} | null;
 };
 
 type Status = {
@@ -15,7 +16,7 @@ type Status = {
     version: string; phase: string; reason: string; fault: boolean;
     task_sha256?: string | null;
     work_locations?: { configured: boolean; visited_count?: number; total_locations?: number };
-    simulated_drilling?: { completed_count: number; simulated_task_complete: boolean; reason: string; dwell_s: number };
+    simulated_drilling?: { completed_count: number; completed_markers: number[]; nearest_hand_distances_m?: number[]; simulated_task_complete: boolean; reason: string; dwell_s: number };
     presentation?: {
       stage: number | null; stages_total: number; title: string;
       instruction: string; action_label: string | null;
@@ -37,13 +38,15 @@ type Status = {
   model_source: string;
   model_sha256: string;
   model_health?: { warnings: string[] };
+  recognition_uses_xsens?: boolean;
+  body_tracking?: {available: boolean; features_ready: boolean; segment_count?: number; reason: string; nearest_segment?: string; minimum_segment_distance_m?: number};
   pipeline_error?: string | null;
   geometry_reference?: {source: string; tcp_position_m: number[] | null};
   event_exposure?: {motion_samples: number; rapid_closing_samples: number; review_reason: string | null};
   controller_comparison?: Record<string, {speed_fraction: number; rule: string; shadow_only: boolean}> | null;
   controller_profile?: {red_radius_m: number; predictive_role: string};
   controller_output_enabled: boolean;
-  controller_decision?: {condition?: string; speed_fraction: number; rule: string} | null;
+  controller_decision?: {condition?: string; speed_fraction: number; rule: string; d?: number; geometry_source?: string} | null;
   recording: boolean;
   session_id: string | null;
   participant_id: string | null;
@@ -558,6 +561,7 @@ export default function Home() {
       setMessage(result.message || "Updated");
       return result as {
         message?: string;
+        guided_step?: number;
         completed?: boolean;
         trial_id?: string;
         participant?: ParticipantSummary;
@@ -698,7 +702,7 @@ export default function Home() {
   const confirmGuidedAction = () => {
     if (!status.recording || status.guided_step == null || protocolBusy.current) return;
     const step = status.guided_step;
-    if (status.automation?.active && (status.automation.fault || ![7, 9].includes(step))) return;
+    if (status.automation?.active && (status.automation.fault || ![7, 9].includes(step) || !status.automation.presentation?.action_label)) return;
     void advanceProtocol();
   };
 
@@ -971,17 +975,24 @@ export default function Home() {
               {status.controller_decision && <div className="controllerWitness" role="status">
                 <strong>{status.controller_decision.speed_fraction === 0 ? "Controller requests stop" : `Controller requests ${Math.round(status.controller_decision.speed_fraction * 100)}% speed`}</strong>
                 <span>{status.controller_decision.rule}</span>
-                <small>Measured separation {n(status.feature?.d)} m · closing speed {n(status.feature?.v_proj)} m/s</small>
+                <small>Control separation {n(status.controller_decision.d)} m · closing speed {n(status.feature?.body_geometry?.v_proj ?? status.feature?.v_proj)} m/s</small>
               </div>}
               {guidedIndex === 0 && status.capture_mode !== "automatic_streams" && <button className="syncMarker" onClick={() => void post("/api/sync")}>
                 {status.sync_marker_count > 0 ? `✓ Sync marker ${status.sync_marker_count} recorded` : "Record visible shared sync marker"}
               </button>}
               {guidedIndex >= 3 && guidedIndex <= 8 && <div className="simPanelNote">No top fixture: suction stays ON while the panel is overhead. Never release an unsupported panel.</div>}
               {!automaticWaiting && <button onClick={confirmGuidedAction} disabled={protocolWorking}>{protocolWorking ? protocolBusyLabel : guidedNext}</button>}
-              <small>{automaticActive ? "Automatic trial: follow the current instruction above. Task completion requires confirmation. Faults require abort and inspection." : "One press records each real phase boundary. Lift and lower requests stay active while the selected controller gates robot speed from the live participant signal."}</small>
+              {automaticActive && status.automation?.phase === "task" && <div role="status">
+                <strong>Drilling gestures: {status.automation.simulated_drilling?.completed_count ?? 0}/4</strong>
+                <p>{[0, 1, 2, 3].map(i => `Corner ${i + 1}: ${status.automation?.simulated_drilling?.completed_markers?.includes(i) ? "done" : `waiting (${n(status.automation?.simulated_drilling?.nearest_hand_distances_m?.[i])} m)`}`).join(" · ")}</p>
+                <small>{status.automation.simulated_drilling?.reason} · Hold either hand at each corner for {status.automation.simulated_drilling?.dwell_s ?? 2} seconds.</small>
+              </div>}
+              <small>{automaticActive ? "Automatic trial: follow the instruction above. Four tracked drilling gestures complete the task; move clear before lowering. Faults require abort and inspection." : "One press records each real phase boundary. Lift and lower requests stay active while the selected controller gates robot speed from the live participant signal."}</small>
               <details className="controllerComparison">
                 <summary>Operator: controller identity and event evidence</summary>
-                <p>Separation reference: {status.geometry_reference?.source || "unavailable"}. This is a head-to-column proxy, not whole-body clearance.</p>
+                <p>Separation reference: {status.geometry_reference?.source || "unavailable"}. Control geometry: {status.controller_decision?.geometry_source || "unavailable"}. Distances use tracked segment origins and a robot column proxy.</p>
+                <p>Xsens body: {status.body_tracking?.available ? `${status.body_tracking.segment_count} segments anchored to helmet` : status.body_tracking?.reason || "unavailable"}. Nearest segment: {status.body_tracking?.nearest_segment || "unavailable"}.</p>
+                <p>HMM phase inputs: {status.recognition_uses_xsens ? "head and Xsens body features" : "legacy head features; a body-trained phase model is not loaded"}. Xsens body geometry separately informs controller separation and hand gesture detection.</p>
                 <p>Recording {status.participant_id} · block {status.block_label}. Assigned controller: <strong>{status.controller_condition || "unavailable"}</strong>.</p>
                 <p>Controller producing the latest decision: <strong>{CONTROLLER_NAMES[status.controller_decision?.condition || ""] || "unavailable — no identified controller decision"}</strong> ({status.controller_decision?.condition || "no identifier"}).</p>
                 {status.controller_decision?.condition && CONTROLLER_NAMES[status.controller_decision.condition] !== status.controller_condition && <p className="warnText">CONTROLLER MISMATCH: abort this attempt and inspect the recorded controller identity.</p>}
@@ -1004,7 +1015,7 @@ export default function Home() {
                 : "Operator-confirmed mode: automation is off"}</strong>
               <p>{status.automation?.enabled
                 ? (status.automation.supported_collection_modes || ["qualification"]).includes(workspaceMode)
-                  ? "Start once. Data saves automatically. Grip verification, retreat, lift, lowering and supported release advance automatically. Confirm when the task is complete."
+                  ? "Start once. Data saves automatically. Grip verification, retreat and lift advance automatically. Hold a hand at each of the four tracked corners for two seconds, then move clear for lowering and supported release."
                   : "Restart the updated backend with Start-Lab.ps1. The service currently running supports rehearsals only."
                 : "Start the lab with Start-Lab.ps1 to enable automatic trials. Sensor and robot checks remain required."}</p>
               {status.model_health?.warnings.map(warning => <p key={warning} className="warnText">{warning}</p>)}

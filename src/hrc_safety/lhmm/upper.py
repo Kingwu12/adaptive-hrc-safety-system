@@ -25,6 +25,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import numpy as np
+from ..features import LEGACY_FEATURE_ORDER
 
 STATES: tuple[str, ...] = ("approaching", "working", "retreating")
 _INDEX = {s: i for i, s in enumerate(STATES)}
@@ -109,12 +110,14 @@ class UpperHMM:
         transition_matrix: np.ndarray,
         emissions: GaussianEmissions | GaussianMixtureEmissions | None = None,
         start_prob: np.ndarray | None = None,
+        feature_order=None,
     ) -> None:
         A = np.asarray(transition_matrix, dtype=float)
         if A.shape != (len(STATES), len(STATES)):
             raise ValueError(f"transition_matrix must be {len(STATES)}x{len(STATES)}")
         self.A = A
         self.emissions = emissions if emissions is not None else default_emissions()
+        self.feature_order = tuple(feature_order or LEGACY_FEATURE_ORDER)
         if start_prob is None:
             start_prob = np.full(len(STATES), 1.0 / len(STATES))
         self._belief = np.asarray(start_prob, dtype=float)
@@ -207,11 +210,14 @@ class UpperHMM:
         """
         X = np.asarray(X, dtype=float)
         n = len(STATES)
-        means = np.zeros((n, _N_FEATURES))
-        variances = np.full((n, _N_FEATURES), var_floor)
+        dimensions = np.asarray(X).shape[1]
+        means = np.zeros((n, dimensions))
+        variances = np.full((n, dimensions), var_floor)
         for i, state in enumerate(STATES):
             mask = np.array([lab == state for lab in labels], dtype=bool)
             if not mask.any():
+                if dimensions != _N_FEATURES:
+                    raise ValueError("Body model requires labelled samples for every phase")
                 # No examples for this state: fall back to the cold-start prior.
                 prior = default_emissions()
                 means[i] = prior.means[i]

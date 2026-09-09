@@ -12,6 +12,7 @@ import numpy as np
 
 from .lhmm.upper import (STATES, GaussianMixtureEmissions, UpperHMM)
 from .metrics import recognition_report
+from .features import LEGACY_FEATURE_ORDER, BODY_FEATURE_ORDER
 
 FEATURES = ("d", "v_proj", "speed", "heading_alignment")
 _RAW_FEATURE_KEYS = {
@@ -30,6 +31,7 @@ class TrialData:
     feature_sequences: list[np.ndarray]
     total_rows: int
     skipped_rows: int
+    feature_order: tuple = LEGACY_FEATURE_ORDER
 
     @property
     def counts(self) -> Counter:
@@ -40,9 +42,12 @@ class TrialData:
         return all(counts[state] >= min_samples_per_state for state in STATES)
 
 
-def load_trial(path: str | Path) -> TrialData:
+def load_trial(path: str | Path, feature_order=LEGACY_FEATURE_ORDER) -> TrialData:
     """Read one JSONL recording, preserving gaps between labelled segments."""
     source = Path(path)
+    feature_order = tuple(feature_order)
+    if feature_order not in (LEGACY_FEATURE_ORDER, BODY_FEATURE_ORDER):
+        raise ValueError("Unknown training feature contract")
     rows: list[list[float]] = []
     labels: list[str] = []
     sequences: list[list[str]] = []
@@ -87,13 +92,20 @@ def load_trial(path: str | Path) -> TrialData:
                 or "unlabelled"
             )
             feature = record.get("features")
+            if feature_order == BODY_FEATURE_ORDER and (
+                    record.get("collection_mode") != "model_development"
+                    or (record.get("body_tracking") or {}).get("available") is not True
+                    or (record.get("body_tracking") or {}).get("features_ready") is not True):
+                skipped += 1
+                end_segment()
+                continue
             if label not in STATES or not isinstance(feature, dict):
                 skipped += 1
                 end_segment()
                 continue
             try:
                 vector = []
-                for name in FEATURES:
+                for name in feature_order:
                     if name == "heading_alignment":
                         speed = float(feature.get("speed", 0.0))
                         value = feature.get(
@@ -105,6 +117,8 @@ def load_trial(path: str | Path) -> TrialData:
                                 if speed > 1e-9 else 0.0
                             )
                         vector.append(float(value))
+                    elif name.startswith("body."):
+                        vector.append(float(feature["body_features"][name[5:]]))
                     else:
                         vector.append(float(feature[name]))
             except (KeyError, TypeError, ValueError) as exc:
@@ -123,7 +137,7 @@ def load_trial(path: str | Path) -> TrialData:
 
     X = np.asarray(rows, dtype=float)
     if X.size == 0:
-        X = np.empty((0, len(FEATURES)), dtype=float)
+        X = np.empty((0, len(feature_order)), dtype=float)
     return TrialData(
         path=source,
         participant_id=participant_id,
@@ -134,12 +148,13 @@ def load_trial(path: str | Path) -> TrialData:
         feature_sequences=feature_sequences,
         total_rows=total,
         skipped_rows=skipped,
+        feature_order=feature_order,
     )
 
 
-def load_trials(directory: str | Path) -> list[TrialData]:
-    files = sorted(Path(directory).glob("*.jsonl"))
-    return [load_trial(path) for path in files]
+def load_trials(directory: str | Path, feature_order=LEGACY_FEATURE_ORDER) -> list[TrialData]:
+    files = sorted(p for p in Path(directory).glob("*.jsonl") if not p.name.endswith('.events.jsonl'))
+    return [load_trial(path, feature_order) for path in files]
 
 
 def complete_trials(
@@ -193,8 +208,8 @@ def fit_trials(
     trials: list[TrialData], emission_components: int = 1,
     transition_power: float = 1.0,
 ) -> UpperHMM:
-    if not trials:
-        raise ValueError("No complete labelled trials supplied")
+    if not trials or len({t.feature_order for t in trials}) != 1:
+        raise ValueError("Training requires one consistent feature contract")
     sequences = [seq for trial in trials for seq in trial.sequences]
     X = np.concatenate([trial.X for trial in trials], axis=0)
     labels = [label for trial in trials for label in trial.labels]
@@ -213,7 +228,7 @@ def fit_trials(
         if emission_components == 1
         else _fit_mixture_emissions(X, labels, emission_components)
     )
-    return UpperHMM(transition_matrix=A, emissions=emissions)
+    return UpperHMM(transition_matrix=A, emissions=emissions, feature_order=trials[0].feature_order)
 
 
 def _decode_trial(model: UpperHMM, trial: TrialData) -> tuple[list[str], list[str]]:

@@ -14,6 +14,23 @@ zones:
   yellow_margin: 1.6  # yellow (warning) radius = yellow_margin * S0
   hysteresis: 0.05  # exit hysteresis band (m); leaving a zone requires clearing boundary + this
 
+helmet_body:
+  enabled: true
+  # User confirmed helmet axes were aligned with the head (2026-09-09).
+  head_axes_confirmed: true
+  head_to_helmet_rotation: [[1, 0, 0], [0, 1, 0], [0, 0, 1]]
+  # Zero uses the helmet pivot as the head anchor. This is an explicit proxy,
+  # not a measured anatomical offset; check the overlay against the lab wearer.
+  head_origin_in_helmet_m: [0, 0, 0]
+  origin_offset_basis: helmet_pivot_proxy
+
+drilling_task:
+  automatic_completion: true
+  marker_set: PANEL
+  radius_m: 0.12
+  dwell_s: 2.0
+  max_gap_s: 0.15
+
 features:
   sample_rate_hz: 60
   velocity_window: 5  # samples in the least-squares velocity slope window

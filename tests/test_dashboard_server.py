@@ -15,9 +15,20 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from scripts.dashboard_server import (ApiHandler, DashboardState,
+from scripts.dashboard_server import (ApiHandler, DashboardState as RealDashboardState,
                                       GuidedRunController, RigControl,
                                       RunCatalog, safe_id)
+
+
+def DashboardState(*args, **kwargs):
+    """Legacy head-only fixture for isolated console tests.
+
+    Default full-body operation is exercised by test_end_to_end_pipeline.
+    """
+    state = RealDashboardState(*args, **kwargs)
+    state.config['helmet_body']['enabled'] = False
+    state.config['drilling_task']['automatic_completion'] = False
+    return state
 
 
 class TelemetryOnlyRig:

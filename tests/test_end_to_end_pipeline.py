@@ -12,6 +12,8 @@ import scripts.dashboard_server as service
 from hrc_safety.mocap.natnet_bridge import MocapBridge
 from hrc_safety.mocap.xsens_transport import build_mxtp02, parse_mxtp02_frame
 from hrc_safety.mocap.natnet_transport import build_frame_packet, parse_rigid_body
+from hrc_safety.mocap.optitrack_transport import RigidBodyMonitor
+from tests.test_body_tracking import body_frame
 from tests.test_dashboard_server import FakeGuidedRig
 
 
@@ -27,6 +29,8 @@ def test_api_to_saved_automatic_cycle(tmp_path,monkeypatch,mode,prefix,block,wit
     state=service.DashboardState(tmp_path,1,Path('data/models/pilot_hmm.json'),
                                  enable_research_output=True)
     state.optitrack_bridge=MocapBridge(extrinsics=(np.eye(3),np.zeros(3)))
+    state.robot_transform=(np.eye(3),np.zeros(3))
+    state.optitrack_monitor=RigidBodyMonitor()
 
     class Rig(FakeGuidedRig):
         def telemetry_snapshot(self,**kwargs):
@@ -59,21 +63,31 @@ def test_api_to_saved_automatic_cycle(tmp_path,monkeypatch,mode,prefix,block,wit
         return payload
 
     counter=[0]
+    hand=[None]
+    corners=np.array([[1.1,-.3,1.5],[1.7,-.3,1.5],[1.7,.3,1.5],[1.1,.3,1.5]])
     def feed(seconds=1/60):
         clock[0]+=seconds
         counter[0]+=1
-        packet=build_mxtp02({i:(2,0,1) for i in range(1,24)},
+        skeleton=body_frame(counter[0],clock[0],hand=hand[0])
+        packet=build_mxtp02({int(i):segment['position_m'] for i,segment in skeleton['segments'].items()},
                             time_code_ms=int(clock[0]*1000),sample_counter=counter[0])
         frame=parse_mxtp02_frame(packet)
         state.on_xsens_frame(frame)
         state.on_sample(frame['time_code_s'],frame['segments']['1']['position_m'],True,clock[0])
-        motive=build_frame_packet(frame_number=counter[0],rigid_bodies={1:((2,0,1),True)})
+        motive=build_frame_packet(frame_number=counter[0],rigid_bodies={1:((2,0,1.7),True)})
         number,position,tracked=parse_rigid_body(motive,1)
         state.optitrack_bridge.on_sample(number/120,position,tracked,clock[0])
+        state.optitrack_monitor.update(1,position,[0,0,0,1],number/120,clock[0])
+        state.optitrack_monitor.update(2,[1.4,0,1.5],[0,0,0,1],number/120,clock[0])
+        state.optitrack_monitor.update_marker_sets({'PANEL':corners.tolist()},number/120,clock[0])
         state.tick()
         assert state.pipeline_error is None
 
     def tick(seconds=1/60):
+        # Sensors keep streaming while the sequencer waits for grip/retreat dwell.
+        while seconds > .1:
+            feed(.05)
+            seconds -= .05
         feed(seconds)
         runner.refresh_health()
         runner.tick()
@@ -93,12 +107,34 @@ def test_api_to_saved_automatic_cycle(tmp_path,monkeypatch,mode,prefix,block,wit
     tick(1)
     tick()
     tick(2)
+    for _ in range(40):
+        if runner.phase in ('task', 'fault'):
+            break
+        tick(.1)
     assert runner.phase == 'task', runner.reason
-    post('/api/protocol/complete',{})
+    assert state.body_tracking['available']
+    assert runner.status()['presentation']['action_label'] is None
+    for index, corner in enumerate(corners):
+        hand[0]=(corner - [2,0,0]).tolist()
+        for _ in range(23):
+            tick(.1)
+        assert runner.drilling.status()['completed_count'] == index + 1
+        if index < 3:
+            assert runner.phase == 'task'
+    assert runner.drilling.status()['completed_count'] == 4
+    assert runner.phase == 'retreat_lower'
+    tick(2)
+    assert runner.phase == 'retreat_lower'  # head clear, hand still near panel
+    assert ('goto','pose1_low') not in rig.actions
+    hand[0]=None
     tick()
     tick(2)
     tick()
     tick(2)
+    for _ in range(40):
+        if runner.phase in ('complete', 'fault'):
+            break
+        tick(.1)
     assert runner.phase == 'complete'
     assert not state.recording
     assert rig.actions.count(('goto','pose2_top')) == 1
@@ -121,8 +157,14 @@ def test_api_to_saved_automatic_cycle(tmp_path,monkeypatch,mode,prefix,block,wit
     assert all(len(row['xsens_frame']['segments']) == 23 for row in rows)
     assert all(row['robot_telemetry']['available'] for row in rows)
     assert all(row['mvn_native_recording_confirmed'] is False for row in rows)
+    assert all(row['body_tracking']['available'] for row in rows)
+    assert any(row['features'] and row['features'].get('body_features') for row in rows)
+    assert all(row['controller_decision'].get('geometry_source') == 'anchored_segment_origins'
+               for row in rows if row['controller_decision'].get('condition'))
     assert {row['controller_decision'].get('condition') for row in rows} == {None,identity}
     events=[json.loads(line) for line in Path(state.event_path).read_text().splitlines()]
     assert any(event['event'] == 'automation_task_contract' for event in events)
     assert any(event['event'] == 'trial_started' and event['capture_mode'] == 'automatic_streams' for event in events)
     assert not any(event['event'] == 'shared_sync_marker' for event in events)
+    assert sum(event['event'] == 'simulated_drilling_marker_complete' for event in events) == 4
+    assert sum(event['event'] == 'automatic_drilling_task_completed' for event in events) == 1

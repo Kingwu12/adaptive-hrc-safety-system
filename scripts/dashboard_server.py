@@ -23,7 +23,7 @@ import urllib.parse
 import urllib.request
 import uuid
 from collections import deque
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -40,6 +40,7 @@ from hrc_safety.experiment_diagnostics import (ControllerComparison, EventExposu
                                              release_fingerprint, live_tcp_position)  # noqa: E402
 from hrc_safety.work_locations import WorkLocationVisits  # noqa: E402
 from hrc_safety.simulated_drilling import SimulatedDrilling, aligned_hands  # noqa: E402
+from hrc_safety.body_tracking import HelmetBodyTracker  # noqa: E402
 from hrc_safety.lhmm.upper import (STATES, GaussianMixtureEmissions)  # noqa: E402
 from hrc_safety.pilot_model import load_upper_hmm  # noqa: E402
 from hrc_safety.mocap import (MocapBridge, NatNetV4Listener,
@@ -539,6 +540,9 @@ class DashboardState:
         features = self.config["features"]
         self.bridge = MocapBridge(sample_rate_hz=features["sample_rate_hz"])
         extrinsics = load_extrinsics("configs/mocap_extrinsics.yaml")
+        self.robot_transform = extrinsics
+        self.body_tracker = HelmetBodyTracker()
+        self.body_tracking = {"available": False, "reason": "Waiting for helmet and Xsens body"}
         self.optitrack_bridge = MocapBridge(
             sample_rate_hz=features["sample_rate_hz"], extrinsics=extrinsics)
         self.extractor = FeatureExtractor(
@@ -653,6 +657,7 @@ class DashboardState:
 
     def _hold_pipeline_fault(self):
         """Keep a failed capture/inference pipeline visibly latched at zero."""
+        self.body_tracking = {"available": False, "reason": "Capture pipeline fault"}
         self.feature = None
         self.feature_status = "pipeline_fault"
         self.controller_comparison = None
@@ -677,6 +682,8 @@ class DashboardState:
         if xsens_sample is None:
             with self.lock:
                 self.feature = None
+                self.body_tracker.reset()
+                self.body_tracking = {"available": False, "reason": "Xsens unavailable"}
                 self.feature_status = "unavailable"
                 self.geometry_reference = {"source": "unavailable", "tcp_position_m": None}
                 self.event_exposure.moving = False
@@ -711,6 +718,11 @@ class DashboardState:
             self.geometry_reference = {"source": "configured_development_reference", "tcp_position_m": tcp}
         else:
             self.geometry_reference = {"source": "unavailable", "tcp_position_m": None}
+        bodies = {} if self.optitrack_monitor is None else self.optitrack_monitor.snapshot(now)
+        self.body_tracking = self.body_tracker.update(
+            self.xsens_frame, None if 1 not in bodies else asdict(bodies[1]),
+            xsens_age_s=None if self.xsens_frame_wall is None else now - self.xsens_frame_wall,
+            config=self.config.get("helmet_body"), robot_transform=self.robot_transform, tcp=tcp)
         sample = optitrack_sample
         if sample is None or sample.stale or xsens_sample.stale or tcp is None:
             self.extractor.reset()
@@ -719,6 +731,14 @@ class DashboardState:
         else:
             frame = self.extractor.push(sample.t, sample.position)
             self.feature_status = "ready" if frame is not None else "warming_up"
+        if frame is not None and self.body_tracking.get("features_ready"):
+            frame = replace(frame, body_features=self.body_tracking["features"],
+                            body_geometry=self.body_tracking.get("body_geometry"))
+        body_required = self.config.get("helmet_body", {}).get("enabled") or any(
+            name.startswith("body.") for name in self.hmm.feature_order)
+        if body_required and not self.body_tracking.get("body_geometry"):
+            frame = None
+            self.feature_status = "warming_up" if self.body_tracking.get("available") else "unavailable"
         posterior: dict[str, float] = {}
         state = None
         feature = None
@@ -739,7 +759,7 @@ class DashboardState:
                     }
                     state = decision.inferred_state
             else:
-                beliefs = self.hmm.step(frame.as_vector())
+                beliefs = self.hmm.step(frame.as_vector(self.hmm.feature_order))
                 posterior = {
                     name: float(beliefs[i]) for i, name in enumerate(STATES)
                 }
@@ -779,7 +799,7 @@ class DashboardState:
                         }
                         for rb_id, body in self.optitrack_monitor.snapshot(now).items()
                     }
-                self.event_exposure.observe(feature, robot_telemetry,
+                self.event_exposure.observe(None if frame is None else asdict(frame.for_control()), robot_telemetry,
                                             self.event_label in {"hazard", "distractor"})
                 record = {
                     "schema_version": 3,
@@ -810,6 +830,7 @@ class DashboardState:
                     "age_s": (None if self.optitrack_age_s is None else
                               round(self.optitrack_age_s, 5)),
                     "features": feature,
+                    "body_tracking": self.body_tracking,
                     "ground_truth": self.label,
                     "ground_truth_phase": self.label,
                     "ground_truth_event": self.event_label,
@@ -988,6 +1009,7 @@ class DashboardState:
             # previous trial's HMM belief or derivative windows leak across it.
             self.hmm.reset()
             self.extractor.reset()
+            self.body_tracker.reset()
             self.feature = None
             self.feature_status = "warming_up"
             self.posterior = {}
@@ -1127,7 +1149,7 @@ class DashboardState:
                 "capture_mode": self.capture_mode,
                 "capture_contents": {
                     "sampled_streams": ["xsens_segments", "optitrack_tracking", "robot_telemetry"],
-                    "derived": ["features", "controller_decisions", "task_events"],
+                    "derived": ["features", "helmet_anchored_body", "body_features", "controller_decisions", "task_events"],
                     "native_files_created": False, "video_recorded": False,
                     "external_sync_verified": False,
                 },
@@ -1347,6 +1369,7 @@ class DashboardState:
                 "position": self.position,
                 "xsens_position": self.xsens_position,
                 "hand_tracking": {
+                    "anchored_body": self.body_tracking,
                     "xsens_sample_counter": (None if self.xsens_frame is None else self.xsens_frame.get("sample_counter")),
                     "xsens_age_s": (None if self.xsens_frame_wall is None else now - self.xsens_frame_wall),
                     "xsens_hands": ({} if self.xsens_frame is None else {
@@ -1362,12 +1385,15 @@ class DashboardState:
                 "optitrack_age_s": (None if self.optitrack_age_s is None else
                                     round(self.optitrack_age_s, 4)),
                 "feature": self.feature,
+                "body_tracking": self.body_tracking,
                 "feature_status": self.feature_status,
                 "posterior": self.posterior,
                 "hmm_state": self.hmm_state,
                 "model_source": self.model_source,
                 "model_sha256": self.model_sha256,
                 "model_health": self.model_health,
+                "recognition_feature_order": list(self.hmm.feature_order),
+                "recognition_uses_xsens": any(name.startswith("body.") for name in self.hmm.feature_order),
                 "pipeline_error": self.pipeline_error,
                 "geometry_reference": dict(self.geometry_reference),
                 "event_exposure": self.event_exposure.status(self.planned_event),
@@ -2266,7 +2292,7 @@ class AutomaticRunController(GuidedRunController):
     becomes ground-truth labels.
     """
 
-    VERSION = "automatic-panel-v6-stream-capture"
+    VERSION = "automatic-panel-v7-helmet-body-task"
     COLLECTION_PREFIXES = {"qualification": "Q", "participant_study": "P"}
     SEAL_DWELL_S = 1.0
     LOW_RELEASE_DWELL_S = 2.0
@@ -2288,7 +2314,10 @@ class AutomaticRunController(GuidedRunController):
         self.health_lock = threading.Lock()
         self.lock = threading.RLock()
         self.contract = None
-        self.drilling = SimulatedDrilling()
+        task = state.config.get('drilling_task', {})
+        self.drilling = SimulatedDrilling(radius_m=task.get('radius_m', .12),
+                                         dwell_s=task.get('dwell_s', 2.0),
+                                         max_gap_s=task.get('max_gap_s', .15))
         visit_config = state.config.get("work_location_observation")
         self.work_visits = None
         if visit_config:
@@ -2307,6 +2336,8 @@ class AutomaticRunController(GuidedRunController):
                 raise ValueError(f"A valid taught {name} pose is required")
             poses[name] = q
         body = {"version": self.VERSION, "poses_q_rad": poses,
+                "helmet_body": self.state.config.get('helmet_body'),
+                "drilling_task": self.state.config.get('drilling_task'),
                 "vacuum_percent": int(vacuum), "joint_speed_rad_s": 0.10,
                 "grip_min_permille": self.GRIP_MIN_PERMILLE,
                 "seal_dwell_s": self.SEAL_DWELL_S,
@@ -2342,6 +2373,9 @@ class AutomaticRunController(GuidedRunController):
             "complete": (7, "Trial saved", None),
         }
         number, title, action = cues.get(phase, (None, "Automatic trial", None))
+        if phase == 'task' and self._automatic_body_task():
+            title = f"Drilling gestures: {self.drilling.status()['completed_count']}/4 corners complete"
+            action = None
         cue_instruction = None
         if phase == "lifting":
             snap = self.state.snapshot()
@@ -2501,6 +2535,8 @@ class AutomaticRunController(GuidedRunController):
             raise ValueError("Automatic trial stopped")
         self._require_unchanged_contract()
         snap, _ = self._tracking()
+        if self.state.config.get('helmet_body', {}).get('enabled') and not (snap.get('body_tracking') or {}).get('available'):
+            raise ValueError("Fresh helmet-anchored body tracking is required during motion")
         self._health()
         # Distance does NOT veto the assigned event here: the selected safety
         # controller must govern the same trajectory in all three conditions.
@@ -2542,6 +2578,8 @@ class AutomaticRunController(GuidedRunController):
         step = self.state.snapshot().get("guided_step")
         with self.lock:
             if step == 7 and self.phase == "task":
+                if self._automatic_body_task():
+                    raise ValueError("All four tracked drilling gestures must complete; watch the corner progress")
                 self._advance_to(8)
                 self._phase("retreat_lower", "Lap confirmed complete. Step back; lowering starts automatically after clear dwell")
             else:
@@ -2584,7 +2622,15 @@ class AutomaticRunController(GuidedRunController):
                     self._advance_to(3)
                     self._phase("retreat_lift", "Grip verified. Release panel and step back; lift starts automatically after clear dwell")
             elif self.phase in ("retreat_lift", "retreat_lower"):
-                if self._stable(distance >= self.motion_clearance_m, self.CLEAR_DWELL_S):
+                body_clear = True
+                if self.state.config.get('helmet_body', {}).get('enabled'):
+                    body = snap.get('body_tracking') or {}
+                    body_distance = body.get('minimum_segment_distance_m')
+                    body_clear = (body.get('available') is True and isinstance(body_distance, (int, float))
+                                  and math.isfinite(body_distance) and body_distance >= self.motion_clearance_m)
+                    if not body_clear:
+                        self.reason = "Step back with both arms and body clear; waiting for fresh helmet-anchored tracking"
+                if self._stable(distance >= self.motion_clearance_m and body_clear, self.CLEAR_DWELL_S):
                     lifting = self.phase == "retreat_lift"
                     self._motion_guard()
                     self._phase("lifting" if lifting else "lowering",
@@ -2602,9 +2648,16 @@ class AutomaticRunController(GuidedRunController):
                     self._advance_to(7 if lifting else 9)
                     self._require_stationary()
                     self._phase("task" if lifting else "supported_release",
-                                "Robot up. Complete one lap and the simulated drilling gestures, then press Lap complete once" if lifting else "Panel resting on the low gripper support. Waiting two stationary seconds before suction releases")
+                                ("Robot up. Hold either hand near each of the four panel corners; progress is detected automatically"
+                                 if self._automatic_body_task() else "Robot up. Complete one lap, then confirm task complete")
+                                if lifting else "Panel resting on the low gripper support. Waiting two stationary seconds before suction releases")
             elif self.phase == "task":
                 self._observe_simulated_drilling(snap)
+                if self._automatic_body_task() and self.drilling.status()['simulated_task_complete']:
+                    self._journal('automatic_drilling_task_completed', basis='four anchored-hand dwells',
+                                  **self.drilling.status())
+                    self._advance_to(8)
+                    self._phase('retreat_lower', 'All four drilling gestures detected. Step back with both arms clear for lowering')
                 # Observe source frames, not repeated polling of one cached pose.
                 # Location coverage does not authorise lowering or label screws complete.
                 if self.work_visits is not None:
@@ -2641,22 +2694,35 @@ class AutomaticRunController(GuidedRunController):
         finally:
             self.lock.release()
 
+    def _automatic_body_task(self):
+        return self.state.config.get('drilling_task', {}).get('automatic_completion') is True
+
     def _observe_simulated_drilling(self, snap):
-        """Record the simulated gesture; commissioning does not command motion."""
+        """Record hand dwells; the state machine separately owns retreat/motion."""
         data = snap.get("hand_tracking") or {}
         markers = data.get("optitrack_markers") or {}
         panel = data.get("panel") or {}
         try:
-            hands = aligned_hands({"segments": data.get("xsens_hands", {})},
-                                  self.state.config.get("simulated_drilling_alignment"))
+            body = data.get('anchored_body') or {}
+            if self.state.config.get('helmet_body', {}).get('enabled'):
+                if body.get('available') is not True:
+                    raise ValueError(body.get('reason', 'Waiting for anchored body'))
+                hands = {i: body['segments'][i]['position_optitrack_m'] for i in ('11', '15')}
+                source_ids = (*body['source_ids'], markers['source_time_s'])
+            else:
+                hands = aligned_hands({"segments": data.get("xsens_hands", {})},
+                                      self.state.config.get("simulated_drilling_alignment"))
+                source_ids = (data['xsens_sample_counter'], markers['source_time_s'])
             fresh = (0 <= float(data["xsens_age_s"]) <= 0.15
                      and 0 <= float(markers["age_s"]) <= 0.15
                      and 0 <= float(panel["age_s"]) <= 0.15
                      and panel["source_time_s"] == markers["source_time_s"])
+            if self.state.config.get('helmet_body', {}).get('enabled'):
+                fresh = fresh and body['source_ids'][1] == panel['source_time_s']
             events = self.drilling.observe(
-                self.clock(), markers.get("sets", {}).get("PANEL"), hands,
-                source_ids=(data["xsens_sample_counter"], markers["source_time_s"]),
-                fresh=fresh, task_active=True)
+                self.clock(), markers.get("sets", {}).get(self.state.config.get('drilling_task', {}).get('marker_set', 'PANEL')), hands,
+                source_ids=source_ids, fresh=fresh, task_active=True,
+                panel_pose=panel if self.state.config.get('helmet_body', {}).get('enabled') else None)
         except (KeyError, TypeError, ValueError) as exc:
             self.drilling.observe(self.clock(), None, {}, source_ids=(0, 0), fresh=False, task_active=True)
             self.drilling.reason = str(exc)

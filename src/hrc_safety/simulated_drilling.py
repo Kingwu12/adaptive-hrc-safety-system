@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 import math
+import itertools
 import numpy as np
+from .body_tracking import rotation
 
 
 class SimulatedDrilling:
@@ -24,11 +26,12 @@ class SimulatedDrilling:
         self.last_t = None
         self.last_sources = None
         self.geometry = None
+        self.corner_reference = None
         self.reason = "Waiting for aligned hands and four panel markers"
         self.distances = []
         self.fault = None
 
-    def observe(self, t, markers, hands, *, source_ids, fresh, task_active):
+    def observe(self, t, markers, hands, *, source_ids, fresh, task_active, panel_pose=None):
         """Return new marker indices. Repeated frames never accumulate dwell."""
         if self.fault:
             self.reason = self.fault
@@ -41,7 +44,7 @@ class SimulatedDrilling:
         try:
             t = float(t)
             source_ids = tuple(float(v) for v in source_ids)
-            if len(source_ids) != 2 or not all(math.isfinite(v) for v in source_ids):
+            if len(source_ids) < 2 or not all(math.isfinite(v) for v in source_ids):
                 raise ValueError("Invalid source frame identifiers")
             points = np.asarray(markers, dtype=float)
             hand_points = {str(k): np.asarray(v, dtype=float) for k, v in hands.items()}
@@ -49,6 +52,24 @@ class SimulatedDrilling:
                     or not hand_points or any(p.shape != (3,) or not np.isfinite(p).all()
                                               for p in hand_points.values())):
                 raise ValueError("Invalid positions")
+            if panel_pose is not None:
+                panel_r = rotation(panel_pose['rotation_xyzw'])
+                panel_p = np.asarray(panel_pose['position'], dtype=float)
+                if panel_p.shape != (3,) or not np.isfinite(panel_p).all():
+                    raise ValueError("Invalid panel pose")
+                local = (points - panel_p) @ panel_r
+                if self.corner_reference is None:
+                    self.corner_reference = local.copy()
+                else:
+                    # Preserve physical corner identity even if packet order
+                    # changes on a symmetric rectangle. Global distances alone
+                    # cannot distinguish those permutations.
+                    matches = sorted((float(np.max(np.linalg.norm(local[list(order)] - self.corner_reference, axis=1))), order)
+                                     for order in itertools.permutations(range(4)))
+                    if matches[0][0] > .03 or matches[1][0] - matches[0][0] < .02:
+                        self.fault = "Panel corner identity changed; restart observation"
+                        raise ValueError(self.fault)
+                    points = points[list(matches[0][1])]
             # The indexed distance matrix is invariant to rigid panel movement,
             # and detects most marker swaps or reconstructed geometry changes.
             geometry = np.linalg.norm(points[:, None] - points[None, :], axis=2)
@@ -104,6 +125,7 @@ class SimulatedDrilling:
                 "nearest_hand_distances_m": self.distances, "reason": self.reason,
                 "radius_m": self.radius, "dwell_s": self.dwell,
                 "fault": self.fault,
+                "corner_reference_local_m": None if self.corner_reference is None else self.corner_reference.tolist(),
                 "fastening_verified": False}
 
 

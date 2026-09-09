@@ -34,6 +34,8 @@ def ready(tmp_path, monkeypatch):
     monkeypatch.setattr(service.time,'monotonic',lambda:clock[0])
     state = service.DashboardState(tmp_path,1,Path('data/models/pilot_hmm.json'),
                                    enable_research_output=True)
+    # Isolate live-TCP/capture faults; default body path has separate end-to-end tests.
+    state.config['helmet_body']['enabled'] = False
     state.optitrack_bridge = MocapBridge(extrinsics=(np.eye(3), np.zeros(3)))
     rig = LiveRig(clock)
     state.rig = rig
@@ -57,6 +59,20 @@ def start(state):
              block_label='A',within_block_trial=1,controller_condition='fixed zone',
              planned_event='clean',collection_mode='participant_study',
              motive_recording_reference='P07-T01.tak',video_recording_reference='P07-T01.mp4')
+
+
+def test_default_body_requirement_never_falls_back_to_head_only(tmp_path,monkeypatch):
+    state,rig,clock,feed = ready(tmp_path,monkeypatch)
+    start(state)
+    feed()
+    feed()
+    assert rig.outputs[-1] == 1
+    state.config['helmet_body']['enabled'] = True
+    feed()
+    assert not state.body_tracking['available']
+    assert state.feature is None
+    assert rig.outputs[-1] == 0
+    state.stop_session()
 
 
 def test_dashboard_uses_moving_robot_pose_for_control_and_recording(tmp_path,monkeypatch):

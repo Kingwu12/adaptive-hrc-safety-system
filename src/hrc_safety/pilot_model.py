@@ -10,12 +10,13 @@ import json
 from pathlib import Path
 
 import numpy as np
+from .features import LEGACY_FEATURE_ORDER, BODY_FEATURE_ORDER
 
 from .lhmm.upper import (STATES, GaussianEmissions, GaussianMixtureEmissions,
                          UpperHMM)
 
 MODEL_SCHEMA_VERSION = 3
-FEATURE_ORDER = ("d", "v_proj", "speed", "heading_alignment")
+FEATURE_ORDER = LEGACY_FEATURE_ORDER
 
 
 def model_payload(hmm: UpperHMM, **metadata) -> dict:
@@ -36,7 +37,7 @@ def model_payload(hmm: UpperHMM, **metadata) -> dict:
     return {
         "schema_version": MODEL_SCHEMA_VERSION,
         "states": list(STATES),
-        "feature_order": list(FEATURE_ORDER),
+        "feature_order": list(hmm.feature_order),
         "transition_matrix": hmm.A.tolist(),
         "emissions": emissions,
         **metadata,
@@ -62,7 +63,8 @@ def load_upper_hmm(path: str | Path) -> UpperHMM:
         raise ValueError(f"Unsupported pilot-model schema in {source}")
     if tuple(payload.get("states", ())) != STATES:
         raise ValueError(f"State order mismatch in {source}")
-    if tuple(payload.get("feature_order", ())) != FEATURE_ORDER:
+    feature_order = tuple(payload.get("feature_order", ()))
+    if feature_order not in (FEATURE_ORDER, BODY_FEATURE_ORDER):
         raise ValueError(f"Feature order mismatch in {source}")
 
     A = np.asarray(payload["transition_matrix"], dtype=float)
@@ -80,14 +82,14 @@ def load_upper_hmm(path: str | Path) -> UpperHMM:
 
     kind = emissions_payload.get("kind")
     if kind == "gaussian":
-        if means.shape != (len(STATES), len(FEATURE_ORDER)) or variances.shape != means.shape:
+        if means.shape != (len(STATES), len(feature_order)) or variances.shape != means.shape:
             raise ValueError(f"Invalid Gaussian emission shape in {source}")
         emissions = GaussianEmissions(means=means, variances=variances)
     elif kind == "gaussian_mixture":
         weights = np.asarray(emissions_payload.get("weights"), dtype=float)
         expected_prefix = (len(STATES),)
         if (means.ndim != 3 or means.shape[:1] != expected_prefix
-                or means.shape[2] != len(FEATURE_ORDER)
+                or means.shape[2] != len(feature_order)
                 or variances.shape != means.shape
                 or weights.shape != means.shape[:2]):
             raise ValueError(f"Invalid mixture emission shape in {source}")
@@ -103,4 +105,5 @@ def load_upper_hmm(path: str | Path) -> UpperHMM:
     return UpperHMM(
         transition_matrix=A,
         emissions=emissions,
+        feature_order=feature_order,
     )

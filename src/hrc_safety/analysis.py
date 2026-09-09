@@ -67,7 +67,8 @@ def fit_hmm(config: dict, seeds: tuple[int, ...] = TRAIN_SEEDS) -> UpperHMM:
 
 def _fresh_hmm(fitted: UpperHMM) -> UpperHMM:
     """A fresh HMM sharing the fitted A + emissions but with an independent belief."""
-    return UpperHMM(transition_matrix=fitted.A, emissions=fitted.emissions)
+    return UpperHMM(transition_matrix=fitted.A, emissions=fitted.emissions,
+                    feature_order=fitted.feature_order)
 
 
 def build_controller(name: str, config: dict, fitted: UpperHMM | None):

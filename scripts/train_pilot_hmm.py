@@ -13,6 +13,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from hrc_safety.lhmm.upper import STATES  # noqa: E402
 from hrc_safety.pilot_model import save_upper_hmm  # noqa: E402
+from hrc_safety.features import LEGACY_FEATURE_ORDER, BODY_FEATURE_ORDER  # noqa: E402
 from hrc_safety.pilot_training import (  # noqa: E402
     complete_trials,
     fit_trials,
@@ -26,9 +27,11 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--input", default="data/xsens", help="recording directory")
     parser.add_argument(
-        "--output", default="data/models/pilot_hmm_candidate.json", help="development candidate JSON; promotion is a separate qualified release step"
+        "--output", default=None, help="development candidate JSON; promotion is a separate qualified release step"
     )
     parser.add_argument("--min-complete-trials", type=int, default=3)
+    parser.add_argument("--features", choices=("head", "head-body"), default="head",
+                        help="head-body requires newly captured labelled model-development body features")
     parser.add_argument("--min-samples-per-state", type=int, default=30)
     parser.add_argument(
         "--emission-components",
@@ -56,12 +59,15 @@ def main() -> int:
         "--check-only", action="store_true", help="report readiness without fitting"
     )
     args = parser.parse_args()
+    feature_order = BODY_FEATURE_ORDER if args.features == 'head-body' else LEGACY_FEATURE_ORDER
+    args.output = args.output or ('data/models/body_hmm_candidate.json' if args.features == 'head-body'
+                                  else 'data/models/pilot_hmm_candidate.json')
     if args.emission_components < 1:
         parser.error("--emission-components must be at least one")
     if args.transition_power <= 0:
         parser.error("--transition-power must be positive")
 
-    scanned = load_trials(args.input)
+    scanned = load_trials(args.input, feature_order)
     if not scanned:
         print(f"No JSONL recordings found in {Path(args.input).resolve()}")
         return 2
@@ -146,9 +152,7 @@ def main() -> int:
             state: sum(trial.counts[state] for trial in usable) for state in STATES
         },
         "min_samples_per_state_per_trial": args.min_samples_per_state,
-        "feature_order": [
-            "d", "v_proj", "speed", "heading_alignment"
-        ],
+        "feature_order": list(feature_order),
         "emission_components_per_state": args.emission_components,
         "transition_power": args.transition_power,
         "target_definition": (
@@ -166,7 +170,7 @@ def main() -> int:
     )
     print(f"FITTED: {target.resolve()}")
     print(
-        f"Observation: d, v_proj, speed, heading_alignment; "
+        f"Observation: {', '.join(feature_order)}; "
         f"emission components/state: {args.emission_components}"
     )
     print(

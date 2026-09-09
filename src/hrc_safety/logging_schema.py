@@ -51,6 +51,7 @@ class DecisionRecord:
     # learned inference and selects the deterministic command bound. Recording a mode
     # does not itself make the installation safety-rated or certified.
     robot_mode: str = "ssm"
+    geometry_source: str = "head_column_proxy"
 
     def to_json(self) -> str:
         return json.dumps(self._serialisable())

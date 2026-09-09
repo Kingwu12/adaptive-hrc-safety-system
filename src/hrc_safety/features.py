@@ -13,9 +13,13 @@ window rather than single-frame finite differences, for robustness to sensor jit
 from __future__ import annotations
 
 from collections import deque
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import numpy as np
+from .body_tracking import BODY_FEATURES
+
+LEGACY_FEATURE_ORDER = ("d", "v_proj", "speed", "heading_alignment")
+BODY_FEATURE_ORDER = LEGACY_FEATURE_ORDER + tuple("body." + key for key in BODY_FEATURES)
 
 
 @dataclass(frozen=True)
@@ -44,16 +48,35 @@ class FeatureFrame:
     v_lat_frac: float
     a_proj: float
     torso_facing: float
+    body_features: dict | None = None
+    body_geometry: dict | None = None
 
-    def as_vector(self) -> np.ndarray:
+    def for_control(self) -> FeatureFrame:
+        """Use anchored-body bounds without changing the trained head observation."""
+        if self.body_geometry is None:
+            return self
+        values = {key: float(self.body_geometry[key]) for key in ("d", "v_proj", "speed", "a_proj")}
+        if not np.isfinite(list(values.values())).all() or values["d"] < 0 or values["speed"] < 0:
+            raise ValueError("Invalid anchored-body control geometry")
+        return replace(self, **values, d_dot=-values["v_proj"])
+
+    def as_vector(self, feature_order=None) -> np.ndarray:
         """Observation vector fed to the Gaussian emission model.
 
         Order is fixed and shared by fit_emissions / step / viterbi.
         """
-        return np.array(
-            [self.d, self.v_proj, self.speed, self.torso_facing],
-            dtype=float,
-        )
+        order = tuple(feature_order or LEGACY_FEATURE_ORDER)
+        if order not in (LEGACY_FEATURE_ORDER, BODY_FEATURE_ORDER):
+            raise ValueError("Unknown recognition feature contract")
+        try:
+            values = [self.body_features[name[5:]] if name.startswith("body.")
+                      else getattr(self, name) for name in order]
+            result = np.asarray(values, dtype=float)
+        except (KeyError, TypeError, AttributeError) as exc:
+            raise ValueError("Model requires valid anchored Xsens body features") from exc
+        if not np.isfinite(result).all():
+            raise ValueError("Non-finite recognition input")
+        return result
 
     @property
     def heading_alignment(self) -> float:

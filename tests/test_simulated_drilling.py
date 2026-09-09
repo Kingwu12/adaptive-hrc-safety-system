@@ -2,6 +2,7 @@ import struct
 
 import numpy as np
 import pytest
+from scipy.spatial.transform import Rotation
 
 from hrc_safety.mocap.natnet_transport import build_frame_packet
 from hrc_safety.mocap.optitrack_transport import parse_natnet4_marker_sets, RigidBodyMonitor
@@ -9,6 +10,24 @@ from hrc_safety.simulated_drilling import SimulatedDrilling, aligned_hands
 
 
 POINTS = np.array([[0, 0, 1], [0.6, 0, 1], [0.6, 0.5, 1], [0, 0.5, 1]])
+
+
+def test_corner_identity_survives_packet_reordering_and_panel_rotation():
+    detector = SimulatedDrilling(dwell_s=.2)
+    events = []
+    for i in range(12):
+        t = i * .1
+        rotation = Rotation.from_euler('z',t)
+        offset = np.array([t,0,0])
+        world = POINTS @ rotation.as_matrix().T + offset
+        target = 0 if i < 6 else 1
+        order = np.roll(np.arange(4),i)
+        events += detector.observe(t,world[order],{'11':world[target]},
+                    source_ids=(i,i,i),fresh=True,task_active=True,
+                    panel_pose={'position':offset,'rotation_xyzw':rotation.as_quat()})
+    assert events == [0,1]
+    assert detector.status()['completed_count'] == 2
+    assert detector.fault is None
 
 
 def test_named_panel_markers_survive_packet_and_monitor():
