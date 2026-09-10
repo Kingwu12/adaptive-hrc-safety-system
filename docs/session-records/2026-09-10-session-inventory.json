@@ -1,0 +1,655 @@
+{
+  "schema_version": 1,
+  "session_date_local": "2026-09-10",
+  "timezone": "Australia/Sydney",
+  "created_utc": "2026-09-10T04:23:26.567912+00:00",
+  "selection_rule": "outcome == completed AND catalog_summary.quality.grade == good",
+  "privacy_note": "Raw participant streams are archived in the restricted project Google Drive, not the public GitHub repository.",
+  "raw_retention_note": "Excluded attempts remain unchanged in the local data/xsens directory; no raw capture was deleted.",
+  "shutdown_state": {
+    "recording_active": false,
+    "xsens_connected": false,
+    "optitrack_connected": false,
+    "robot_reachable": false,
+    "gripper_reachable": false,
+    "last_cached_tcp_m": [
+      -0.1697,
+      -0.0626,
+      0.4423
+    ]
+  },
+  "counts": {
+    "captures_found": 16,
+    "selected_good": 9,
+    "excluded": 7,
+    "selected_participants": [
+      "P22",
+      "P24"
+    ]
+  },
+  "captures": [
+    {
+      "session_id": "P06-T03-20260910-112508-7d79f4",
+      "participant_id": "P06",
+      "trial_id": "T03",
+      "block_label": "A",
+      "within_block_trial": 2,
+      "controller_condition": "predictive SSM",
+      "planned_event": "distractor",
+      "outcome": "aborted",
+      "quality_grade": "repeat",
+      "quality_score": 5,
+      "quality_reasons": [
+        "missing approaching, working, retreating",
+        "missing planned distractor event",
+        "phase order or completion differs from the guided run",
+        "run is under 30 seconds"
+      ],
+      "samples": 1247,
+      "duration_s": 24.7,
+      "rate_hz": 50.6,
+      "selected_for_analysis": false,
+      "selection_reason": "excluded: outcome aborted",
+      "files": [
+        {
+          "name": "P06-T03-20260910-112508-7d79f4.jsonl",
+          "bytes": 11664008,
+          "sha256": "cb63fb408bd9898d9cb926ed38201e99da6f9e45e46b1b970dce96fdf0223055"
+        },
+        {
+          "name": "P06-T03-20260910-112508-7d79f4.events.jsonl",
+          "bytes": 221428,
+          "sha256": "9a4395bed04edeb017db2785aa61943f9c2c4944f8465219f89d6d78bd03ce98"
+        },
+        {
+          "name": "P06-T03-20260910-112508-7d79f4.manifest.json",
+          "bytes": 2160,
+          "sha256": "9a629f7dca1a75e605638130584d01c0eb987f7bd50ea6e7d696df0ebb18f807"
+        }
+      ]
+    },
+    {
+      "session_id": "P22-T01-20260910-112414-151674",
+      "participant_id": "P22",
+      "trial_id": "T01",
+      "block_label": "A",
+      "within_block_trial": 1,
+      "controller_condition": "reactive SSM",
+      "planned_event": "distractor",
+      "outcome": "aborted",
+      "quality_grade": "repeat",
+      "quality_score": 0,
+      "quality_reasons": [
+        "missing approaching, working, retreating",
+        "missing planned distractor event",
+        "phase order or completion differs from the guided run",
+        "run is under 30 seconds",
+        "capture rate is 10.3 Hz"
+      ],
+      "samples": 13,
+      "duration_s": 1.3,
+      "rate_hz": 10.3,
+      "selected_for_analysis": false,
+      "selection_reason": "excluded: outcome aborted",
+      "files": [
+        {
+          "name": "P22-T01-20260910-112414-151674.jsonl",
+          "bytes": 119193,
+          "sha256": "d7376523ba7e122cdee95f9028763729b6e735f26491b297d709a8293ce90d7d"
+        },
+        {
+          "name": "P22-T01-20260910-112414-151674.events.jsonl",
+          "bytes": 4237,
+          "sha256": "407750e778e16ec0cae1e0dbcb5e08cb2852ed7a11028ec3ae1c5ad418800593"
+        },
+        {
+          "name": "P22-T01-20260910-112414-151674.manifest.json",
+          "bytes": 2184,
+          "sha256": "b19f06d959511e5bb8e4f85c7e584df19b4abe1dae24ca635364698ef198dd25"
+        }
+      ]
+    },
+    {
+      "session_id": "P22-T02-20260910-112613-e37e7e",
+      "participant_id": "P22",
+      "trial_id": "T02",
+      "block_label": "A",
+      "within_block_trial": 1,
+      "controller_condition": "reactive SSM",
+      "planned_event": "distractor",
+      "outcome": "completed",
+      "quality_grade": "good",
+      "quality_score": 100,
+      "quality_reasons": [
+        "all phases captured in order with stable tracking"
+      ],
+      "samples": 5415,
+      "duration_s": 108.3,
+      "rate_hz": 50.0,
+      "selected_for_analysis": true,
+      "selection_reason": "completed capture with quality grade good",
+      "files": [
+        {
+          "name": "P22-T02-20260910-112613-e37e7e.jsonl",
+          "bytes": 49906061,
+          "sha256": "9b0382eeb4a7bf3ce70271405f505be54d5f503d21fa453953d35ed4a91355fb"
+        },
+        {
+          "name": "P22-T02-20260910-112613-e37e7e.events.jsonl",
+          "bytes": 958310,
+          "sha256": "7bee789ccba4d11ae23078913f98cafa6763ddb05e6848d2c353c0138daf2c79"
+        },
+        {
+          "name": "P22-T02-20260910-112613-e37e7e.manifest.json",
+          "bytes": 2251,
+          "sha256": "6fc159488ab8203719cd782a1f1c9ac49c609975ea9f9ae7dd4dc2ea9ddfdf00"
+        }
+      ]
+    },
+    {
+      "session_id": "P22-T03-20260910-112814-826c86",
+      "participant_id": "P22",
+      "trial_id": "T03",
+      "block_label": "A",
+      "within_block_trial": 2,
+      "controller_condition": "reactive SSM",
+      "planned_event": "rapid intrusion",
+      "outcome": "completed",
+      "quality_grade": "good",
+      "quality_score": 100,
+      "quality_reasons": [
+        "all phases captured in order with stable tracking"
+      ],
+      "samples": 4668,
+      "duration_s": 93.6,
+      "rate_hz": 49.9,
+      "selected_for_analysis": true,
+      "selection_reason": "completed capture with quality grade good",
+      "files": [
+        {
+          "name": "P22-T03-20260910-112814-826c86.jsonl",
+          "bytes": 43016662,
+          "sha256": "af1f5158a6bb80c71ceb72cb54db1eb05c8320b15b392e806a2222d0c59131f6"
+        },
+        {
+          "name": "P22-T03-20260910-112814-826c86.events.jsonl",
+          "bytes": 842916,
+          "sha256": "6b255b2b11244557573230b893725d8ef4ebd4fe485148c5968c09725bddfbb8"
+        },
+        {
+          "name": "P22-T03-20260910-112814-826c86.manifest.json",
+          "bytes": 2256,
+          "sha256": "6c391322c1e541caa10c22da1e5eb6fdd24488fa8639fd3de6430d8e12e944d5"
+        }
+      ]
+    },
+    {
+      "session_id": "P22-T04-20260910-113002-841d82",
+      "participant_id": "P22",
+      "trial_id": "T04",
+      "block_label": "A",
+      "within_block_trial": 3,
+      "controller_condition": "reactive SSM",
+      "planned_event": "clean",
+      "outcome": "aborted",
+      "quality_grade": "good",
+      "quality_score": 100,
+      "quality_reasons": [
+        "all phases captured in order with stable tracking"
+      ],
+      "samples": 4748,
+      "duration_s": 93.7,
+      "rate_hz": 50.7,
+      "selected_for_analysis": false,
+      "selection_reason": "excluded: outcome aborted",
+      "files": [
+        {
+          "name": "P22-T04-20260910-113002-841d82.jsonl",
+          "bytes": 43674117,
+          "sha256": "a43aca4c1e32716c9a4ce243a3f758f96d64977232c884fd532e6c7611a0a9ad"
+        },
+        {
+          "name": "P22-T04-20260910-113002-841d82.events.jsonl",
+          "bytes": 837394,
+          "sha256": "7614a56b1b898627a4a3edd7751fe81c9ce11f0abb4c6bae3a57226e076c104f"
+        },
+        {
+          "name": "P22-T04-20260910-113002-841d82.manifest.json",
+          "bytes": 2212,
+          "sha256": "7ce464450d10b7d7ef2d9295d95fc964d2080dcbdd02de1c0bb288d4815a75df"
+        }
+      ]
+    },
+    {
+      "session_id": "P22-T05-20260910-113738-e193a8",
+      "participant_id": "P22",
+      "trial_id": "T05",
+      "block_label": "B",
+      "within_block_trial": 1,
+      "controller_condition": "predictive SSM",
+      "planned_event": "rapid intrusion",
+      "outcome": "completed",
+      "quality_grade": "good",
+      "quality_score": 100,
+      "quality_reasons": [
+        "all phases captured in order with stable tracking"
+      ],
+      "samples": 5315,
+      "duration_s": 109.0,
+      "rate_hz": 48.8,
+      "selected_for_analysis": true,
+      "selection_reason": "completed capture with quality grade good",
+      "files": [
+        {
+          "name": "P22-T05-20260910-113738-e193a8.jsonl",
+          "bytes": 49977276,
+          "sha256": "77f3734abce88de5d2b1a0290c64e3ed29da02c4c12d92b4f8de0c37fd5bb4ce"
+        },
+        {
+          "name": "P22-T05-20260910-113738-e193a8.events.jsonl",
+          "bytes": 983536,
+          "sha256": "436e188fb4fef91cd097332f1f522c58c0800b8ddcb4fadef813e355ac60b459"
+        },
+        {
+          "name": "P22-T05-20260910-113738-e193a8.manifest.json",
+          "bytes": 2261,
+          "sha256": "ee768d1a584e2de533d16d5c3d5d43ded07068051c69b6fcf48bf87d493b9a92"
+        }
+      ]
+    },
+    {
+      "session_id": "P22-T06-20260910-113939-c293dc",
+      "participant_id": "P22",
+      "trial_id": "T06",
+      "block_label": "B",
+      "within_block_trial": 2,
+      "controller_condition": "predictive SSM",
+      "planned_event": "clean",
+      "outcome": "completed",
+      "quality_grade": "good",
+      "quality_score": 100,
+      "quality_reasons": [
+        "all phases captured in order with stable tracking"
+      ],
+      "samples": 4400,
+      "duration_s": 90.0,
+      "rate_hz": 48.9,
+      "selected_for_analysis": true,
+      "selection_reason": "completed capture with quality grade good",
+      "files": [
+        {
+          "name": "P22-T06-20260910-113939-c293dc.jsonl",
+          "bytes": 41352503,
+          "sha256": "fd2fe58b7b23cb265c1c208296f22e14fd4507701499d442ab028f8268617276"
+        },
+        {
+          "name": "P22-T06-20260910-113939-c293dc.events.jsonl",
+          "bytes": 796474,
+          "sha256": "de3b9202339533930b521e76c2f15825535b298cd9f8b880f9bb98455bba2815"
+        },
+        {
+          "name": "P22-T06-20260910-113939-c293dc.manifest.json",
+          "bytes": 2217,
+          "sha256": "2ea2c3421cbe48d6c0e77cab386fb2f29e1806b42077c4a090be323a982f4d9b"
+        }
+      ]
+    },
+    {
+      "session_id": "P22-T07-20260910-114120-def7ec",
+      "participant_id": "P22",
+      "trial_id": "T07",
+      "block_label": "B",
+      "within_block_trial": 3,
+      "controller_condition": "predictive SSM",
+      "planned_event": "distractor",
+      "outcome": "completed",
+      "quality_grade": "good",
+      "quality_score": 100,
+      "quality_reasons": [
+        "all phases captured in order with stable tracking"
+      ],
+      "samples": 4950,
+      "duration_s": 101.1,
+      "rate_hz": 49.0,
+      "selected_for_analysis": true,
+      "selection_reason": "completed capture with quality grade good",
+      "files": [
+        {
+          "name": "P22-T07-20260910-114120-def7ec.jsonl",
+          "bytes": 46547167,
+          "sha256": "8ec069e0bcbe714266a9d8d1c7f2e1f4e55f93afe1dd7d937af5daafd778d0ad"
+        },
+        {
+          "name": "P22-T07-20260910-114120-def7ec.events.jsonl",
+          "bytes": 914180,
+          "sha256": "e797036de0836b00265845e6ebf5d4a25de16e4da21b97a0ad309bee7964116d"
+        },
+        {
+          "name": "P22-T07-20260910-114120-def7ec.manifest.json",
+          "bytes": 2255,
+          "sha256": "078ccf72afeb41008dc1a2aa879939f5f855b101b4b64d42b5f81c12590313dc"
+        }
+      ]
+    },
+    {
+      "session_id": "P22-T08-20260910-114704-44de5f",
+      "participant_id": "P22",
+      "trial_id": "T08",
+      "block_label": "C",
+      "within_block_trial": 1,
+      "controller_condition": "fixed zone",
+      "planned_event": "rapid intrusion",
+      "outcome": "completed",
+      "quality_grade": "good",
+      "quality_score": 100,
+      "quality_reasons": [
+        "all phases captured in order with stable tracking"
+      ],
+      "samples": 4745,
+      "duration_s": 96.0,
+      "rate_hz": 49.4,
+      "selected_for_analysis": true,
+      "selection_reason": "completed capture with quality grade good",
+      "files": [
+        {
+          "name": "P22-T08-20260910-114704-44de5f.jsonl",
+          "bytes": 43615619,
+          "sha256": "129bee58b73e7c8b7361ef81be80868a3ecc2e3ed67ee8c401d955190c8afe5f"
+        },
+        {
+          "name": "P22-T08-20260910-114704-44de5f.events.jsonl",
+          "bytes": 851880,
+          "sha256": "492cd7c3ed2bd5375f655877d825c1bef5c7813aa30c43d68939b758f348251b"
+        },
+        {
+          "name": "P22-T08-20260910-114704-44de5f.manifest.json",
+          "bytes": 2252,
+          "sha256": "d86b4e04987a750fae14c33ca02c887f290995cae936701700bde9fb07695307"
+        }
+      ]
+    },
+    {
+      "session_id": "P22-T09-20260910-114849-62f99d",
+      "participant_id": "P22",
+      "trial_id": "T09",
+      "block_label": "C",
+      "within_block_trial": 2,
+      "controller_condition": "fixed zone",
+      "planned_event": "distractor",
+      "outcome": "completed",
+      "quality_grade": "good",
+      "quality_score": 90,
+      "quality_reasons": [
+        "too little retreating data"
+      ],
+      "samples": 4772,
+      "duration_s": 95.6,
+      "rate_hz": 49.9,
+      "selected_for_analysis": true,
+      "selection_reason": "completed capture with quality grade good",
+      "files": [
+        {
+          "name": "P22-T09-20260910-114849-62f99d.jsonl",
+          "bytes": 43948929,
+          "sha256": "2e5b8c26b98dc5bbd709850b2e8f59e1134ce04cf10c36474db254b0465246e9"
+        },
+        {
+          "name": "P22-T09-20260910-114849-62f99d.events.jsonl",
+          "bytes": 843836,
+          "sha256": "92c8329f2b4435746af1d3276af96931c8f2d068c72b72253d44b83c8c17b7e3"
+        },
+        {
+          "name": "P22-T09-20260910-114849-62f99d.manifest.json",
+          "bytes": 2222,
+          "sha256": "81f74a84809678a589f1095f2d7bc87aa183b11a5dae77ff35dc0dfe374531dd"
+        }
+      ]
+    },
+    {
+      "session_id": "P22-T10-20260910-115039-bb4dcd",
+      "participant_id": "P22",
+      "trial_id": "T10",
+      "block_label": "C",
+      "within_block_trial": 3,
+      "controller_condition": "fixed zone",
+      "planned_event": "clean",
+      "outcome": "completed",
+      "quality_grade": "good",
+      "quality_score": 100,
+      "quality_reasons": [
+        "all phases captured in order with stable tracking"
+      ],
+      "samples": 4761,
+      "duration_s": 95.1,
+      "rate_hz": 50.1,
+      "selected_for_analysis": true,
+      "selection_reason": "completed capture with quality grade good",
+      "files": [
+        {
+          "name": "P22-T10-20260910-115039-bb4dcd.jsonl",
+          "bytes": 43749790,
+          "sha256": "a7e227064808295faebef32e239b5a6ebf7ca9f9243f4df566120f69c8788b7d"
+        },
+        {
+          "name": "P22-T10-20260910-115039-bb4dcd.events.jsonl",
+          "bytes": 832152,
+          "sha256": "7f4f12dabc45bb3bd2d994f0adfeba19e72bdb4d0198c58d64937c698916f027"
+        },
+        {
+          "name": "P22-T10-20260910-115039-bb4dcd.manifest.json",
+          "bytes": 2209,
+          "sha256": "4101acda59c8a1a3d4f93108926f432e86b2d358cef6f4b8ad19dc94926f48b3"
+        }
+      ]
+    },
+    {
+      "session_id": "P23-T01-20260910-120902-2a19d1",
+      "participant_id": "P23",
+      "trial_id": "T01",
+      "block_label": "A",
+      "within_block_trial": 1,
+      "controller_condition": "predictive SSM",
+      "planned_event": "rapid intrusion",
+      "outcome": "aborted",
+      "quality_grade": "good",
+      "quality_score": 85,
+      "quality_reasons": [
+        "phase order or completion differs from the guided run"
+      ],
+      "samples": 4017,
+      "duration_s": 84.2,
+      "rate_hz": 47.7,
+      "selected_for_analysis": false,
+      "selection_reason": "excluded: outcome aborted",
+      "files": [
+        {
+          "name": "P23-T01-20260910-120902-2a19d1.jsonl",
+          "bytes": 37778912,
+          "sha256": "05c8e07957ab035f0d559d56adc8fc86a0a909e7ae511a83ad01296cce57c964"
+        },
+        {
+          "name": "P23-T01-20260910-120902-2a19d1.events.jsonl",
+          "bytes": 743060,
+          "sha256": "b64ee63339e1985f5968e8a22afe4505934a84009e3a9652ce91568c985cebdb"
+        },
+        {
+          "name": "P23-T01-20260910-120902-2a19d1.manifest.json",
+          "bytes": 2264,
+          "sha256": "01319f9e67b1a27a6d778cb9c4adbac8988e7eb966870218c854c47b02a475c7"
+        }
+      ]
+    },
+    {
+      "session_id": "P23-T02-20260910-121138-c84e16",
+      "participant_id": "P23",
+      "trial_id": "T02",
+      "block_label": "A",
+      "within_block_trial": 2,
+      "controller_condition": "predictive SSM",
+      "planned_event": "clean",
+      "outcome": "aborted",
+      "quality_grade": "review",
+      "quality_score": 75,
+      "quality_reasons": [
+        "phase order or completion differs from the guided run",
+        "too little approaching data"
+      ],
+      "samples": 14824,
+      "duration_s": 295.5,
+      "rate_hz": 50.2,
+      "selected_for_analysis": false,
+      "selection_reason": "excluded: outcome aborted",
+      "files": [
+        {
+          "name": "P23-T02-20260910-121138-c84e16.jsonl",
+          "bytes": 139287920,
+          "sha256": "48e7b45d3fabb24359febd1f07954286a7a9f18d5c008babf440d6a29c2aedcd"
+        },
+        {
+          "name": "P23-T02-20260910-121138-c84e16.events.jsonl",
+          "bytes": 2559316,
+          "sha256": "46c4fe1bb692f3e7dd3760c7a1c7914b418739dfbceb7f8bac87adf0ca885552"
+        },
+        {
+          "name": "P23-T02-20260910-121138-c84e16.manifest.json",
+          "bytes": 2352,
+          "sha256": "18d8647a8a46be38f595b5ed948c744dd1567b6f825356767a5d95608b9cf2f5"
+        }
+      ]
+    },
+    {
+      "session_id": "P24-T01-20260910-122319-588c2d",
+      "participant_id": "P24",
+      "trial_id": "T01",
+      "block_label": "A",
+      "within_block_trial": 1,
+      "controller_condition": "predictive SSM",
+      "planned_event": "rapid intrusion",
+      "outcome": "completed",
+      "quality_grade": "good",
+      "quality_score": 85,
+      "quality_reasons": [
+        "capture rate is 23.0 Hz"
+      ],
+      "samples": 2633,
+      "duration_s": 114.2,
+      "rate_hz": 23.0,
+      "selected_for_analysis": true,
+      "selection_reason": "completed capture with quality grade good",
+      "files": [
+        {
+          "name": "P24-T01-20260910-122319-588c2d.jsonl",
+          "bytes": 55359934,
+          "sha256": "12fb432390ef9d636d58d8c35a61cfc8fdfd5cb37d959b85845294f9d4d6f3b3"
+        },
+        {
+          "name": "P24-T01-20260910-122319-588c2d.events.jsonl",
+          "bytes": 946743,
+          "sha256": "c0ade6d223fd6bdab6e5c7b6b8238f4df8f993082f91eea64703e33efda925f2"
+        },
+        {
+          "name": "P24-T01-20260910-122319-588c2d.manifest.json",
+          "bytes": 9887,
+          "sha256": "2f90579b2abb7145db8695b05f46bb32cab31e114d9c2cba447f5e80618bad21"
+        }
+      ]
+    },
+    {
+      "session_id": "P24-T02-20260910-122532-343a8b",
+      "participant_id": "P24",
+      "trial_id": "T02",
+      "block_label": "A",
+      "within_block_trial": 2,
+      "controller_condition": "predictive SSM",
+      "planned_event": "distractor",
+      "outcome": "completed",
+      "quality_grade": "review",
+      "quality_score": 85,
+      "quality_reasons": [
+        "capture rate is 23.6 Hz",
+        "The distractor window includes rapid closing or boundary entry; review the event annotation."
+      ],
+      "samples": 2988,
+      "duration_s": 126.5,
+      "rate_hz": 23.6,
+      "selected_for_analysis": false,
+      "selection_reason": "excluded: quality grade review",
+      "files": [
+        {
+          "name": "P24-T02-20260910-122532-343a8b.jsonl",
+          "bytes": 62410736,
+          "sha256": "dbf7dd0e92e908f240d2931c268a851d25543b726356326548e617be8569ed75"
+        },
+        {
+          "name": "P24-T02-20260910-122532-343a8b.events.jsonl",
+          "bytes": 1061059,
+          "sha256": "fdcccdb85f78a52d242cb5296b3ec13ded9bb611bfadd64e0a464339ab006bf1"
+        },
+        {
+          "name": "P24-T02-20260910-122532-343a8b.manifest.json",
+          "bytes": 10086,
+          "sha256": "1a549900c9fdb2aa9deb1dae02ed144711febfeab00e846af212098482f5059c"
+        }
+      ]
+    },
+    {
+      "session_id": "P24-T03-20260910-122802-bf1aac",
+      "participant_id": "P24",
+      "trial_id": "T03",
+      "block_label": "A",
+      "within_block_trial": 2,
+      "controller_condition": "predictive SSM",
+      "planned_event": "distractor",
+      "outcome": "completed",
+      "quality_grade": "review",
+      "quality_score": 85,
+      "quality_reasons": [
+        "capture rate is 23.6 Hz",
+        "The distractor window includes rapid closing or boundary entry; review the event annotation."
+      ],
+      "samples": 3233,
+      "duration_s": 137.2,
+      "rate_hz": 23.6,
+      "selected_for_analysis": false,
+      "selection_reason": "excluded: quality grade review",
+      "files": [
+        {
+          "name": "P24-T03-20260910-122802-bf1aac.jsonl",
+          "bytes": 67974275,
+          "sha256": "bc59beedb98910682aaa3b391341ba8aa8da8ffdb058c408d1a179f5a80f4650"
+        },
+        {
+          "name": "P24-T03-20260910-122802-bf1aac.events.jsonl",
+          "bytes": 1146695,
+          "sha256": "1a1d7ea6c9d57d43cb7d9334ad1921c041dc58e8e6b34277fec2f2cb1c3f50e4"
+        },
+        {
+          "name": "P24-T03-20260910-122802-bf1aac.manifest.json",
+          "bytes": 10086,
+          "sha256": "59db3a80bc8742ae68ce0eb94ab84ef60ee97b27fdd2e172a3d88bcfe50a808c"
+        }
+      ]
+    }
+  ],
+  "archives": [
+    {
+      "file": "P22-good-captures-2026-09-10.zip",
+      "participant_id": "P22",
+      "bytes": 83798231,
+      "sha256": "fd259d11d6c4e0b874888da4564df9511929b2f9b079f5001cf48da2bd646b82",
+      "capture_count": 8
+    },
+    {
+      "file": "P24-good-captures-2026-09-10.zip",
+      "participant_id": "P24",
+      "bytes": 15393998,
+      "sha256": "3c91dc9bed587db0a845155000cb6b8121f73bb3f9ee80a7d571fe2f75f68583",
+      "capture_count": 1
+    }
+  ],
+  "participant_registry": {
+    "file": "participants-2026-09-10.json",
+    "bytes": 3641,
+    "sha256": "2c791f804bcc4985057986ffc64e11516aac45634bd98770e8a9cdd05d2ae0b6"
+  }
+}
