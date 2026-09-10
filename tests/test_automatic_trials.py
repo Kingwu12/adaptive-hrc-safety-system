@@ -558,6 +558,23 @@ def test_release_is_blocked_without_stationary_telemetry(qd, age):
     assert not any(a[0] == "release" for a in rig.actions)
 
 
+def test_stale_cached_stationary_telemetry_is_refreshed_before_start():
+    clock = FakeClock()
+    state, rig = State(clock), Rig()
+    runner = AutomaticRunController(state, rig, clock, enabled=True)
+    refreshed = []
+    rig.telemetry_snapshot = lambda: {
+        "available": True, "actual_qd": [0.0] * 6, "source_age_s": 2.0,
+    }
+    rig.fresh_telemetry_snapshot = lambda: refreshed.append(True) or {
+        "available": True, "actual_qd": [0.0] * 6, "source_age_s": 0.0,
+    }
+
+    runner._require_stationary()
+
+    assert refreshed == [True]
+
+
 def test_catalog_rechecks_completed_manifest_and_keeps_block_trial_slot(tmp_path):
     import json
     path = tmp_path / "Q01-T01-test.jsonl"

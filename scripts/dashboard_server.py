@@ -1564,6 +1564,41 @@ class RigControl:
             return {"available": False, "error": f"{type(exc).__name__}: {exc}"}
         return result
 
+    def fresh_telemetry_snapshot(self) -> dict:
+        """Read one independent RTDE sample after a cached receiver goes stale.
+
+        The long-lived receiver can retain its final sample after a robot
+        restart.  Trial preflight must not confuse that stale cache with a
+        moving arm, so an explicit start may verify the current joint velocity
+        through a short-lived connection instead.
+        """
+        recv = None
+        try:
+            with socket.create_connection((self.robot_host, 30004), timeout=0.25):
+                pass
+            from rtde_receive import RTDEReceiveInterface
+            recv = RTDEReceiveInterface(self.robot_host)
+            source_time = float(recv.getTimestamp())
+            qd = [float(value) for value in recv.getActualQd()]
+            if (not math.isfinite(source_time) or len(qd) != 6
+                    or not all(math.isfinite(value) for value in qd)):
+                raise ValueError("Invalid fresh RTDE stationary sample")
+            return {
+                "available": True,
+                "sampled_monotonic_s": round(time.monotonic(), 6),
+                "source_timestamp_s": source_time,
+                "source_age_s": 0.0,
+                "actual_qd": [round(value, 6) for value in qd],
+            }
+        except Exception as exc:
+            return {"available": False, "error": f"{type(exc).__name__}: {exc}"}
+        finally:
+            if recv is not None:
+                try:
+                    recv.disconnect()
+                except Exception:
+                    pass
+
     def apply_research_speed_fraction(self, speed_fraction: float) -> dict:
         """Write the UR speed slider for the research controller.
 
@@ -2475,6 +2510,17 @@ class AutomaticRunController(GuidedRunController):
 
     def _require_stationary(self):
         telemetry = self.rig.telemetry_snapshot()
+        qd = telemetry.get("actual_qd") or []
+        structurally_fresh = (
+            telemetry.get("available")
+            and len(qd) == 6
+            and 0 <= float(telemetry.get("source_age_s", math.inf)) <= 0.25
+            and all(math.isfinite(float(v)) for v in qd)
+        )
+        if not structurally_fresh:
+            refresh = getattr(self.rig, "fresh_telemetry_snapshot", None)
+            if callable(refresh):
+                telemetry = refresh()
         qd = telemetry.get("actual_qd") or []
         if (not telemetry.get("available") or len(qd) != 6
                 or not 0 <= float(telemetry.get("source_age_s", math.inf)) <= 0.25
