@@ -175,6 +175,12 @@ function studySchedule(participantId: string): StudySlot[] {
   });
 }
 
+function acceptsStudyRun(run: RunSummary) {
+  // REVIEW means the capture completed but needs later annotation/audit. Keep
+  // it in the study schedule; only an incomplete or REPEAT capture is rerun.
+  return run.completed === true && run.quality.grade !== "repeat";
+}
+
 const GUIDED_PROTOCOL = [
   {
     label: "unlabelled", title: "GET READY",
@@ -750,7 +756,7 @@ export default function Home() {
   const nextTrial = selectedParticipant?.next_trial ?? "T01";
   const schedule = studySchedule(participant || "P01");
   const acceptedStudyKeys = new Set(participantRuns
-    .filter(run => run.completed === true && run.quality.grade === "good")
+    .filter(acceptsStudyRun)
     .map(run => `${run.block_label}-${run.within_block_trial}`));
   const nextStudySlot = schedule.find(slot =>
     !acceptedStudyKeys.has(`${slot.block}-${slot.withinBlockTrial}`));
@@ -1105,7 +1111,7 @@ export default function Home() {
               <div className="trialMatrix">
                 {schedule.map(slot => {
                   const matches = participantRuns.filter(run => run.block_label === slot.block && run.within_block_trial === slot.withinBlockTrial);
-                  const accepted = matches.some(run => run.completed === true && run.quality.grade === "good");
+                  const accepted = matches.some(acceptsStudyRun);
                   const attempted = matches.length > 0;
                   return <div key={`${slot.block}-${slot.withinBlockTrial}`} className={accepted ? "trialSlot accepted" : attempted ? "trialSlot repeat" : "trialSlot"}>
                     <span>{slot.block}{slot.withinBlockTrial}</span><strong>{slot.event}</strong><small>{accepted ? "✓ accepted" : attempted ? "repeat" : "waiting"}</small>
