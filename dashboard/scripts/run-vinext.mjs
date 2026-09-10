@@ -2,7 +2,11 @@
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 const cli = fileURLToPath(new URL("../node_modules/vinext/dist/cli.js", import.meta.url));
-const child = spawn(process.execPath, [cli, ...process.argv.slice(2)], {
+const args = process.argv.slice(2);
+const preload = process.platform === "win32" && args[0] === "start"
+  ? ["--import", new URL("./windows-static-cache.mjs", import.meta.url).href]
+  : [];
+const child = spawn(process.execPath, [...preload, cli, ...args], {
   stdio: "inherit",
   env: { ...process.env, WRANGLER_LOG_PATH: ".wrangler/wrangler.log" },
 });
