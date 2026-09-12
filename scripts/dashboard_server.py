@@ -103,6 +103,19 @@ PARTICIPANT_FORM_URLS = {
     "end": "https://docs.google.com/forms/d/e/1FAIpQLSd4gfX2ljOfRFxyeYq2B-haGNhENzA6dCjnmhYTIXGpVxc87g/viewform",
 }
 
+SERVICE_CONTRACT = "adaptive-hrc-lab-backend-v1"
+
+
+def service_identity() -> dict:
+    """Identify the exact backend process and source file serving this API."""
+    source = Path(__file__).resolve()
+    return {
+        "contract": SERVICE_CONTRACT,
+        "pid": os.getpid(),
+        "started_at": datetime.now(timezone.utc).isoformat(),
+        "source_sha256": hashlib.sha256(source.read_bytes()).hexdigest(),
+    }
+
 
 def safe_id(value: object, fallback: str) -> str:
     clean = re.sub(r"[^A-Za-z0-9_-]+", "-", str(value or "").strip()).strip("-")
@@ -569,6 +582,7 @@ class DashboardState:
         self.study_release = None
         self.runtime_release = release_fingerprint(
             Path(__file__).resolve().parents[1], self.model_sha256, self.config)
+        self.service = service_identity()
         self.event_exposure = EventExposure(self.config)
         self.geometry_reference = {"source": "unavailable", "tcp_position_m": None}
         self.pipeline_error = None
@@ -1361,6 +1375,7 @@ class DashboardState:
                 rate = (len(recent) - 1) / max(recent[-1] - recent[0], 1e-6)
             calibration_elapsed = None if self.calibration_started is None else now - self.calibration_started
             return {
+                "service": dict(self.service),
                 "connected": self.connected,
                 "packets": self.packets,
                 "packet_rate_hz": round(rate, 1),
@@ -3157,6 +3172,8 @@ def main() -> int:
     parser.add_argument("--allow-remote-control", action="store_true", help="let shared-network browsers record and label")
     parser.add_argument("--http-port", type=int, default=8765)
     parser.add_argument("--udp-port", type=int, default=9763)
+    parser.add_argument("--optitrack-data-port", type=int, default=1511,
+                        help="NatNet multicast data port (default: 1511)")
     parser.add_argument("--segment", type=int, default=PELVIS)
     parser.add_argument("--out", default="data/xsens")
     parser.add_argument("--enable-automatic-trials", action="store_true",
@@ -3189,6 +3206,7 @@ def main() -> int:
         state.optitrack_bridge,
         head_rigid_body_id=1,
         local_address="127.0.0.1",
+        data_port=args.optitrack_data_port,
         monitor=optitrack_monitor,
         nominal_rate_hz=120.0,
     )

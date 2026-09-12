@@ -29,8 +29,10 @@ three controllers, three scenarios, nine-trial schedule, five questionnaire hand
 operator roles, measurements, analysis logic and no-go boundaries in one place.
 
 Automatic grip/retreat/lift/lower sequencing supports **P-code participant studies
-and Q-code rehearsals**, using the same checks and sequence. Run `Start-Lab.ps1`
-on Windows. Read [the automatic-trial handoff](docs/automatic-trial-qualification.md)
+and Q-code rehearsals**, using the same checks and sequence. On Windows, run
+`Setup-Lab.cmd` once, then double-click `Check-Lab.cmd` and `Start-Lab.cmd`.
+The `.cmd` launchers use a process-only PowerShell policy bypass; they do not weaken
+the machine-wide policy. Read [the automatic-trial handoff](docs/automatic-trial-qualification.md)
 for operation, physical setup assumptions, tests and fault behaviour.
 
 **Participant-day materials:** print the [participant handout](output/pdf/participant-handout.pdf)

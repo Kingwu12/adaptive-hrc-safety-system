@@ -8,12 +8,20 @@ restriction was an administrative software gate, not a different physical
 algorithm. Collection mode determines data classification; it does not weaken
 grip, tracking, pose, supported-release, stop or watchdog checks.
 
-Start the updated service with `Start-Lab.ps1`, select the desired collection
-mode, and press Start trial. Sample and event files are created automatically;
+Run `Setup-Lab.cmd` once on a new checkout. Before a session, double-click
+`Check-Lab.cmd`, then `Start-Lab.cmd`, select the desired collection mode, and
+press Start trial. Sample and event files are created automatically;
 observed task completion remains explicit. No native recording, filename entry
 or manual shared-sync marker is required. The dashboard reports if an older
 rehearsal-only backend is still running instead of silently switching to manual.
-The launcher does not stop an unknown existing service.
+The CMD launchers work even when Windows blocks unsigned PowerShell scripts because
+they apply `ExecutionPolicy Bypass` only to that one child process. `Start-Lab.cmd`
+starts clean services whenever no trial is active. It replaces a listener only when
+Windows proves that the executable and command line belong to this checkout. It
+refuses to kill unknown processes and refuses to restart an active recording or
+automatic cycle. The backend reports its startup-time source SHA-256, and the
+launcher requires that digest through both ports 8765 and 3000 before printing
+`LAB READY`. This prevents a pulled checkout from silently using an old hidden backend.
 
 This implementation was tested locally with simulated hardware and a real local
 HTTP service. It has not been deployed to or physically checked on the offline
