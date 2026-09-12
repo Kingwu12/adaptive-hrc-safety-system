@@ -1,7 +1,12 @@
 from __future__ import annotations
 
 import hashlib
+import os
+import shutil
+import subprocess
 from pathlib import Path
+
+import pytest
 
 from scripts.dashboard_server import SERVICE_CONTRACT, service_identity
 
@@ -26,11 +31,15 @@ def test_cmd_launcher_bypasses_policy_only_for_child_process():
     assert "Set-ExecutionPolicy" not in launcher
 
 
-def test_launcher_requires_source_proof_and_protects_active_trials():
-    launcher = (ROOT / "Start-Lab.ps1").read_text(encoding="utf-8")
-
-    assert "source_sha256" in launcher
-    assert "Get-FileHash -Algorithm SHA256" in launcher
-    assert "if ($labTrialActive)" in launcher
-    assert "The launcher will not kill it" in launcher
-    assert "LAB READY" in launcher
+def test_powershell_launcher_failure_paths():
+    runtime = os.environ.get("HRC_TEST_PWSH") or shutil.which("pwsh") or shutil.which("powershell")
+    if runtime is None:
+        pytest.skip("PowerShell required; set HRC_TEST_PWSH to a portable runtime")
+    result = subprocess.run(
+        [runtime, "-NoLogo", "-NoProfile", "-File",
+         str(ROOT / "tests" / "test_windows_launcher.ps1"),
+         "-LauncherPath", str(ROOT / "Start-Lab.ps1")],
+        capture_output=True, text=True, timeout=30,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "LAUNCHER CHECKS PASSED" in result.stdout

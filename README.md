@@ -34,6 +34,8 @@ and Q-code rehearsals**, using the same checks and sequence. On Windows, run
 The `.cmd` launchers use a process-only PowerShell policy bypass; they do not weaken
 the machine-wide policy. Read [the automatic-trial handoff](docs/automatic-trial-qualification.md)
 for operation, physical setup assumptions, tests and fault behaviour.
+For a policy or backend error, use [Windows diagnosis and repair](docs/windows-startup-repair.md)
+before retrying launchers. Existing services are never automatically terminated.
 
 **Participant-day materials:** print the [participant handout](output/pdf/participant-handout.pdf)
 for participants and the [operator session script](output/pdf/operator-session-script.pdf)

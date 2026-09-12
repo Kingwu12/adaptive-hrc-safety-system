@@ -14,14 +14,18 @@ press Start trial. Sample and event files are created automatically;
 observed task completion remains explicit. No native recording, filename entry
 or manual shared-sync marker is required. The dashboard reports if an older
 rehearsal-only backend is still running instead of silently switching to manual.
-The CMD launchers work even when Windows blocks unsigned PowerShell scripts because
-they apply `ExecutionPolicy Bypass` only to that one child process. `Start-Lab.cmd`
-starts clean services whenever no trial is active. It replaces a listener only when
-Windows proves that the executable and command line belong to this checkout. It
-refuses to kill unknown processes and refuses to restart an active recording or
-automatic cycle. The backend reports its startup-time source SHA-256, and the
-launcher requires that digest through both ports 8765 and 3000 before printing
-`LAB READY`. This prevents a pulled checkout from silently using an old hidden backend.
+The CMD launchers apply `ExecutionPolicy Bypass` to one child process. This handles
+ordinary PowerShell script restrictions; administrator-managed Group Policy still
+takes precedence. The original Windows policy error has not been recovered, so
+this is not proof that PowerShell caused the lab failure.
+
+The launcher never terminates existing processes. It reuses a compatible backend
+or reports the exact mismatch. A timeout or failed port inspection means unknown
+state, never evidence that no trial is active. Resolve the rig/recording state
+before deliberately shutting down an older service. The launcher checks the
+startup-time backend source SHA-256 and process ID through both ports 8765 and
+3000 before printing `SERVICES READY`. This is a software check, not physical
+qualification. See [Windows diagnosis and repair](windows-startup-repair.md).
 
 This implementation was tested locally with simulated hardware and a real local
 HTTP service. It has not been deployed to or physically checked on the offline
