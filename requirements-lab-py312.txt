@@ -1,0 +1,11 @@
+# Reproducible lab environment, validated on Python 3.12.
+# Do not replace an existing working lab environment during an active session.
+numpy==2.5.1
+scipy==1.18.1
+PyYAML==6.0.3
+ur-rtde==1.6.3
+scikit-learn==1.9.0
+pytest==9.1.1
+setuptools==80.9.0
+wheel==0.45.1
+colorama==0.4.6

@@ -1,8 +1,8 @@
 @echo off
 setlocal
 cd /d "%~dp0"
-powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%~dp0Start-Lab.ps1" -CheckOnly
+call "%~dp0scripts\Run-Lab.cmd" check %*
 set "LAB_EXIT=%ERRORLEVEL%"
 echo.
-pause
+if not "%HRC_NONINTERACTIVE%"=="1" pause
 exit /b %LAB_EXIT%

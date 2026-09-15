@@ -1376,6 +1376,7 @@ class DashboardState:
             calibration_elapsed = None if self.calibration_started is None else now - self.calibration_started
             return {
                 "service": dict(self.service),
+                "runtime_files": dict(self.runtime_release["files"]),
                 "connected": self.connected,
                 "packets": self.packets,
                 "packet_rate_hz": round(rate, 1),
@@ -2474,7 +2475,7 @@ class AutomaticRunController(GuidedRunController):
             raise ValueError("A recording is already active")
         if automatic:
             if not self.enabled:
-                raise ValueError("Automatic trials require --enable-automatic-trials; restart the service with Start-Lab.ps1")
+                raise ValueError("Automatic trials require --enable-automatic-trials; restart the service with Start-Lab.cmd after establishing idle rig state")
             mode = kwargs.get("collection_mode")
             prefix = self.COLLECTION_PREFIXES.get(mode)
             if prefix is None:

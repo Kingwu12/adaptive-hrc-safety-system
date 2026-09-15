@@ -1,0 +1,86 @@
+name: Windows lab readiness
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '**.py'
+      - '**.cmd'
+      - '**.ps1'
+      - 'requirements-lab-py312.txt'
+      - 'dashboard/**'
+      - 'configs/**'
+      - '.github/workflows/windows-lab.yml'
+permissions:
+  contents: read
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: pwsh
+        working-directory: lab checkout
+    env:
+      HRC_NONINTERACTIVE: '1'
+      PYTHONUTF8: '1'
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          path: lab checkout
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Prepare Windows offline dependencies
+        run: |
+          python -m pip download --only-binary=:all: --dest .lab-offline/wheels -r requirements-lab-py312.txt
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Push-Location dashboard
+          npm.cmd ci --include=dev --cache ../.lab-offline/npm
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Pop-Location
+          # This checkout belongs only to this disposable CI runner.
+          Remove-Item dashboard/node_modules -Recurse -Force
+      - name: Fresh installation from offline cache using actual CMD setup
+        run: |
+          cmd.exe /d /c Setup-Lab.cmd
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          .venv/Scripts/python.exe -m pip freeze | Out-File -Encoding utf8 .lab-offline/python-installed.txt
+          node --version | Out-File -Encoding utf8 .lab-offline/node-version.txt
+          git rev-parse HEAD | Out-File -Encoding utf8 .lab-offline/source-commit.txt
+      - name: Full Python regression suite
+        run: .venv/Scripts/python.exe -m pytest --junitxml=.lab-offline/python-tests.xml
+      - name: Dashboard behavior, lint and production build
+        working-directory: lab checkout/dashboard
+        run: |
+          npm.cmd run lint
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm.cmd test
+          exit $LASTEXITCODE
+      - name: CMD startup with PowerShell script execution restricted
+        run: |
+          $env:PSExecutionPolicyPreference = 'Restricted'
+          if ((Get-ExecutionPolicy -Scope Process) -ne 'Restricted') { throw 'Restricted process policy was not set' }
+          try {
+            & ./Start-Lab.ps1 -CheckOnly
+            throw 'Negative control failed: PowerShell script was allowed'
+          } catch [System.Management.Automation.PSSecurityException] {
+            Write-Output 'Confirmed: .ps1 execution is blocked in this process.'
+          }
+          .venv/Scripts/python.exe scripts/windows_lab_smoke.py
+          exit $LASTEXITCODE
+      - uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: windows-lab-offline
+          include-hidden-files: true
+          compression-level: 6
+          path: |
+            lab checkout/.lab-offline/wheels
+            lab checkout/.lab-offline/npm/_cacache
+            lab checkout/.lab-offline/*.txt
+            lab checkout/.lab-offline/*.json
+            lab checkout/.lab-offline/*.xml
