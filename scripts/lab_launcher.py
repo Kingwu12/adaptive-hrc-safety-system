@@ -389,7 +389,7 @@ def start(report, *, no_browser=False, root=ROOT):
         assert_dashboard(proxy, listeners()[3000], direct, expected_hash)
         if proxy is None:
             child = launch_process([checks["node"]["path"], "scripts/run-vinext.mjs", "dev",
-                                    "--host", "127.0.0.1", "--port", "3000", "--strictPort"], root / "dashboard", "dashboard", root)
+                                    "--hostname", "127.0.0.1", "--port", "3000"], root / "dashboard", "dashboard", root)
             proxy = wait_status(3000, child, expected_hash, backend=direct, timeout=90)
     print("SERVICES READY (hardware and trial preflight still required)")
     print(f"Backend PID {direct['service']['pid']}; source {expected_hash}")
