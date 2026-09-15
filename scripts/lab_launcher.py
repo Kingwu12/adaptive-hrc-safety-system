@@ -116,6 +116,66 @@ def require_free(port):
         raise Blocked(f"Port {port} is occupied or bind is denied: {exc}") from exc
 
 
+def windows_parent_pids():
+    """Read native process ancestry without PowerShell or a third-party package.
+
+    Windows venv python.exe is a redirector: its interpreter child owns HTTP.
+    Source identity plus listener PID must still match before checking ancestry.
+    """
+    import ctypes
+    from ctypes import wintypes
+
+    class ProcessEntry(ctypes.Structure):
+        _fields_ = [("size", wintypes.DWORD), ("usage", wintypes.DWORD),
+                    ("pid", wintypes.DWORD), ("heap", ctypes.c_size_t),
+                    ("module", wintypes.DWORD), ("threads", wintypes.DWORD),
+                    ("parent", wintypes.DWORD), ("priority", wintypes.LONG),
+                    ("flags", wintypes.DWORD), ("exe", wintypes.WCHAR * 260)]
+
+    kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel.CreateToolhelp32Snapshot.argtypes = (wintypes.DWORD, wintypes.DWORD)
+    kernel.CreateToolhelp32Snapshot.restype = wintypes.HANDLE
+    for name in ("Process32FirstW", "Process32NextW"):
+        fn = getattr(kernel, name)
+        fn.argtypes = (wintypes.HANDLE, ctypes.POINTER(ProcessEntry))
+        fn.restype = wintypes.BOOL
+    kernel.CloseHandle.argtypes = (wintypes.HANDLE,)
+    kernel.CloseHandle.restype = wintypes.BOOL
+    handle = kernel.CreateToolhelp32Snapshot(2, 0)  # TH32CS_SNAPPROCESS, read-only
+    if handle == ctypes.c_void_p(-1).value:
+        raise Blocked(f"Cannot inspect Windows process ancestry: {ctypes.WinError(ctypes.get_last_error())}")
+    try:
+        entry = ProcessEntry()
+        entry.size = ctypes.sizeof(entry)
+        if not kernel.Process32FirstW(handle, ctypes.byref(entry)):
+            raise Blocked(f"Cannot enumerate Windows processes: {ctypes.WinError(ctypes.get_last_error())}")
+        parents = {}
+        while True:
+            parents[entry.pid] = entry.parent
+            if not kernel.Process32NextW(handle, ctypes.byref(entry)):
+                if ctypes.get_last_error() != 18:  # ERROR_NO_MORE_FILES
+                    raise Blocked(f"Incomplete Windows process snapshot: {ctypes.WinError(ctypes.get_last_error())}")
+                break
+        return parents
+    finally:
+        kernel.CloseHandle(handle)
+
+
+def assert_started_process(service_pid, launched_pid, parents=None):
+    if service_pid == launched_pid:
+        return
+    if parents is None:
+        parents = windows_parent_pids() if os.name == "nt" else {}
+    seen = set()
+    current = service_pid
+    while current in parents and current not in seen:
+        seen.add(current)
+        current = parents[current]
+        if current == launched_pid:
+            return
+    raise Blocked(f"Backend PID {service_pid} is not the launched process {launched_pid} or its verified interpreter child")
+
+
 def status(port, timeout=5):
     # Windows can take over two seconds to report WSAECONNREFUSED even on
     # loopback. A shorter deadline misclassifies a closed port as unknown.
@@ -299,8 +359,7 @@ def wait_status(port, child, expected_hash, backend=None, timeout=60, root=ROOT)
             owners = listeners()
             if port == 8765:
                 assert_backend(value, owners[port], expected_hash, root)
-                if value["service"]["pid"] != child.pid:
-                    raise Blocked("Port 8765 was taken by a different process during startup")
+                assert_started_process(value["service"]["pid"], child.pid)
             else:
                 assert_dashboard(value, owners[port], backend, expected_hash)
             return value

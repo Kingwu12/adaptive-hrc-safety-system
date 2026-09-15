@@ -23,6 +23,17 @@ def test_backend_identity_binds_process_to_loaded_source():
     assert identity['source_sha256'] == hashlib.sha256((ROOT / 'scripts/dashboard_server.py').read_bytes()).hexdigest()
 
 
+def test_windows_venv_interpreter_child_is_verified():
+    lab.assert_started_process(789, 123, {789: 456, 456: 123, 123: 1})
+    lab.assert_started_process(123, 123, {})
+
+
+@pytest.mark.parametrize('parents', [{789: 999, 999: 1}, {}, {789: 456, 456: 789}])
+def test_unrelated_or_unknown_backend_never_passes_as_our_child(parents):
+    with pytest.raises(lab.Blocked, match='not the launched process'):
+        lab.assert_started_process(789, 123, parents)
+
+
 @pytest.fixture
 def backend(tmp_path):
     (tmp_path / 'source.py').write_text('loaded source')
