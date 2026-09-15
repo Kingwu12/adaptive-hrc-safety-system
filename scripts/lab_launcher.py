@@ -351,7 +351,7 @@ def wait_status(port, child, expected_hash, backend=None, timeout=60, root=ROOT)
         if child.poll() is not None:
             raise Blocked(f"Service on port {port} exited {child.returncode}; read its .err.log")
         try:
-            value = status(port, timeout=1)
+            value = status(port, timeout=min(5, max(1, deadline - time.monotonic())))
         except Blocked as exc:
             last_error = str(exc)
             value = None

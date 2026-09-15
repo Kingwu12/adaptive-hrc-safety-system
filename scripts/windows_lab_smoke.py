@@ -64,4 +64,21 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    try:
+        main()
+    except Exception:
+        # This is a disposable CI host, never the lab. Keep diagnostic evidence
+        # before the runner disappears, with control keys redacted.
+        print('WINDOWS FAILURE DIAGNOSTICS', flush=True)
+        try:
+            print('Native listeners:', lab.listeners(), flush=True)
+            for port in lab.PORTS:
+                try:
+                    print(port, json.dumps(lab.safe_status(lab.status(port))), flush=True)
+                except Exception as exc:
+                    print(port, lab.redact(exc), flush=True)
+        except Exception as exc:
+            print(lab.redact(exc), flush=True)
+        for path in sorted((ROOT / 'data/service-logs').glob('*.log')):
+            print(path.name, lab.redact(path.read_text(errors='replace')[-12000:]), flush=True)
+        raise
