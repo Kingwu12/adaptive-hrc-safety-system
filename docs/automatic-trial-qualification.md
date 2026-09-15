@@ -1,8 +1,8 @@
 # Automatic panel trials: participant and rehearsal handoff
 
-## Shared participant/rehearsal engine with automatic capture (v6, 2026-09-09)
+## Shared participant/rehearsal engine (v7, source checked 2026-09-15)
 
-`automatic-panel-v6-stream-capture` runs the same guarded sequence in
+`automatic-panel-v7-helmet-body-task` runs the same guarded sequence in
 Participant study (P-codes) and Qualification (Q-codes). The earlier Q-only
 restriction was an administrative software gate, not a different physical
 algorithm. Collection mode determines data classification; it does not weaken
@@ -11,10 +11,12 @@ grip, tracking, pose, supported-release, stop or watchdog checks.
 Run `Setup-Lab.cmd` once on a new checkout. Before a session, double-click
 `Check-Lab.cmd`, then `Start-Lab.cmd`, select the desired collection mode, and
 press Start trial. Sample and event files are created automatically;
-observed task completion remains explicit. No native recording, filename entry
+task completion follows the configured tracked-gesture or operator-confirmed mode.
+No native recording, filename entry
 or manual shared-sync marker is required. The dashboard reports if an older
-rehearsal-only backend is still running instead of silently switching to manual.
-The CMD launchers apply `ExecutionPolicy Bypass` to one child process. This handles
+rehearsal-only or automation-disabled backend is running and refuses to silently
+switch a structured trial to manual mode.
+Start-Lab.cmd and Check-Lab.cmd apply `ExecutionPolicy Bypass` to one child process. This handles
 ordinary PowerShell script restrictions; administrator-managed Group Policy still
 takes precedence. The original Windows policy error has not been recovered, so
 this is not proof that PowerShell caused the lab failure.
@@ -27,9 +29,9 @@ startup-time backend source SHA-256 and process ID through both ports 8765 and
 3000 before printing `SERVICES READY`. This is a software check, not physical
 qualification. See [Windows diagnosis and repair](windows-startup-repair.md).
 
-This implementation was tested locally with simulated hardware and a real local
-HTTP service. It has not been deployed to or physically checked on the offline
-lab PC. Earlier operator-confirmed data stays unchanged and separately identified.
+Local tests and HTTP checks do not establish the central Windows PC's current
+deployment or physical readiness. Recheck that computer and rig for each session.
+Earlier operator-confirmed data stays unchanged and separately identified.
 
 ## Windows revision: supported low release (2026-09-09)
 
@@ -53,7 +55,7 @@ those timings with future automatic runs without addressing the protocol change.
 
 One server-owned cycle, independent of which of the three safety controllers is
 assigned. Browser refresh does not restart or advance the cycle.
-The current source runner is `automatic-panel-v6-stream-capture`: the server supplies the seven-stage
+The current source runner is `automatic-panel-v7-helmet-body-task`: the server supplies the seven-stage
 instruction and the dashboard shows a button only when confirmation is needed.
 It no longer presents the old ten-step manual sequence as the automatic workflow.
 
@@ -73,14 +75,19 @@ It no longer presents the old ten-step manual sequence as the automatic workflow
    speed/stop during that same trajectory; the sequencer does not impose its
    launch-clearance condition throughout the scored motion window.
 5. At the verified top pose, suction stays on. Participant approaches and performs
-   the agreed task. Operator confirms **Task complete**; the system cannot sense
-   successful assembly from vacuum or the HMM.
+   the agreed task. When `drilling_task.automatic_completion` is enabled, four
+   tracked hand dwells at the panel corners complete the simulated drilling task.
+   Otherwise, the operator confirms the task using the displayed action.
+   Detected gestures do not establish successful physical assembly.
 6. Sustained retreat triggers automatic lowering. Suction stays on.
 7. At the verified low pose, the panel rests on the established rigid gripper
    support. After two stationary seconds at that pose, release once and save.
    There is no unattended repeat loop.
 
-Only start and task-complete confirmation are routine dashboard actions for an automatic trial.
+Start is the routine dashboard action in tracked-gesture mode; the configured
+operator-confirmed mode also requires task-complete confirmation. Follow the
+current server instruction. With helmet-body tracking enabled, both arms and
+body must also remain clear through the retreat dwell before lifting/lowering.
 The safety comparison still exercises controller response during motion.
 
 ## Short spoken script for the rehearsal
@@ -94,7 +101,8 @@ suction. Only perform the agreed movement when
 we give its cue. You can ask us to stop at any time.”
 
 During the run, use the current dashboard instruction. Do not add another grip,
-lift or lower command. “Task complete” is an actual observation, not a timer.
+lift or lower command. Tracked gesture completion is not proof of assembly;
+an operator confirmation must reflect the agreed observed task.
 The arrival instruction is withheld until stationary telemetry is confirmed.
 A pending lift/lower command is not described as proof of physical motion.
 

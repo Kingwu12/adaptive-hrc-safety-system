@@ -3255,7 +3255,8 @@ def main() -> int:
     # A slow hardware socket probe must not keep the process alive on shutdown.
     server.daemon_threads = True
     print(f"Dashboard sensor service: http://{host}:{args.http_port}")
-    print(f"RIG CONTROL PAGE: http://<this-mac-ip>:{args.http_port}/control?k={control_key}")
+    control_host = "<this-computer-lan-ip>" if args.share else "127.0.0.1"
+    print(f"RIG CONTROL PAGE: http://{control_host}:{args.http_port}/control?k={control_key}")
     print(f"Xsens MVN target: UDP {args.udp_port} · Position + Quaternion · segment {args.segment}")
     print(f"Recordings: {Path(args.out).resolve()}")
     print(f"Model: {state.model_source}")

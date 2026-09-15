@@ -24,6 +24,15 @@ function Get-LabUrl {
     catch { return $null }
 }
 
+function Open-LabDashboard {
+    # Browser association/policy is independent of the verified service state.
+    try { Start-Process 'http://localhost:3000' }
+    catch {
+        Write-Host "  Browser launch failed: $($_.Exception.Message)"
+        Write-Host '  Services are ready. Open http://localhost:3000 manually.'
+    }
+}
+
 function Get-LabListener {
     param([int]$Port)
     try {
@@ -183,9 +192,9 @@ if ((Get-LabProperty $labProxyService 'contract') -ne $labContract -or
     throw 'DASHBOARD_FAILED: the dashboard is not connected to the backend launched from this checkout.'
 }
 
-Start-Process 'http://localhost:3000'
 Write-Host 'SERVICES READY (hardware and trial preflight still required)'
 Write-Host "  Backend source: $($labExpectedHash.Substring(0, 12))"
 Write-Host "  Logs: data/service-logs/$labStamp-*"
 Write-Host '  Participant and qualification automation: enabled'
 Write-Host '  Starting services alone does not move the robot. Start trial still performs the guarded preflight.'
+Open-LabDashboard

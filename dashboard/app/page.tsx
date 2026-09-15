@@ -594,6 +594,10 @@ export default function Home() {
       setMessage("No assigned study slot is selected. Refresh the session before starting.");
       return;
     }
+    if (isStructuredRun && status.automation?.enabled !== true) {
+      setMessage("Automatic trials are disabled or unavailable on this backend. Use Start-Lab.cmd after resolving the rig and recording state, then retry.");
+      return;
+    }
     if (isStructuredRun && status.automation?.enabled && !(status.automation.supported_collection_modes || ["qualification"]).includes(workspaceMode)) {
       setMessage("This running backend does not support automatic participant trials. Restart the updated backend with Start-Lab.ps1.");
       return;
@@ -605,7 +609,7 @@ export default function Home() {
       controller_condition: isStructuredRun ? slot?.controller : undefined,
       planned_event: isStructuredRun ? slot?.event : undefined,
       collection_mode: workspaceMode,
-      automatic: isStructuredRun && status.automation?.enabled === true,
+      automatic: isStructuredRun,
       vacuum,
     });
     } finally {

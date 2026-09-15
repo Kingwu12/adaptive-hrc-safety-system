@@ -111,4 +111,15 @@ function Invoke-RestMethod {
 if ($null -ne (Get-LabUrl 'http://127.0.0.1:8765/api/status')) {
     throw 'HTTP failure must not produce a fabricated idle status.'
 }
+# A shell/browser failure after service verification is not a backend failure.
+function Start-Process {
+    param([string]$FilePath)
+    if ($FilePath -ne 'http://localhost:3000') { throw 'Unexpected browser URL' }
+    throw 'Browser launch blocked by test policy'
+}
+$labBrowserOutput = (Open-LabDashboard 6>&1 | Out-String)
+if ($labBrowserOutput -notmatch 'Browser launch blocked by test policy' -or
+    $labBrowserOutput -notmatch 'Open http://localhost:3000 manually') {
+    throw 'Browser failure must preserve its error and the manual URL without failing startup.'
+}
 Write-Output 'LAUNCHER CHECKS PASSED'
