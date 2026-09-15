@@ -16,10 +16,11 @@ No native recording, filename entry
 or manual shared-sync marker is required. The dashboard reports if an older
 rehearsal-only or automation-disabled backend is running and refuses to silently
 switch a structured trial to manual mode.
-Start-Lab.cmd and Check-Lab.cmd apply `ExecutionPolicy Bypass` to one child process. This handles
-ordinary PowerShell script restrictions; administrator-managed Group Policy still
-takes precedence. The original Windows policy error has not been recovered, so
-this is not proof that PowerShell caused the lab failure.
+Start-Lab.cmd and Check-Lab.cmd use the venv Python executable directly. They do
+not execute PowerShell scripts or change execution policy. The original Windows
+policy error has not been recovered; managed executable restrictions still require
+the actual error and an institution-approved remedy. Bring the prepared offline
+kit and use [the one-hour lab handoff](windows-lab-2026-09-16.md).
 
 The launcher never terminates existing processes. It reuses a compatible backend
 or reports the exact mismatch. A timeout or failed port inspection means unknown

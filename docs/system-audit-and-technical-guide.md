@@ -87,7 +87,7 @@ This geometry is a proxy. It does not measure minimum distance from every body p
 
 ## What still needs operator action
 
-`Start-Lab.ps1` starts the local backend with research output and automatic trials enabled, starts the dashboard, and checks their API connection. It detects an already-running old or disabled backend instead of silently claiming automation is enabled. Starting these services does not start a trial or move the robot.
+`Start-Lab.cmd` starts the local backend with research output and automatic trials enabled, starts the dashboard, and checks their API connection. It detects an already-running old or disabled backend instead of silently claiming automation is enabled. Starting these services does not start a trial or move the robot.
 
 For a participant: select/create the P-code, complete intake, establish tracking/calibration, and press Start trial. The backend generates filenames, opens the sample/event files and journals the start timestamp itself. No native recording, filename confirmation or manual sync step is required. The common automatic cycle turns on suction, verifies sealing, waits for clearance, lifts, waits through the task, accepts the operator's task-complete confirmation, waits for clearance, lowers, verifies low stationary support and releases. Consent/forms, the planned event cue and task completion remain human actions.
 

@@ -116,7 +116,9 @@ def require_free(port):
         raise Blocked(f"Port {port} is occupied or bind is denied: {exc}") from exc
 
 
-def status(port, timeout=2):
+def status(port, timeout=5):
+    # Windows can take over two seconds to report WSAECONNREFUSED even on
+    # loopback. A shorter deadline misclassifies a closed port as unknown.
     url = f"http://127.0.0.1:{port}/api/status"
     try:
         # Corporate HTTP_PROXY settings must never route local rig status elsewhere.

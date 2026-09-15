@@ -587,7 +587,7 @@ export default function Home() {
     try {
     const isStructuredRun = workspaceMode !== "model_development";
     if (status.capture_mode !== "automatic_streams") {
-      setMessage("Restart the updated backend with Start-Lab.ps1 to enable automatic data capture.");
+      setMessage("Restart the updated backend with Start-Lab.cmd to enable automatic data capture.");
       return;
     }
     if (isStructuredRun && !slot) {
@@ -599,7 +599,7 @@ export default function Home() {
       return;
     }
     if (isStructuredRun && status.automation?.enabled && !(status.automation.supported_collection_modes || ["qualification"]).includes(workspaceMode)) {
-      setMessage("This running backend does not support automatic participant trials. Restart the updated backend with Start-Lab.ps1.");
+      setMessage("This running backend does not support automatic participant trials. Restart the updated backend with Start-Lab.cmd.");
       return;
     }
     await post("/api/protocol/start", {
@@ -894,7 +894,7 @@ export default function Home() {
     detail: "Run the local sensor service on this lab PC. This page will continue automatically when it is online.",
   } : status.capture_mode !== "automatic_streams" ? {
     key: "capture", owner: "SYSTEM SETUP", title: "Update the data capture service",
-    detail: "Restart the updated backend with Start-Lab.ps1. It creates and saves trial files automatically.",
+    detail: "Restart the updated backend with Start-Lab.cmd. It creates and saves trial files automatically.",
   } : !status.controller_output_enabled ? {
     key: "control", owner: "SYSTEM SETUP", title: "Robot control is switched off",
     detail: "The dashboard can monitor tracking, but this server cannot send trial speed or stop commands. This is a lab-PC setup issue; moving the participant farther away will not resolve it.",
@@ -1026,8 +1026,8 @@ export default function Home() {
               <p>{status.automation?.enabled
                 ? (status.automation.supported_collection_modes || ["qualification"]).includes(workspaceMode)
                   ? "Start once. Data saves automatically. Grip verification, retreat and lift advance automatically. Hold a hand at each of the four tracked corners for one second, then move clear for lowering and supported release."
-                  : "Restart the updated backend with Start-Lab.ps1. The service currently running supports rehearsals only."
-                : "Start the lab with Start-Lab.ps1 to enable automatic trials. Sensor and robot checks remain required."}</p>
+                  : "Restart the updated backend with Start-Lab.cmd. The service currently running supports rehearsals only."
+                : "Start the lab with Start-Lab.cmd to enable automatic trials. Sensor and robot checks remain required."}</p>
               {status.model_health?.warnings.map(warning => <p key={warning} className="warnText">{warning}</p>)}
               {status.pipeline_error && <p className="warnText" role="alert">Capture/controller pipeline failed: {status.pipeline_error}. Restart the service.</p>}
             </aside>}

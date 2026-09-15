@@ -1,117 +1,115 @@
-# Central Windows lab handoff — 16 September 2026
+# Central Windows lab — 16 September 2026
 
-## Before the experiment
+## The short path for the one-hour booking
 
-Use the existing `Kingwu12/adaptive-hrc-safety-system` checkout on `main`.
-Preserve local recordings, calibration, models and taught poses. Establish an
-idle rig and a maintenance window before updating code or dependencies. Do not
-pull or edit underneath a running experiment. An HTTP timeout does not prove idle.
+1. **Update during maintenance**, with the rig confirmed idle and old services
+   deliberately resolved. Preserve local recordings, calibration and taught poses.
+2. Double-click **Check-Lab.cmd**. If it passes, skip dependency installation.
+3. Double-click **Start-Lab.cmd**. Require **SERVICES READY**, then open
+   **http://localhost:3000**. Browser auto-open failure does not invalidate startup.
+4. Qualify the actual rig with the established supervised **Q-code** procedure
+   before collecting participant data.
 
-The original “blocked by policy” message remains unidentified. Capture the exact
-command, complete error and exit code if it recurs. A command-tool rejection,
-Windows script/program policy, service failure and trial-preflight rejection
-need different fixes. Do not guess that they are all PowerShell.
+Start/Check now use CMD and the existing venv Python **directly**. They do not
+execute PowerShell scripts, activate a venv, invoke npm.ps1, or change execution
+policy. Start-Lab.ps1 is only a compatibility wrapper. Native executable policy,
+firewall restrictions and AI command-tool restrictions still need their actual
+error and approved remedy; the original reported policy block was never recovered.
 
-Claude reviewed source `b482297` in session
-`ee6ca642-9434-493f-9031-a23747275205`; Codex independently reproduced the UI's
-silent manual fallback and implemented the repairs. Updated startup preserves
-successful service checks even if Windows cannot open the browser. Structured
-trials now refuse disabled/unknown automation instead of posting a manual start.
-No hardware interlock or calibration requirement was relaxed.
+## Before leaving the Mac
 
-Mac validation: 119 focused Python/PowerShell checks and 8 UI request-behavior
-checks passed; dashboard lint/build passed. Before the UI fix, all four cases
-with disabled/missing automation posted a manual request and failed the new
-regression check. Hardware calls were stubbed; no real trial was started.
+Bring the prepared **FYP-Windows-kit.zip**, extracted if transfer time matters.
+It contains the Git update bundle, Windows Python wheels and the Windows npm cache.
+Keep its SHA-256 and Windows test receipt with it. The kit is for **Windows x64,
+Python 3.12 and Node 22.13+**. It does not install Python, Node or Git themselves.
+These must already be present or available through the institution's approved
+installation process. A working older lab venv can be checked without replacing it;
+Setup intentionally refuses to overwrite a venv using a different Python version.
 
-## 1. Capture the machine state (read-only)
+Software tests do not qualify the campus computer or physical rig. The hosted
+Windows test runs no trial and issues no control API requests.
 
-Run these in the existing checkout's PowerShell window. Retain exact errors:
+## Update without losing the lab's local state
 
-```powershell
-Get-Location
+Use **Command Prompt**, opened in the existing repository. Confirm an idle rig and
+maintenance window first; an HTTP timeout does not prove stopped recording/motion.
+
+```bat
 git status --short
+git branch --show-current
 git rev-parse HEAD
-git remote -v
-$PSVersionTable.PSVersion
-whoami
-Get-ExecutionPolicy -List
-Get-Command python,py,node,npm,npm.cmd -All -ErrorAction SilentlyContinue |
-    Select-Object Name,Source
-Get-NetTCPConnection -State Listen -ErrorAction Stop |
-    Where-Object { $_.LocalPort -in @(8765,3000) } |
-    Select-Object LocalAddress,LocalPort,OwningProcess
-```
-
-Probe each endpoint separately; connection refused before startup can be expected:
-
-```powershell
-Invoke-RestMethod http://127.0.0.1:8765/api/status -TimeoutSec 5 |
-    Select-Object service,recording,automation,capture_mode,controller_output_enabled
-Invoke-RestMethod http://127.0.0.1:3000/api/status -TimeoutSec 5 |
-    Select-Object service,recording,automation,capture_mode,controller_output_enabled
-```
-
-If even `Get-Location` is rejected by the AI command tool, retain that tool error
-and compare the harmless command in a normal terminal. Do not change robot or
-Windows settings to diagnose an agent-tool restriction.
-
-## 2. Update during the confirmed maintenance window
-
-After preserving local changes and deliberately resolving any old services:
-
-```powershell
 git fetch origin main
-git log --oneline HEAD..origin/main
-git diff --stat HEAD..origin/main
-git pull --ff-only origin main
-git rev-parse HEAD
-git ls-remote origin refs/heads/main
-Test-Path .\data\models\pilot_hmm.json
-Test-Path .\data\taught_poses.json
+git merge --ff-only origin/main
 ```
 
-Stop on a Git conflict; preserve local files. Both model and pose checks must
-return True. The model is tracked in Git; taught poses must belong to this actual
-rig. Neither file's existence proves its physical calibration is correct.
+Use the existing main checkout. Stop on a conflict or unexpected local edit;
+retain those files. Do not reset, clean or overwrite the checkout. Both the model
+and example taught poses are tracked; preserve the **actual rig's** calibrated
+poses and extrinsics. File existence is not physical calibration proof.
 
-## 3. Check and start the software
+If internet is unavailable, fetch the bundle instead (replace the kit path):
 
-1. Run `Check-Lab.cmd`. Keep its full output, including any first blocker.
-2. Run `Setup-Lab.cmd` only if dependencies are missing/outdated, with services
-   deliberately shut down. Re-run the check afterward.
-3. Run `Start-Lab.cmd`. Require `SERVICES READY`, matching backend source SHA-256
-   and PID through both endpoints, `capture_mode=automatic_streams`,
-   `controller_output_enabled=true`, and `automation.enabled=true`.
-4. Require `automation.version=automatic-panel-v7-helmet-body-task` and support
-   for the chosen `participant_study` or `qualification` mode.
-5. If automatic browser launch fails, preserve that exact error and open
-   `http://localhost:3000` manually. It no longer makes successful service startup
-   report failure. Confirm the page loads, is styled and polls the same backend.
+```bat
+git fetch "C:\path\FYP-Windows-kit\source-update.bundle" main
+git merge --ff-only FETCH_HEAD
+robocopy "C:\path\FYP-Windows-kit\.lab-offline" ".lab-offline" /E /R:1 /W:1
+```
 
-Start/Check use a per-process PowerShell setting; Setup is a CMD dependency script.
-If managed policy rejects execution, identify the enforced rule and use the
-institution's approved remedy. The scripts do not override managed policy.
-See [the full diagnostic guide](windows-startup-repair.md).
+Robocopy exit codes 0–7 are success/nonfatal differences; 8+ indicates a copy
+failure. Do not use /MIR. Then run Check-Lab.cmd. Only run **Setup-Lab.cmd** if the
+check identifies missing dependencies, while services are deliberately shut down.
+Setup uses the supplied wheels/cache offline when `.lab-offline` is present.
+Run Check again after Setup. Avoid doing a fresh installation during the booking
+if the existing environment already passes.
 
-## 4. Qualify the actual rig before collecting participant data
+## What Check / Start establish
 
-Follow the team's established physical safeguards and qualification procedure.
-Verify current taught low/top poses, payload/support, robot and gripper health,
-fresh OptiTrack/Xsens streams, body/hand tracking and the intended task settings.
-Mark Xsens calibration complete only after actual calibration; start within the
-existing five-minute window. Do not merely re-mark an expired calibration.
+The preflight checks Python and Node versions, actual RTDE/scientific imports,
+loading the fitted model, required files and valid low/top joint-pose structure.
+It checks listener PIDs and both direct/proxied status responses. Empty ports must
+also permit binding. Unknown or stale services block startup and remain intact.
+A backend loaded before a source/config change is rejected before trial start.
 
-Use a Q-code for a supervised qualification rehearsal. Confirm the actual guarded
-cycle and required stop/fault checks on the rig before participant release.
-The automatic tracked-gesture configuration uses four corner dwells; follow the
-server's current instruction and keep its task fingerprint with the data.
+Start requires the current backend source SHA-256 and matching PID through both
+endpoints, automatic stream capture, research output enabled, and automatic trial
+support for both P and Q modes. The automation version is
+`automatic-panel-v7-helmet-body-task`. Starting services alone does not start a trial.
+An already compatible service is reused, including an active one; no process is
+terminated or recording restarted by these launchers.
 
-If Start trial refuses, preserve its full message. Common checks include a changed
-code/config fingerprint since startup, expired calibration, stale/missing tracking
-or robot telemetry, missing model/poses, wrong P/Q mode, wrong assigned study slot,
-or low-pose/gripper/clearance checks. Fix the demonstrated cause; do not lower
-thresholds, fabricate status, switch to manual to get past it, or force-kill services.
+## If anything fails: capture once, identify the owner
 
-Software checks completed on Mac are not proof of Windows policy compatibility
-or physical experiment readiness. That proof remains the task for the lab PC.
+Run **Diagnose-Lab.cmd**. It starts no service. It retains executable lookup,
+read-only PowerShell policy scopes, exact errors and the consolidated preflight.
+Keep `data/service-logs/bootstrap-*.txt` and `preflight-*.json`. If Python itself
+is denied, the outer CMD diagnostic still records that executable error.
+Raw service logs can contain a control URL/key; do not post them publicly.
+
+If the AI tool says “blocked by policy” before running a command, retain its
+full rejection and compare **Check-Lab.cmd in ordinary Command Prompt**. A tool
+rejection and a Windows executable restriction are different diagnoses. If CMD or
+Python is denied by a managed rule, retain the exact command/error and involve
+lab support; no Mac-side change can verify or remove that institution rule.
+See [the diagnostic guide](windows-startup-repair.md).
+
+## Use the hour for qualification and collection
+
+Aim to finish update/check/start in the first **5 minutes**. If blocked, capture
+Diagnose immediately and use the offline kit only for a demonstrated dependency
+failure. Set a **10-minute software troubleshooting limit** with the team; if a
+managed restriction remains, use the captured evidence to seek lab support or
+additional time. Do not consume the whole booking repeating the same launch.
+
+Once software starts, follow the existing physical safeguards and qualification
+procedure. Check the actual taught low/top poses, payload/support, robot/gripper
+health, fresh OptiTrack/Xsens streams and body/hand tracking. Mark Xsens calibration
+complete only after actual calibration and start within its five-minute window.
+Run the supervised Q-code rehearsal and required stop/fault checks before P-code
+release. The tracked-gesture task uses four corner dwells; follow its current
+instruction and preserve the task fingerprint with the data.
+
+A trial rejection must retain its full message. Common causes include expired
+calibration, stale/incomplete tracking, robot telemetry, model/poses, changed source,
+wrong P/Q collection mode or assigned slot, and low-pose/gripper/clearance checks.
+Fix the demonstrated cause. Do not switch to manual, fabricate calibration/status,
+change thresholds or force-kill services to get past it.
