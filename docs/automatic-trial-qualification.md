@@ -1,12 +1,13 @@
 # Automatic panel trials: participant and rehearsal handoff
 
-## Shared participant/rehearsal engine (v7, source checked 2026-09-15)
+## Shared participant/rehearsal engine (v10, source checked 2026-09-16)
 
-`automatic-panel-v7-helmet-body-task` runs the same guarded sequence in
+`automatic-panel-v10-supervised-head-clearance` runs the same guarded sequence in
 Participant study (P-codes) and Qualification (Q-codes). The earlier Q-only
 restriction was an administrative software gate, not a different physical
-algorithm. Collection mode determines data classification; it does not weaken
-grip, tracking, pose, supported-release, stop or watchdog checks.
+algorithm. Q qualification can launch from tracked HEAD during Xsens
+gaps; P participant trials retain the body gate. Grip, tracked HEAD, live TCP,
+pose, supported-release, stop and watchdog checks remain required.
 
 Run `Setup-Lab.cmd` once on a new checkout. Before a session, double-click
 `Check-Lab.cmd`, then `Start-Lab.cmd`, select the desired collection mode, and
@@ -42,8 +43,9 @@ gripper support at `pose1_low` with vacuum off. This revision is specific to tha
 support arrangement; it does not infer panel support from suction pressure.
 After reaching the low pose, the runner verifies stationary telemetry and the low
 joint pose throughout a two-second dwell, then commands release once and saves.
-Tracking/health loss, pose drift, motion, cancellation or release failure latches
-a fault. A failed release is not retried or counted as a completed trial.
+Tracked HEAD or robot-geometry loss, pose drift, motion, cancellation or release
+failure latches a fault. Missing Xsens packets do not prevent release on the
+verified stationary low support. A failed release is not retried or counted as a completed trial.
 The support assumption and dwell are included in the versioned task contract.
 Manual mode is unchanged. The instructions below describe this supported
 automatic release revision.
@@ -56,7 +58,7 @@ those timings with future automatic runs without addressing the protocol change.
 
 One server-owned cycle, independent of which of the three safety controllers is
 assigned. Browser refresh does not restart or advance the cycle.
-The current source runner is `automatic-panel-v7-helmet-body-task`: the server supplies the seven-stage
+The current source runner is `automatic-panel-v10-supervised-head-clearance`: the server supplies the seven-stage
 instruction and the dashboard shows a button only when confirmation is needed.
 It no longer presents the old ten-step manual sequence as the automatic workflow.
 
@@ -90,6 +92,29 @@ operator-confirmed mode also requires task-complete confirmation. Follow the
 current server instruction. With helmet-body tracking enabled, both arms and
 body must also remain clear through the retreat dwell before lifting/lowering.
 The safety comparison still exercises controller response during motion.
+
+## Xsens packet gaps
+
+In supervised Q qualification, launch clearance and controller distance use the
+fresh OptiTrack HEAD and live RTDE TCP even when Xsens packets are missing. The
+Q launch uses the existing supervised HEAD clearance (about 1.55 m); the wearer must
+retreat beyond that clearance before lift or lower. The controller scores raw HEAD-to-TCP distance during motion; HMM and closing-speed checks may stop earlier than the shared red boundary. This
+column-based envelope is a research proxy, not safety-rated full robot/person
+geometry. The supervisor keeps both arms physically clear and the independent
+stop path ready. Grip loading and supported low release can proceed without
+Xsens, but four hand-gesture dwells wait for fresh aligned body frames. Missing
+samples remain marked stale and can lower capture quality.
+
+P participant-study motion still requires fresh helmet-anchored body evidence.
+If Xsens disappears during a P lift or lower motion, the move stops and the trial
+stays recorded in a **paused** state with suction held. The supervisor checks
+the panel grip, wearer and both arms clear, tracked HEAD, restored Xsens, live
+TCP and stop path before pressing **Resume after supervisor checks**. The backend
+then verifies fresh body geometry, grip, stationary robot and launch clearance;
+it requires a new two-second clear dwell before reissuing the interrupted move.
+Tracked HEAD, robot geometry, grip, robot health and failed controller output
+remain hard faults. An unresolved pause should be aborted and inspected; suction
+is never vented automatically in a pause or fault.
 
 ## Short spoken script for the rehearsal
 

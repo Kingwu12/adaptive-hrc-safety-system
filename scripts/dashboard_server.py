@@ -643,6 +643,8 @@ class DashboardState:
         self.rig = None
         self.calibration_started: float | None = None
         self.file = None
+        self._last_data_flush = 0.0
+        self.motion_paused = False
 
     def on_sample(self, source_ts: float, position, tracked: bool, wall_time: float) -> None:
         self.bridge.on_sample(source_ts, position, tracked, wall_time)
@@ -717,6 +719,9 @@ class DashboardState:
             return
         # Absolute operator position comes from the tracked head rigid body in
         # robot-base coordinates. Xsens remains the articulated-motion source.
+        connector = getattr(self.rig, "schedule_receiver_connect", None)
+        if callable(connector):
+            connector()
         robot_telemetry = (self.rig.telemetry_snapshot(allow_connect=False)
                            if self.rig is not None else {"available": False})
         tcp = live_tcp_position(robot_telemetry)
@@ -738,7 +743,7 @@ class DashboardState:
             xsens_age_s=None if self.xsens_frame_wall is None else now - self.xsens_frame_wall,
             config=self.config.get("helmet_body"), robot_transform=self.robot_transform, tcp=tcp)
         sample = optitrack_sample
-        if sample is None or sample.stale or xsens_sample.stale or tcp is None:
+        if sample is None or sample.stale or tcp is None:
             self.extractor.reset()
             frame = None
             self.feature_status = "unavailable"
@@ -748,8 +753,12 @@ class DashboardState:
         if frame is not None and self.body_tracking.get("features_ready"):
             frame = replace(frame, body_features=self.body_tracking["features"],
                             body_geometry=self.body_tracking.get("body_geometry"))
-        body_required = self.config.get("helmet_body", {}).get("enabled") or any(
-            name.startswith("body.") for name in self.hmm.feature_order)
+        if frame is not None and self.recording and self.collection_mode == "qualification":
+            # Keep all Q controllers on the same HEAD observation, including
+            # packet-gap intervals. Launch clearance is checked separately;
+            # it is not subtracted from the scored SSM input.
+            frame = replace(frame, body_geometry=None)
+        body_required = any(name.startswith("body.") for name in self.hmm.feature_order)
         if body_required and not self.body_tracking.get("body_geometry"):
             frame = None
             self.feature_status = "warming_up" if self.body_tracking.get("available") else "unavailable"
@@ -786,6 +795,18 @@ class DashboardState:
                 "rule": "FAIL CLOSED: fresh Xsens, OptiTrack and live robot geometry are required",
                 "output_applied": False,
             }
+        body_evidence_missing = (self.recording and self.collection_mode != "qualification"
+                                 and self.config.get("helmet_body", {}).get("enabled")
+                                 and not self.body_tracking.get("available"))
+        if self.motion_paused or body_evidence_missing:
+            controller_decision = {
+                "status": "supervisor_resume_required" if self.motion_paused else "body_evidence_unavailable",
+                "command": "protective_stop", "speed_fraction": 0.0,
+                "rule": ("Xsens gap paused the automatic motion; supervisor resume required"
+                         if self.motion_paused else "Body evidence missing; arm held until fresh Xsens and HEAD alignment"),
+                "output_applied": False,
+            }
+            comparison = None
         with self.lock:
             if controller_decision is not None:
                 self._apply_controller_output_locked(controller_decision)
@@ -865,7 +886,13 @@ class DashboardState:
                     "robot_telemetry": robot_telemetry,
                 }
                 self.file.write(json.dumps(record, separators=(",", ":"), allow_nan=False) + "\n")
-                self.file.flush()
+                # Schema-v3 rows are large. Per-row flushes held this lock
+                # during disk I/O and blocked incoming Xsens frames, creating
+                # stale gaps and reducing the recorded rate to about 39 Hz.
+                # File close in stop_session performs the final flush.
+                if now - self._last_data_flush >= 1.0:
+                    self.file.flush()
+                    self._last_data_flush = now
                 self.samples_written += 1
                 sample_t = float(record["t"])
                 if self._catalog_first_t is None:
@@ -907,9 +934,9 @@ class DashboardState:
         decision["output_status"] = result.get("status", "unknown")
         signature = (
             decision.get("command"), decision.get("speed_fraction"),
-            applied, result.get("status"), result.get("error"),
+            applied, "applied" if applied else result.get("status"), result.get("error"),
         )
-        if result.get("changed") or signature != self._last_controller_output_signature:
+        if signature != self._last_controller_output_signature:
             self._journal_event_locked(
                 "research_controller_command",
                 command=decision.get("command"),
@@ -1055,6 +1082,7 @@ class DashboardState:
             self.output_dir.mkdir(parents=True, exist_ok=True)
             path = self.output_dir / f"{self.session_id}.jsonl"
             self.file = path.open("x", encoding="utf-8")
+            self._last_data_flush = time.monotonic()
             self.recording_path = str(path.resolve())
             event_path = self.output_dir / f"{self.session_id}.events.jsonl"
             self.event_file = event_path.open("x", encoding="utf-8")
@@ -1212,6 +1240,9 @@ class DashboardState:
             self.guided_step = None
             self.active_controller = None
             self.controller_decision = None
+            # Once the capture is closed, the automatic stop latch must not
+            # keep overriding a separately supervised low-pose recovery move.
+            self.motion_paused = False
             self.mvn_recording_confirmed = False
             self.mvn_recording_reference = None
             self.motive_recording_reference = None
@@ -1461,6 +1492,10 @@ class RigControl:
         self._last_gripper_t = 0.0
         self._recv = None            # RTDEReceiveInterface, opened lazily
         self._recv_error: str | None = None
+        self._recv_connect_lock = threading.Lock()
+        self._recv_schedule_lock = threading.Lock()
+        self._recv_connect_scheduled = False
+        self._last_recv_connect_attempt = 0.0
         self._io = None              # RTDEIOInterface, opened only when opted in
         self._output_lock = threading.Lock()
         self._last_speed_fraction: float | None = None
@@ -1495,25 +1530,44 @@ class RigControl:
     def _receiver(self):
         """Lazy RTDEReceiveInterface. Returns None if unavailable, never a
         stale pose -- a missing pose must read as missing, not as a default."""
-        if self._recv is not None:
+        with self._recv_connect_lock:
+            if self._recv is not None:
+                return self._recv
+            # The native constructor can hold the GIL. Probe the port first and
+            # keep connection attempts off the 60 Hz capture thread.
+            try:
+                with socket.create_connection((self.robot_host, 30004), timeout=0.25):
+                    pass
+            except OSError as exc:
+                self._recv_error = f"RTDE port unavailable: {exc}"
+                return None
+            try:
+                from rtde_receive import RTDEReceiveInterface
+                self._recv = RTDEReceiveInterface(self.robot_host)
+                self._recv_error = None
+            except Exception as exc:
+                self._recv = None
+                self._recv_error = f"{type(exc).__name__}: {exc}"
             return self._recv
-        # The ur-rtde constructor performs a long native connect while holding
-        # the Python GIL. Probe the port with a short normal socket first so an
-        # offline/booting robot cannot freeze every dashboard request.
-        try:
-            with socket.create_connection((self.robot_host, 30004), timeout=0.25):
-                pass
-        except OSError as exc:
-            self._recv_error = f"RTDE port unavailable: {exc}"
-            return None
-        try:
-            from rtde_receive import RTDEReceiveInterface
-            self._recv = RTDEReceiveInterface(self.robot_host)
-            self._recv_error = None
-        except Exception as exc:
-            self._recv = None
-            self._recv_error = f"{type(exc).__name__}: {exc}"
-        return self._recv
+
+    def schedule_receiver_connect(self) -> None:
+        """Reconnect missing telemetry in the background, at most once a second."""
+        with self._recv_schedule_lock:
+            now = time.monotonic()
+            if (self._recv is not None or self._recv_connect_scheduled
+                    or now - self._last_recv_connect_attempt < 1.0):
+                return
+            self._recv_connect_scheduled = True
+            self._last_recv_connect_attempt = now
+
+        def connect() -> None:
+            try:
+                self._receiver()
+            finally:
+                with self._recv_schedule_lock:
+                    self._recv_connect_scheduled = False
+
+        threading.Thread(target=connect, daemon=True).start()
 
     def pose_status(self) -> dict:
         """Live TCP + joints, or an explicit reason why not."""
@@ -1562,6 +1616,11 @@ class RigControl:
                     self._last_telemetry_source = (source_time, time.monotonic())
                 result["source_timestamp_s"] = source_time
                 result["source_age_s"] = time.monotonic() - self._last_telemetry_source[1]
+                if result["source_age_s"] > 0.25:
+                    self._recv = None
+                    self._recv_error = "RTDE source timestamp stopped advancing"
+                    self._last_telemetry_source = None
+                    return {"available": False, "error": self._recv_error}
             for key, name in getters.items():
                 fn = getattr(recv, name, None)
                 if fn is None:
@@ -1577,7 +1636,8 @@ class RigControl:
                     result[key] = float(value) if isinstance(value, float) else value
         except Exception as exc:
             self._recv = None
-            return {"available": False, "error": f"{type(exc).__name__}: {exc}"}
+            self._recv_error = f"{type(exc).__name__}: {exc}"
+            return {"available": False, "error": self._recv_error}
         return result
 
     def fresh_telemetry_snapshot(self) -> dict:
@@ -1626,7 +1686,7 @@ class RigControl:
         with self._output_lock:
             if (self._last_speed_fraction is not None and
                     abs(self._last_speed_fraction - fraction) < 1e-6 and
-                    time.monotonic() - getattr(self, "_last_speed_write_at", 0.0) < 0.1):
+                    time.monotonic() - getattr(self, "_last_speed_write_at", 0.0) < 0.5):
                 return {
                     "applied": True, "changed": False,
                     "status": "already_applied", "speed_fraction": fraction,
@@ -1736,6 +1796,8 @@ class RigControl:
         return {
             **cached,
             "xsens": xsens,
+            "rtde_receive": {"connected": getattr(self, "_recv", None) is not None,
+                             "error": getattr(self, "_recv_error", None)},
             "cycle": {
                 "active": self.cycle_active,
                 "fastening_complete": self.fastening_complete.is_set(),
@@ -2334,6 +2396,10 @@ class GuidedRunController:
             return {**advanced, "action": action}
 
 
+class RecoverableXsensGap(ValueError):
+    """Loss of body evidence that stops motion but preserves the trial."""
+
+
 class AutomaticRunController(GuidedRunController):
     """Single-cycle automation for the *current*, suction-held panel task.
 
@@ -2343,13 +2409,14 @@ class AutomaticRunController(GuidedRunController):
     becomes ground-truth labels.
     """
 
-    VERSION = "automatic-panel-v7-helmet-body-task"
+    VERSION = "automatic-panel-v10-supervised-head-clearance"
     COLLECTION_PREFIXES = {"qualification": "Q", "participant_study": "P"}
     SEAL_DWELL_S = 1.0
     LOW_RELEASE_DWELL_S = 2.0
     CLEAR_DWELL_S = 2.0
-    HEALTH_MAX_AGE_S = 2.0
+    HEALTH_MAX_AGE_S = 2.5
     WAIT_TIMEOUT_S = 120.0
+    HEAD_REACH_MARGIN_M = 0.0
 
     def __init__(self, state, rig, clock=time.monotonic, *, enabled=False):
         super().__init__(state, rig, clock)
@@ -2365,6 +2432,7 @@ class AutomaticRunController(GuidedRunController):
         self.health_lock = threading.Lock()
         self.lock = threading.RLock()
         self.contract = None
+        self.paused_from = None
         task = state.config.get('drilling_task', {})
         self.drilling = SimulatedDrilling(radius_m=task.get('radius_m', .12),
                                          dwell_s=task.get('dwell_s', 1.0),
@@ -2396,6 +2464,9 @@ class AutomaticRunController(GuidedRunController):
                 "clear_dwell_s": self.CLEAR_DWELL_S,
                 "low_release_dwell_s": self.LOW_RELEASE_DWELL_S,
                 "low_release_support": "panel rests on rigid gripper support at pose1_low",
+                "xsens_gap_policy": "hold controller output; stop motion and require supervisor resume after fresh body and new clear dwell",
+                "qualification_head_reach_margin_m": self.HEAD_REACH_MARGIN_M,
+                "qualification_head_policy": "Tracked HEAD clears the existing supervised Q launch threshold; the controller scores raw HEAD distance; P motion requires fresh body",
                 "health_max_age_s": self.HEALTH_MAX_AGE_S,
                 "wait_timeout_s": self.WAIT_TIMEOUT_S,
                 "sequence": ["loading", "retreat_lift", "lifting", "task",
@@ -2420,6 +2491,7 @@ class AutomaticRunController(GuidedRunController):
             "lowering": (6, "Lowering requested — stay clear", None),
             "supported_release": (7, "Panel at low support — releasing after two seconds", None),
             "releasing": (7, "Releasing suction and saving", None),
+            "paused": (None, "Motion paused — supervisor check required", None),
             "fault": (None, "Trial stopped — do not restart", None),
             "complete": (7, "Trial saved", None),
         }
@@ -2447,6 +2519,8 @@ class AutomaticRunController(GuidedRunController):
                 "automatic_wait": self.automatic and action is None}
 
     def status(self):
+        with self.health_lock:
+            health = dict(self.health) if self.health is not None else None
         return {"enabled": self.enabled, "active": self.automatic,
                 "availability": "automatic_ready" if self.enabled else "service_disabled",
                 "supported_collection_modes": list(self.COLLECTION_PREFIXES),
@@ -2455,6 +2529,13 @@ class AutomaticRunController(GuidedRunController):
                 "simulated_drilling": self.drilling.status(),
                 "qualification_only": False, "version": self.VERSION,
                 "phase": self.phase, "reason": self.reason,
+                "paused_from": self.paused_from,
+                "qualification_head_reach_margin_m": self.HEAD_REACH_MARGIN_M,
+                "health": (None if health is None else {
+                    "age_s": max(0.0, self.clock() - health["at"]),
+                    "probe_duration_s": health.get("probe_duration_s"),
+                    "error": health.get("error") or health.get("grip", {}).get("error")
+                    or health.get("robot", {}).get("error")}),
                 "fault": self.phase == "fault", "presentation": self.presentation(),
                 "task_sha256": None if self.contract is None else self.contract["sha256"]}
 
@@ -2489,9 +2570,14 @@ class AutomaticRunController(GuidedRunController):
             contract = self._build_contract(vacuum)
         self.automatic = False
         self.automatic_requested = automatic
+        self.state.motion_paused = False
+        self.paused_from = None
         self.cancel.clear()
         result = super().start(*args, vacuum=vacuum, **kwargs)
-        self.automatic = automatic
+        # Do not launch background health probes while the one-time loading
+        # suction command owns the gripper I/O path. A queued probe would stamp
+        # itself before the wait and falsely fail its own freshness check.
+        self.automatic = False
         self.contract = contract if automatic else None
         self.drilling.reset()
         if self.work_visits is not None:
@@ -2514,11 +2600,13 @@ class AutomaticRunController(GuidedRunController):
                     raise ValueError("Loading suction command failed; inspect rig")
                 if self.cancel.is_set():
                     raise ValueError("Trial stopped during loading suction")
+                self.automatic = True
                 self.refresh_health()
                 self._health(require_grip=False)
                 self._journal("automation_loading_suction_enabled", vacuum_percent=int(vacuum))
                 self._phase("loading", "Data capture started. Suction on; place the panel against both cups")
             except Exception as exc:
+                self.automatic = True
                 self.request_stop(str(exc))
                 # Preserve this failed attempt and never vent automatically.
                 raise ValueError(f"Trial faulted during suction startup: {exc}") from exc
@@ -2556,16 +2644,17 @@ class AutomaticRunController(GuidedRunController):
                       "robot": self.rig.robot_status()}
         except Exception as exc:
             health = {"at": started, "error": str(exc)}
+        health["probe_duration_s"] = max(0.0, self.clock() - started)
         with self.health_lock:
             if self.health is None or health["at"] >= self.health["at"]:
                 self.health = health
 
     def _tracking(self):
         snap = self.state.snapshot()
-        if (not snap.get("recording") or not snap.get("connected")
-                or snap.get("stale") or not snap.get("optitrack_connected")
-                or snap.get("xsens_segment_count", 0) < MVN_FULL_BODY_SEGMENTS):
-            raise ValueError("Recording or tracking unavailable")
+        if (not snap.get("recording") or not snap.get("optitrack_connected")
+                or snap.get("feature_status") not in (None, "ready")
+                or snap.get("geometry_reference", {}).get("source", "live_rtde_tcp") != "live_rtde_tcp"):
+            raise ValueError("Recording, tracked HEAD or live robot geometry unavailable")
         distance = (snap.get("feature") or {}).get("d")
         if distance is None or not math.isfinite(float(distance)):
             raise ValueError("Valid separation unavailable")
@@ -2597,7 +2686,13 @@ class AutomaticRunController(GuidedRunController):
             raise ValueError("Automatic trial stopped")
         self._require_unchanged_contract()
         snap, _ = self._tracking()
-        if self.state.config.get('helmet_body', {}).get('enabled') and not (snap.get('body_tracking') or {}).get('available'):
+        if (self.state.collection_mode != "qualification"
+                and self.state.config.get('helmet_body', {}).get('enabled')
+                and not (snap.get('body_tracking') or {}).get('available')):
+            if (not snap.get('connected') or snap.get('stale')
+                    or snap.get('xsens_segment_count', 0) < MVN_FULL_BODY_SEGMENTS):
+                self.state.motion_paused = True
+                raise RecoverableXsensGap("Xsens body packets missing during motion")
             raise ValueError("Fresh helmet-anchored body tracking is required during motion")
         self._health()
         # Distance does NOT veto the assigned event here: the selected safety
@@ -2651,12 +2746,39 @@ class AutomaticRunController(GuidedRunController):
     def request_stop(self, reason="Operator stop"):
         # Never wait for the controller lock: an in-flight move owns it.
         self.cancel.set()
+        self.state.motion_paused = True
         self._clear_arm()
         if self.automatic:
             self._phase("fault", reason + "; no automatic restart or suction release")
 
+    def resume_paused(self):
+        """Supervisor-controlled continuation after a motion-time Xsens gap."""
+        with self.lock:
+            if not self.automatic or self.phase != "paused":
+                raise ValueError("No paused automatic trial is available")
+            self._require_unchanged_contract()
+            snap, distance = self._tracking()
+            body = snap.get("body_tracking") or {}
+            body_distance = body.get("minimum_segment_distance_m")
+            if (not snap.get("connected") or snap.get("stale")
+                    or snap.get("xsens_segment_count", 0) < MVN_FULL_BODY_SEGMENTS
+                    or body.get("available") is not True
+                    or not isinstance(body_distance, (int, float))
+                    or not math.isfinite(body_distance)
+                    or min(distance, body_distance) < self.motion_clearance_m):
+                raise ValueError("Fresh Xsens body and verified launch clearance are required to resume")
+            self._health()
+            self._require_stationary()
+            resumed_phase = {"lifting": "retreat_lift", "lowering": "retreat_lower"}.get(self.paused_from)
+            if resumed_phase is None:
+                raise ValueError("Paused motion origin is unknown; abort and inspect")
+            self.state.motion_paused = False
+            self.paused_from = None
+            self._phase(resumed_phase, "Supervisor resumed after fresh tracking; waiting for a new clear dwell before motion")
+            return {"message": self.reason, "automation": self.status()}
+
     def tick(self):
-        if not self.automatic or self.cancel.is_set() or self.phase in ("ready", "complete"):
+        if not self.automatic or self.cancel.is_set() or self.phase in ("ready", "complete", "paused"):
             return
         if not self.lock.acquire(blocking=False):
             return
@@ -2685,7 +2807,8 @@ class AutomaticRunController(GuidedRunController):
                     self._phase("retreat_lift", "Grip verified. Release panel and step back; lift starts automatically after clear dwell")
             elif self.phase in ("retreat_lift", "retreat_lower"):
                 body_clear = True
-                if self.state.config.get('helmet_body', {}).get('enabled'):
+                if (self.state.collection_mode != "qualification"
+                        and self.state.config.get('helmet_body', {}).get('enabled')):
                     body = snap.get('body_tracking') or {}
                     body_distance = body.get('minimum_segment_distance_m')
                     body_clear = (body.get('available') is True and isinstance(body_distance, (int, float))
@@ -2747,6 +2870,14 @@ class AutomaticRunController(GuidedRunController):
                     self._phase("complete", "Run saved; suction released on the low support")
             if self.phase in ("loading", "retreat_lift", "retreat_lower") and self.clock() - self.since > self.WAIT_TIMEOUT_S:
                 raise ValueError("Automatic step timed out")
+        except RecoverableXsensGap as exc:
+            self.state.motion_paused = True
+            self.paused_from = self.phase
+            self._phase("paused", f"{exc}; arm stopped, suction held. Supervisor must verify tracking and clearance before resume")
+            try:
+                self.rig.robot_action("stop")
+            except Exception as stop_exc:
+                self.reason += f"; stop command failed: {stop_exc}. Use physical E-stop"
         except Exception as exc:
             self.request_stop(str(exc))
             try:
@@ -3075,7 +3206,7 @@ class ApiHandler(BaseHTTPRequestHandler):
             rig_paths = {
                 "/api/gripper", "/api/robot", "/api/demo", "/api/cycle",
                 "/api/xsens/reset", "/api/protocol/start", "/api/protocol/arm",
-                "/api/protocol/complete", "/api/sync", "/api/session/stop",
+                "/api/protocol/complete", "/api/protocol/resume", "/api/sync", "/api/session/stop",
             }
             if self.path in rig_paths:
                 # rig control needs the key from any remote browser
@@ -3118,6 +3249,8 @@ class ApiHandler(BaseHTTPRequestHandler):
                     result = self.guided.arm_step()
                 elif self.path == "/api/protocol/complete":
                     result = self.guided.complete_step(int(body.get("vacuum", 60)))
+                elif self.path == "/api/protocol/resume":
+                    result = self.guided.resume_paused()
                 elif self.path == "/api/sync":
                     result = self.state.mark_sync_event()
                 elif self.path == "/api/session/stop":
@@ -3228,9 +3361,14 @@ def main() -> int:
 
     def ticker() -> None:
         dt = 1.0 / state.config["features"]["sample_rate_hz"]
+        next_tick = time.monotonic()
         while not stop.is_set():
             state.tick()
-            time.sleep(dt)
+            next_tick += dt
+            now = time.monotonic()
+            if next_tick < now:
+                next_tick = now
+            stop.wait(max(0.0, next_tick - now))
 
     tick_thread = threading.Thread(target=ticker, daemon=True)
     tick_thread.start()

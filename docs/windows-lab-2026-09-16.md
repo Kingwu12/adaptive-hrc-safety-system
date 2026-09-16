@@ -73,7 +73,7 @@ A backend loaded before a source/config change is rejected before trial start.
 Start requires the current backend source SHA-256 and matching PID through both
 endpoints, automatic stream capture, research output enabled, and automatic trial
 support for both P and Q modes. The automation version is
-`automatic-panel-v7-helmet-body-task`. Starting services alone does not start a trial.
+`automatic-panel-v10-supervised-head-clearance`. Starting services alone does not start a trial.
 An already compatible service is reused, including an active one; no process is
 terminated or recording restarted by these launchers.
 
@@ -111,5 +111,10 @@ instruction and preserve the task fingerprint with the data.
 A trial rejection must retain its full message. Common causes include expired
 calibration, stale/incomplete tracking, robot telemetry, model/poses, changed source,
 wrong P/Q collection mode or assigned slot, and low-pose/gripper/clearance checks.
-Fix the demonstrated cause. Do not switch to manual, fabricate calibration/status,
-change thresholds or force-kill services to get past it.
+Fix the demonstrated cause. Supervised manual is the default trial mode after
+automatic qualification faults, but it still requires the same live tracking,
+grip, robot and controller preflight. Do not fabricate calibration/status,
+change thresholds or force-kill services to get past it. Advance each manual
+phase only after the operator verifies the physical event. The dashboard saves
+streams and controller decisions through supported low release; check the trial
+manifest and survey completion before proceeding to the next assigned slot.

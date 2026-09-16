@@ -133,7 +133,8 @@ class FixedZoneController:
             command=command.value,
             speed_fraction=speed,
             robot_mode=robot_mode,
-            geometry_source="anchored_segment_origins" if frame.body_geometry else "head_column_proxy",
+            geometry_source=(frame.body_geometry.get("source", "anchored_segment_origins")
+                             if frame.body_geometry else "head_column_proxy"),
         )
 
 
@@ -282,7 +283,8 @@ class EnvelopeAdaptiveController:
             risk=float(risk),
             time_to_breach_s=ttb_out,
             robot_mode=robot_mode,
-            geometry_source="anchored_segment_origins" if frame.body_geometry else "head_column_proxy",
+            geometry_source=(frame.body_geometry.get("source", "anchored_segment_origins")
+                             if frame.body_geometry else "head_column_proxy"),
         )
 
     def _decide_command(

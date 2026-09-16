@@ -83,7 +83,7 @@ def model_health(hmm, sample_rate_hz=60.0):
              for p in exit_probability]
     warnings = []
     if any(p < 1e-12 for p in exit_probability):
-        warnings.append("Model transitions are effectively locked; use a development candidate and validate causal phase changes before a new study release.")
+        warnings.append("Pilot HMM phase transitions have near-zero exit probability. Reactive SSM manual starts remain available; predictive-model study release needs causal phase-change validation.")
     return {"warnings": warnings, "expected_state_dwell_s": dwell,
             "interpretation": "Transition-prior dwell, not measured recognition latency."}
 

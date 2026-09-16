@@ -41,7 +41,7 @@ def backend(tmp_path):
             'runtime_files': {'source.py': hashlib.sha256(b'loaded source').hexdigest()},
             'recording': False, 'capture_mode': 'automatic_streams', 'controller_output_enabled': True,
             'automation': {'active': False, 'enabled': True,
-                           'version': 'automatic-panel-v7-helmet-body-task',
+                           'version': 'automatic-panel-v10-supervised-head-clearance',
                            'supported_collection_modes': ['participant_study', 'qualification']}}
 
 

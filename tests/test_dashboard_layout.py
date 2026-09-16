@@ -103,10 +103,11 @@ def test_dashboard_does_not_describe_an_unreachable_robot_as_live_tcp():
     assert 'label: "ROBOT OFFLINE"' in page
 
 
-def test_automatic_structured_runs_do_not_offer_manual_movement_advances():
+def test_automatic_q_runs_hide_manual_movement_advances():
     page = (ROOT / "dashboard/app/page.tsx").read_text(encoding="utf-8")
     # The HTTP request behavior is exercised by dashboard/scripts/trial-start.test.mjs.
-    assert 'automatic: isStructuredRun,' in page
+    assert 'const automaticSelected = workspaceMode === "qualification" && automaticQSelected;' in page
+    assert 'automatic: automaticSelected,' in page
     assert '{!automaticWaiting && <button onClick={confirmGuidedAction}' in page
     assert 'status.automation.fault || ![7, 9].includes(step)' in page
     assert 'START LOADING SUCTION' not in page
@@ -114,4 +115,5 @@ def test_automatic_structured_runs_do_not_offer_manual_movement_advances():
     assert 'automaticPresentation?.action_label' in page
     assert 'automaticPresentation?.title' in page
     assert '{guidedProgress}' in page
-    assert 'Automatic participant trials enabled' in page
+    assert 'Automatic Q trial selected' in page
+    assert 'Supervised manual trials selected' in page

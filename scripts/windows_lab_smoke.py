@@ -41,7 +41,7 @@ def main():
     direct, proxy = lab.status(8765), lab.status(3000)
     assert direct['service'] == proxy['service']
     assert direct['recording'] is False and direct['automation']['active'] is False
-    assert direct['automation']['version'] == 'automatic-panel-v7-helmet-body-task'
+    assert direct['automation']['version'] == 'automatic-panel-v10-supervised-head-clearance'
     assert direct['service']['source_sha256'] == hashlib.sha256((ROOT / 'scripts/dashboard_server.py').read_bytes()).hexdigest()
     page = get('/')
     css = re.findall(r'<link[^>]+href="([^"]+\.css(?:\?[^\"]*)?)"', page)

@@ -20,12 +20,13 @@ const code = ts.transpileModule(`const run = ${handler};`, {
   compilerOptions: { target: ts.ScriptTarget.ES2022 },
 }).outputText;
 
-async function start(mode, automation) {
+async function start(mode, automation, automaticQSelected = true) {
   const calls = [];
   const messages = [];
   const busy = [];
   const context = vm.createContext({
-    workspaceMode: mode, status: { capture_mode: 'automatic_streams', automation },
+    workspaceMode: mode, automaticQSelected,
+    status: { capture_mode: 'automatic_streams', automation },
     participant: mode === 'qualification' ? 'Q01' : 'P01', vacuum: 60,
     startInFlight: { current: false },
     setStartBusy: value => busy.push(value),
@@ -39,26 +40,37 @@ async function start(mode, automation) {
   return { calls, messages };
 }
 
-for (const mode of ['participant_study', 'qualification']) {
-  for (const automation of [undefined, { enabled: false }]) {
-    test(`${mode} refuses a disabled or unknown automatic service`, async () => {
-      const result = await start(mode, automation);
-      assert.equal(result.calls.length, 0, 'must not send a manual trial request');
-      assert.match(result.messages[0], /Automatic trials.*disabled|Automatic trials.*unavailable/i);
-    });
-  }
-  test(`${mode} requests automatic operation when supported`, async () => {
-    const result = await start(mode, { enabled: true, supported_collection_modes: [mode] });
+for (const automation of [undefined, { enabled: false }]) {
+  test('participant_study starts supervised manual with no automatic service', async () => {
+    const result = await start('participant_study', automation);
     assert.equal(result.calls.length, 1);
-    assert.equal(result.calls[0].url, '/api/protocol/start');
-    assert.equal(result.calls[0].body.automatic, true);
+    assert.equal(result.calls[0].body.automatic, false);
+  });
+
+  test('automatic qualification refuses a disabled or unknown service', async () => {
+    const result = await start('qualification', automation);
+    assert.equal(result.calls.length, 0, 'must not send an unavailable automatic request');
+    assert.match(result.messages[0], /Automatic trials.*disabled|Automatic trials.*unavailable/i);
   });
 }
 
-test('an older qualification-only service cannot start a participant trial', async () => {
+test('automatic qualification requests automatic operation when supported', async () => {
+    const result = await start('qualification', { enabled: true, supported_collection_modes: ['qualification'] });
+    assert.equal(result.calls.length, 1);
+    assert.equal(result.calls[0].url, '/api/protocol/start');
+    assert.equal(result.calls[0].body.automatic, true);
+});
+
+test('participant study does not depend on automatic-mode support', async () => {
   const result = await start('participant_study', { enabled: true, supported_collection_modes: ['qualification'] });
-  assert.equal(result.calls.length, 0);
-  assert.match(result.messages[0], /does not support/);
+  assert.equal(result.calls.length, 1);
+  assert.equal(result.calls[0].body.automatic, false);
+});
+
+test('qualification can explicitly use supervised manual operation', async () => {
+  const result = await start('qualification', { enabled: false }, false);
+  assert.equal(result.calls.length, 1);
+  assert.equal(result.calls[0].body.automatic, false);
 });
 
 test('model development remains a non-automatic capture', async () => {

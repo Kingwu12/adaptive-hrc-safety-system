@@ -61,7 +61,40 @@ def start(state):
              motive_recording_reference='P07-T01.tak',video_recording_reference='P07-T01.mp4')
 
 
-def test_default_body_requirement_never_falls_back_to_head_only(tmp_path,monkeypatch):
+def test_capture_batches_disk_flushes_without_losing_rows(tmp_path, monkeypatch):
+    state, rig, clock, feed = ready(tmp_path, monkeypatch)
+    start(state)
+    underlying = state.file
+
+    class CountingFile:
+        def __init__(self, wrapped):
+            self.wrapped = wrapped
+            self.flushes = 0
+
+        def write(self, value):
+            return self.wrapped.write(value)
+
+        def flush(self):
+            self.flushes += 1
+            return self.wrapped.flush()
+
+        def close(self):
+            return self.wrapped.close()
+
+    counted = CountingFile(underlying)
+    state.file = counted
+    for _ in range(10):
+        feed()
+    assert counted.flushes == 0
+    clock[0] += 1.0
+    feed()
+    assert counted.flushes == 1
+    result = state.stop_session()
+    rows = Path(result['path']).read_text(encoding='utf-8').splitlines()
+    assert len(rows) == 11
+
+
+def test_missing_body_evidence_keeps_head_distance_visible_but_holds_arm(tmp_path,monkeypatch):
     state,rig,clock,feed = ready(tmp_path,monkeypatch)
     start(state)
     feed()
@@ -70,9 +103,54 @@ def test_default_body_requirement_never_falls_back_to_head_only(tmp_path,monkeyp
     state.config['helmet_body']['enabled'] = True
     feed()
     assert not state.body_tracking['available']
-    assert state.feature is None
+    assert state.feature['d'] == pytest.approx(2)
     assert rig.outputs[-1] == 0
+    assert state.controller_decision['status'] == 'body_evidence_unavailable'
     state.stop_session()
+
+
+def test_q_controller_uses_raw_head_distance_during_xsens_gap(tmp_path, monkeypatch):
+    state, rig, clock, feed = ready(tmp_path, monkeypatch)
+    state.start_session('Q07', 'T01', True, 'Q07-T01.mvn',
+                        block_label='A', within_block_trial=1,
+                        controller_condition='fixed zone', planned_event='clean',
+                        collection_mode='qualification')
+    state.config['helmet_body']['enabled'] = True
+    feed()
+    feed()
+    clock[0] += .2
+    feed(xsens=False)
+    assert state.feature['d'] == pytest.approx(2)
+    assert state.feature['body_geometry'] is None
+    assert state.controller_decision['geometry_source'] == 'head_column_proxy'
+    assert state.controller_decision['output_applied'] is True
+    assert rig.outputs[-1] > 0
+    rig.pose = [1, 0, 2.2, 0, 0, 0]
+    feed(xsens=False)
+    assert state.feature['d'] == pytest.approx(1)
+    assert state.controller_decision['speed_fraction'] == pytest.approx(.35)
+    assert rig.outputs[-1] == pytest.approx(.35)
+    rig.pose = [1.1, 0, 2.2, 0, 0, 0]
+    feed(xsens=False)
+    assert state.feature['d'] == pytest.approx(.9)
+    assert rig.outputs[-1] == 0
+    result = state.stop_session()
+    row = json.loads(Path(result['path']).read_text().splitlines()[-1])
+    assert row['stale'] is True
+    assert row['controller_decision']['geometry_source'] == 'head_column_proxy'
+
+
+def test_aborted_capture_stops_overriding_supervised_recovery_speed(tmp_path, monkeypatch):
+    state, rig, clock, feed = ready(tmp_path, monkeypatch)
+    start(state)
+    feed()
+    state.motion_paused = True
+    state.stop_session(outcome='aborted')
+    before = len(rig.outputs)
+    feed()
+    assert state.motion_paused is False
+    assert state.controller_decision is None
+    assert len(rig.outputs) == before
 
 
 def test_dashboard_uses_moving_robot_pose_for_control_and_recording(tmp_path,monkeypatch):
@@ -102,9 +180,15 @@ def test_geometry_or_sensor_failure_stops_and_logs_staleness(tmp_path,monkeypatc
     if failure == 'old_pose': rig.age = 1
     if failure == 'invalid_pose': rig.pose = [float('nan')]*6
     if failure == 'missing_pose': rig.available = False
-    if failure == 'xsens_dropout': clock[0] += .2
+    if failure == 'xsens_dropout':
+        state.config['helmet_body']['enabled'] = True
+        clock[0] += .2
     feed(xsens=failure != 'xsens_dropout')
-    assert state.feature is None
+    if failure == 'xsens_dropout':
+        assert state.feature['d'] == pytest.approx(2)
+        assert state.controller_decision['status'] == 'body_evidence_unavailable'
+    else:
+        assert state.feature is None
     assert rig.outputs[-1] == 0
     result = state.stop_session()
     row = json.loads(Path(result['path']).read_text().splitlines()[-1])

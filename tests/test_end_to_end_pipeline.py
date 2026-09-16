@@ -74,7 +74,8 @@ def test_api_to_saved_automatic_cycle(tmp_path,monkeypatch,mode,prefix,block,wit
         frame=parse_mxtp02_frame(packet)
         state.on_xsens_frame(frame)
         state.on_sample(frame['time_code_s'],frame['segments']['1']['position_m'],True,clock[0])
-        motive=build_frame_packet(frame_number=counter[0],rigid_bodies={1:((2,0,1.7),True)})
+        head_x = 2.0
+        motive=build_frame_packet(frame_number=counter[0],rigid_bodies={1:((head_x,0,1.7),True)})
         number,position,tracked=parse_rigid_body(motive,1)
         state.optitrack_bridge.on_sample(number/120,position,tracked,clock[0])
         state.optitrack_monitor.update(1,position,[0,0,0,1],number/120,clock[0])
@@ -159,7 +160,9 @@ def test_api_to_saved_automatic_cycle(tmp_path,monkeypatch,mode,prefix,block,wit
     assert all(row['mvn_native_recording_confirmed'] is False for row in rows)
     assert all(row['body_tracking']['available'] for row in rows)
     assert any(row['features'] and row['features'].get('body_features') for row in rows)
-    assert all(row['controller_decision'].get('geometry_source') == 'anchored_segment_origins'
+    expected_geometry = ('head_column_proxy' if mode == 'qualification'
+                         else 'anchored_segment_origins')
+    assert all(row['controller_decision'].get('geometry_source') == expected_geometry
                for row in rows if row['controller_decision'].get('condition'))
     assert {row['controller_decision'].get('condition') for row in rows} == {None,identity}
     events=[json.loads(line) for line in Path(state.event_path).read_text().splitlines()]
@@ -168,3 +171,92 @@ def test_api_to_saved_automatic_cycle(tmp_path,monkeypatch,mode,prefix,block,wit
     assert not any(event['event'] == 'shared_sync_marker' for event in events)
     assert sum(event['event'] == 'simulated_drilling_marker_complete' for event in events) == 4
     assert sum(event['event'] == 'automatic_drilling_task_completed' for event in events) == 1
+
+
+@pytest.mark.parametrize('mode,prefix',[('participant_study','P'),('qualification','Q')])
+@pytest.mark.parametrize('block',['A','B','C'])
+def test_api_to_saved_supervised_manual_cycle(tmp_path,monkeypatch,mode,prefix,block):
+    clock=[100.0]
+    monkeypatch.setattr(service.time,'monotonic',lambda:clock[0])
+    state=service.DashboardState(tmp_path,1,Path('data/models/pilot_hmm.json'),
+                                 enable_research_output=True)
+    state.optitrack_bridge=MocapBridge(extrinsics=(np.eye(3),np.zeros(3)))
+    state.robot_transform=(np.eye(3),np.zeros(3))
+    state.optitrack_monitor=RigidBodyMonitor()
+
+    class Rig(FakeGuidedRig):
+        def telemetry_snapshot(self,**kwargs):
+            return {'available':True,'source_timestamp_s':clock[0],'source_age_s':0,
+                    'actual_tcp_pose':[0,0,2.2,0,0,0],'actual_qd':[0]*6}
+        def goto_pose(self,name,*,guard,cancel,speed=.1):
+            guard()
+            assert not cancel.is_set()
+            return super().goto_pose(name)
+
+    rig=Rig()
+    state.rig=rig
+    guided=service.AutomaticRunController(state,rig,clock=lambda:clock[0],enabled=True)
+    guided.sleeper=lambda _:None
+    handler=service.ApiHandler.__new__(service.ApiHandler)
+    handler.state,handler.rig,handler.guided=state,rig,guided
+    handler.catalog=service.RunCatalog(tmp_path)
+    handler.client_address=('127.0.0.1',1)
+    replies=[]
+    handler._json=lambda payload,status=200:replies.append((status,payload))
+
+    def post(path,body):
+        wire=json.dumps(body).encode()
+        handler.path=path
+        handler.headers={'Content-Length':str(len(wire))}
+        handler.rfile=io.BytesIO(wire)
+        handler.do_POST()
+        status,payload=replies.pop()
+        assert status == 200,payload
+        return payload
+
+    counter=[0]
+    def feed(frames=1):
+        for _ in range(frames):
+            clock[0]+=1/60
+            counter[0]+=1
+            skeleton=body_frame(counter[0],clock[0])
+            packet=build_mxtp02({int(i):segment['position_m'] for i,segment in skeleton['segments'].items()},
+                                time_code_ms=int(clock[0]*1000),sample_counter=counter[0])
+            frame=parse_mxtp02_frame(packet)
+            state.on_xsens_frame(frame)
+            state.on_sample(frame['time_code_s'],frame['segments']['1']['position_m'],True,clock[0])
+            state.optitrack_bridge.on_sample(counter[0]/120,(2,0,1.7),True,clock[0])
+            state.optitrack_monitor.update(1,(2,0,1.7),[0,0,0,1],counter[0]/120,clock[0])
+            state.tick()
+            assert state.pipeline_error is None
+
+    feed(3)
+    state.mark_calibrated()
+    participant=prefix+'01'
+    condition,event=service.assigned_study_slot(participant,block,1)
+    result=post('/api/protocol/start',{'participant_id':participant,'automatic':False,
+         'collection_mode':mode,'block_label':block,'within_block_trial':1,
+         'controller_condition':condition,'planned_event':event})
+    assert result['automation']['active'] is False
+    assert state.snapshot()['capture_mode'] == 'automatic_streams'
+    assert ('grip','BOTH',60) in rig.actions
+    for step in (0,1,2,3,5,6,7,8):
+        assert state.snapshot()['guided_step'] == step
+        feed(240 if mode == 'participant_study' and block == 'A' else 120)
+        result=post('/api/protocol/complete',{})
+    assert result['completed'] is True
+    assert state.recording is False
+    assert rig.actions.count(('goto','pose2_top')) == 1
+    assert rig.actions.count(('goto','pose1_low')) == 1
+    assert rig.actions.count(('release','BOTH',0)) == 1
+    manifest=json.loads(Path(state.manifest_path).read_text())
+    assert manifest['outcome'] == 'completed'
+    assert manifest['collection_mode'] == mode
+    assert manifest['execution_mode'] != 'automatic'
+    if mode == 'participant_study' and block == 'A':
+        assert manifest['catalog_summary']['quality']['grade'] == 'good'
+    rows=[json.loads(line) for line in Path(state.recording_path).read_text().splitlines()]
+    identity={'fixed zone':'static','reactive SSM':'dynamic_ssm',
+              'predictive SSM':'adaptive'}[condition]
+    assert {row['controller_decision'].get('condition') for row in rows} == {None,identity}
+    assert {row['ground_truth_phase'] for row in rows} >= {'approaching','working','retreating'}

@@ -11,7 +11,7 @@ from scripts.dashboard_server import AutomaticRunController, RigControl, RunCata
 
 class State(FakeGuidedState):
     def __init__(self, clock):
-        super().__init__(step=None)
+        super().__init__(step=None, distance=2.8)
         self.clock = clock
         self.controller_updated_at = clock()
         self.events = []
@@ -28,6 +28,7 @@ class State(FakeGuidedState):
         self.start_metadata = {'participant_id':args[0],
                                'collection_mode':args[8] if len(args) > 8 else kwargs.get('collection_mode'),
                                'execution_mode':kwargs.get('execution_mode')}
+        self.collection_mode = self.start_metadata['collection_mode']
         return super().start_session(*args[:4])
 
     def journal_event(self, kind, **payload):
@@ -70,6 +71,24 @@ def begin(clock, runner):
     # Only the existing sync marker is needed. Suction is already on from start.
     assert runner.rig.actions == [("grip", "BOTH", 60)]
     runner.state.sync_count = 1
+
+
+def test_start_suppresses_background_health_checks_during_loading_suction():
+    clock = FakeClock()
+    state, rig = State(clock), Rig()
+    runner = AutomaticRunController(state, rig, clock, enabled=True)
+    original_gripper_action = rig.gripper_action
+    automatic_during_grip = []
+
+    def grip(action, channel, vacuum):
+        automatic_during_grip.append(runner.automatic)
+        return original_gripper_action(action, channel, vacuum)
+
+    rig.gripper_action = grip
+    runner.start("Q01", "T01", True, "Q01-T01.mvn",
+                 collection_mode="qualification", block_label="A", automatic=True)
+    assert automatic_during_grip == [False]
+    assert runner.automatic and runner.phase == "loading"
 
 
 def test_work_visits_are_recorded_in_task_without_commanding_lowering():
@@ -199,7 +218,8 @@ def test_low_release_dwell_fault_never_vents(failure,mode):
     elif failure == "cancel":
         runner.request_stop()
     elif failure == "tracking":
-        state.fresh = False
+        original_snapshot = state.snapshot
+        state.snapshot = lambda: {**original_snapshot(), "optitrack_connected": False}
     if failure == "health":
         clock.advance(3)
         runner.tick()
@@ -251,7 +271,8 @@ def test_faults_latch_without_release_or_restart(failure,mode):
     if failure == "grip":
         rig.vacuum = (600, 200)
     elif failure == "tracking":
-        state.fresh = False
+        original_snapshot = state.snapshot
+        state.snapshot = lambda: {**original_snapshot(), "optitrack_connected": False}
     elif failure == "nan":
         state.distance = float("nan")
     elif failure == "output":
@@ -265,12 +286,94 @@ def test_faults_latch_without_release_or_restart(failure,mode):
     assert runner.cancel.is_set()
     assert ("stop",) in rig.actions
     assert not any(a[0] == "release" for a in rig.actions)
-    state.fresh, state.output, state.distance = True, True, 2.0
+    state.fresh, state.output, state.distance = True, True, 2.8
     rig.vacuum = (650, 650)
     tick(clock, state, runner, 3)
     assert runner.phase == "fault"
     with pytest.raises(ValueError, match="faulted"):
         runner.complete_step()
+
+
+def test_short_hardware_probe_delay_has_slack_but_stale_grip_still_faults():
+    clock, state, rig, runner = setup("qualification")
+    begin(clock, runner)
+    clock.advance(2.2)
+    assert runner._health() is True
+    clock.advance(.4)
+    with pytest.raises(ValueError, match="telemetry stale"):
+        runner._health()
+
+
+def test_xsens_gap_during_lift_pauses_without_venting_and_requires_supervisor_resume():
+    clock, state, rig, runner = setup("participant_study")
+    state.config["helmet_body"] = {"enabled": True}
+    original_snapshot = state.snapshot
+    state.snapshot = lambda: {**original_snapshot(), "body_tracking": {
+        "available": state.fresh, "minimum_segment_distance_m": 2.0}}
+    # The contract is frozen at start, so refresh it for this body-enabled fixture.
+    runner.contract = runner._build_contract(60)
+    state.automation_contract = runner.contract
+    begin(clock, runner)
+    tick(clock, state, runner)
+    tick(clock, state, runner, 1)
+    original_goto = rig.goto_pose
+
+    def interrupted_goto(name, *, guard, cancel, speed=0.10):
+        state.fresh = False
+        guard()
+
+    rig.goto_pose = interrupted_goto
+    tick(clock, state, runner)
+    tick(clock, state, runner, 2)
+    assert runner.phase == "paused"
+    assert runner.paused_from == "lifting"
+    assert state.recording and state.motion_paused
+    assert ("stop",) in rig.actions
+    assert not any(action[0] == "release" for action in rig.actions)
+    with pytest.raises(ValueError, match="Fresh Xsens"):
+        runner.resume_paused()
+    state.fresh = True
+    state.controller_updated_at = clock()
+    runner.refresh_health()
+    rig.goto_pose = original_goto
+    runner.resume_paused()
+    assert runner.phase == "retreat_lift" and not state.motion_paused
+    tick(clock, state, runner)
+    tick(clock, state, runner, 2)
+    assert runner.phase == "task"
+    assert rig.actions.count(("goto", "pose2_top")) == 1
+
+
+def test_q_lift_uses_supervised_head_clearance_while_xsens_body_is_missing():
+    clock, state, rig, runner = setup("qualification")
+    state.config["helmet_body"] = {"enabled": True}
+    runner.contract = runner._build_contract(60)
+    state.automation_contract = runner.contract
+    state.distance = 2.0  # Clears the original 1.554 m supervised launch threshold.
+    state.fresh = False
+    original_snapshot = state.snapshot
+    state.snapshot = lambda: {**original_snapshot(), "body_tracking": {
+        "available": False, "minimum_segment_distance_m": None}}
+    begin(clock, runner)
+    tick(clock, state, runner)
+    tick(clock, state, runner, 1)
+    assert runner.phase == "retreat_lift"
+    tick(clock, state, runner)
+    tick(clock, state, runner, 2)
+    assert runner.phase == "task"
+    assert rig.actions.count(("goto", "pose2_top")) == 1
+    assert not runner.cancel.is_set()
+
+
+def test_supported_low_release_can_finish_with_xsens_missing():
+    clock, state, rig, runner = setup()
+    state.step = 9
+    runner._phase("supported_release", "Panel resting on verified low support")
+    tick(clock, state, runner)
+    state.fresh = False
+    tick(clock, state, runner, 2)
+    assert runner.phase == "complete" and state.stopped
+    assert rig.actions[-1] == ("release", "BOTH", 0)
 
 
 def test_seal_dwell_resets_and_low_pressure_during_loading_does_not_vent():
@@ -459,7 +562,7 @@ def test_dashboard_api_sequence_start_to_saved_release_with_fake_hardware():
     tick(clock, state, runner)
     state.distance = 0.5
     tick(clock, state, runner, 1)
-    state.distance = 2.0
+    state.distance = 2.8
     tick(clock, state, runner, 1)
     tick(clock, state, runner, 1)
     assert runner.phase == "retreat_lower"

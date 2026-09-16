@@ -1,0 +1,16 @@
+# Development worksheet only. This file is not read by the live controller.
+# Fill these fields from measurements of the final robot, tool, panel, sensing
+# and safety output chain before considering a new study release.
+status: development_only
+static_stop_m: null
+static_warning_m: null
+adaptive_min_m: null
+end_to_end_stop_time_s: null
+sensing_uncertainty_m: null
+protected_geometry_margin_m: null
+adaptive_speed_ramp_m: null
+evidence:
+  stop_time: null
+  sensing_uncertainty: null
+  protected_geometry: null
+  safety_rated_output: null

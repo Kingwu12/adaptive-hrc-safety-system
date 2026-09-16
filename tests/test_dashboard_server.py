@@ -92,6 +92,23 @@ def _full_xsens_frame() -> dict:
     }
 
 
+def test_stopped_rtde_source_clock_discards_cached_receiver():
+    rig = RigControl("192.0.2.1")
+
+    class FrozenReceiver:
+        def getTimestamp(self):
+            return 1.0
+
+        def getActualTCPPose(self):
+            return [0.0, 0.0, 0.5, 0.0, 0.0, 0.0]
+
+    rig._recv = FrozenReceiver()
+    rig._last_telemetry_source = (1.0, time.monotonic() - 1.0)
+    sample = rig.telemetry_snapshot(allow_connect=False)
+    assert sample == {"available": False, "error": "RTDE source timestamp stopped advancing"}
+    assert rig._recv is None
+
+
 def test_safe_id_removes_path_characters():
     assert safe_id("../P 01/", "fallback") == "P-01"
 
@@ -664,8 +681,10 @@ def test_goto_pose_rejects_low_vacuum_before_connecting(monkeypatch):
     assert connected is False
 
 
-def test_research_speed_output_is_clamped_and_deduplicated():
+def test_research_speed_output_is_clamped_and_deduplicated(monkeypatch):
     calls = []
+    clock = [100.0]
+    monkeypatch.setattr("scripts.dashboard_server.time.monotonic", lambda: clock[0])
 
     class FakeIO:
         def setSpeedSlider(self, value):
@@ -680,12 +699,16 @@ def test_research_speed_output_is_clamped_and_deduplicated():
     rig._last_output_failure = None
 
     first = rig.apply_research_speed_fraction(1.5)
+    clock[0] += 0.4
     second = rig.apply_research_speed_fraction(1.0)
+    clock[0] += 0.2
+    refreshed = rig.apply_research_speed_fraction(1.0)
     stopped = rig.apply_research_speed_fraction(-0.2)
 
-    assert calls == [1.0, 0.0]
+    assert calls == [1.0, 1.0, 0.0]
     assert first["applied"] is True and first["changed"] is True
     assert second["status"] == "already_applied"
+    assert refreshed["status"] == "applied"
     assert stopped["speed_fraction"] == 0.0
 
 

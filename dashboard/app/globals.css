@@ -476,4 +476,7 @@ footer{display:flex;justify-content:space-between;border-top:1px solid var(--lin
 }
 :root .automationReadiness{grid-column:1/-1;padding:16px 20px;border:1px solid #b9c8c0;border-left:4px solid #27674e;background:#fff;color:#172c23;font-size:1rem}
 :root .automationReadiness p{margin:8px 0 0;line-height:1.5}
+.trialModeChoice{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.trialModeChoice button{padding:8px 12px;border:1px solid #b9c8c0;border-radius:6px;background:#fff;color:#24382e;font-weight:700;cursor:pointer}
+.trialModeChoice button[aria-pressed="true"]{border-color:#087a50;background:#e7f5ee;color:#065d3d}
 :root .controllerWitness{display:grid;gap:8px;margin:16px 0;padding:16px;background:#edf3ef;border-left:4px solid #27674e;color:#172c23;font-size:1rem;overflow-wrap:anywhere}

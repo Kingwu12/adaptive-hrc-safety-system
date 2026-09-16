@@ -222,7 +222,7 @@ def assert_backend(value, owners, expected_hash, root=ROOT):
         raise Blocked("Backend recording/automation state is unknown")
     if (value.get("capture_mode") != "automatic_streams"
             or automation.get("enabled") is not True
-            or automation.get("version") != "automatic-panel-v7-helmet-body-task"
+            or automation.get("version") != "automatic-panel-v10-supervised-head-clearance"
             or value.get("controller_output_enabled") is not True
             or not {"participant_study", "qualification"}.issubset(automation.get("supported_collection_modes") or [])):
         raise Blocked("Backend lacks required automatic trial/capture settings; resolve rig state before restarting")

@@ -13,7 +13,8 @@ type Status = {
   automation?: {
     enabled: boolean; active: boolean; qualification_only: boolean;
     availability?: string; supported_collection_modes?: string[];
-    version: string; phase: string; reason: string; fault: boolean;
+    version: string; phase: string; reason: string; fault: boolean; paused_from?: string | null;
+    qualification_head_reach_margin_m?: number;
     task_sha256?: string | null;
     work_locations?: { configured: boolean; visited_count?: number; total_locations?: number };
     simulated_drilling?: { completed_count: number; completed_markers: number[]; nearest_hand_distances_m?: number[]; simulated_task_complete: boolean; reason: string; dwell_s: number };
@@ -382,6 +383,7 @@ export default function Home() {
   const [reachable, setReachable] = useState(false);
   const [history, setHistory] = useState<Record<string, number[]>>({ distance: [], speed: [], acceleration: [] });
   const [workspaceMode, setWorkspaceMode] = useState<CollectionMode>("participant_study");
+  const [automaticQSelected, setAutomaticQSelected] = useState(false);
   const [participant, setParticipant] = useState("");
   const [catalog, setCatalog] = useState<Catalog>({ participants: [], runs: [] });
   const [catalogRefresh, setCatalogRefresh] = useState(0);
@@ -537,7 +539,14 @@ export default function Home() {
         headers: { "Content-Type": "application/json", "X-Control-Key": controlKey() },
         body: JSON.stringify(body),
       });
-      const result = await res.json();
+      const raw = await res.text();
+      let result;
+      try { result = JSON.parse(raw); }
+      catch {
+        throw new Error(res.status >= 500
+          ? "Dashboard proxy timed out. Check the live phase and rig before pressing again; the backend may still be finishing the motion."
+          : `Control response was unreadable (HTTP ${res.status}). Check the live trial state.`);
+      }
       if (!res.ok) {
         throw new Error(res.status === 403
           ? "REJECTED 403 — no valid control key. Add ?k=<key> to this page's URL."
@@ -594,11 +603,12 @@ export default function Home() {
       setMessage("No assigned study slot is selected. Refresh the session before starting.");
       return;
     }
-    if (isStructuredRun && status.automation?.enabled !== true) {
+    const automaticSelected = workspaceMode === "qualification" && automaticQSelected;
+    if (automaticSelected && status.automation?.enabled !== true) {
       setMessage("Automatic trials are disabled or unavailable on this backend. Use Start-Lab.cmd after resolving the rig and recording state, then retry.");
       return;
     }
-    if (isStructuredRun && status.automation?.enabled && !(status.automation.supported_collection_modes || ["qualification"]).includes(workspaceMode)) {
+    if (automaticSelected && status.automation?.enabled && !(status.automation.supported_collection_modes || ["qualification"]).includes(workspaceMode)) {
       setMessage("This running backend does not support automatic participant trials. Restart the updated backend with Start-Lab.cmd.");
       return;
     }
@@ -609,7 +619,7 @@ export default function Home() {
       controller_condition: isStructuredRun ? slot?.controller : undefined,
       planned_event: isStructuredRun ? slot?.event : undefined,
       collection_mode: workspaceMode,
-      automatic: isStructuredRun,
+      automatic: automaticSelected,
       vacuum,
     });
     } finally {
@@ -630,6 +640,14 @@ export default function Home() {
       abortInFlight.current = false;
       setAbortBusy(false);
     }
+  };
+
+  const resumePausedTrial = async () => {
+    if (status.automation?.phase !== "paused" || protocolWorking) return;
+    if (!window.confirm("Resume the paused trial?\n\nThe supervisor must verify the wearer and both arms are clear, HEAD and Xsens tracking are fresh, the panel remains firmly gripped, and the stop path is ready. A new clear dwell is required before motion.")) return;
+    setProtocolWorking(true);
+    try { await post("/api/protocol/resume"); }
+    finally { setProtocolWorking(false); }
   };
 
   const saveParticipant = async () => {
@@ -765,6 +783,7 @@ export default function Home() {
   const nextStudySlot = schedule.find(slot =>
     !acceptedStudyKeys.has(`${slot.block}-${slot.withinBlockTrial}`));
   const acceptedStudyRuns = acceptedStudyKeys.size;
+  const reviewCaptures = participantRuns.filter(run => acceptsStudyRun(run) && run.quality.grade === "review").length;
   const intakeComplete = !!completedStudyForms[studyFormKey(participant, "intake")];
   const blockAFormComplete = !!completedStudyForms[studyFormKey(participant, "block", "A")];
   const blockBFormComplete = !!completedStudyForms[studyFormKey(participant, "block", "B")];
@@ -970,7 +989,7 @@ export default function Home() {
               <span>STEP {currentFlowIndex + 1} OF {flowSteps.length}</span>
               <strong>{participant ? currentFlowLabel : isQualification ? "Create Q code" : "Create participant"}</strong>
             </div>
-            <div className="studyCounter"><strong>{acceptedStudyRuns}/9</strong><span>trials accepted</span></div>
+            <div className="studyCounter"><strong>{acceptedStudyRuns}/9</strong><span>captures logged</span></div>
           </section>
 
           {status.recording && (
@@ -992,6 +1011,8 @@ export default function Home() {
               </button>}
               {guidedIndex >= 3 && guidedIndex <= 8 && <div className="simPanelNote">No top fixture: suction stays ON while the panel is overhead. Never release an unsupported panel.</div>}
               {!automaticWaiting && <button onClick={confirmGuidedAction} disabled={protocolWorking}>{protocolWorking ? protocolBusyLabel : guidedNext}</button>}
+              {automaticActive && status.automation?.phase === "paused" && <button onClick={() => void resumePausedTrial()} disabled={protocolWorking}>Resume after supervisor checks</button>}
+              {automaticActive && status.stale && status.automation?.phase !== "fault" && <p className="warnText">{isQualification ? "Xsens packets are missing. Hand gestures wait for fresh data; Q motion scores tracked HEAD distance." : "Xsens packets are missing. Body clearance and hand gestures wait for fresh data; P motion pauses if the gap occurs during lift or lower."}</p>}
               {automaticActive && status.automation?.phase === "task" && <div role="status">
                 <strong>Drilling gestures: {status.automation.simulated_drilling?.completed_count ?? 0}/4</strong>
                 <p>{[0, 1, 2, 3].map(i => `Corner ${i + 1}: ${status.automation?.simulated_drilling?.completed_markers?.includes(i) ? "done" : `waiting (${n(status.automation?.simulated_drilling?.nearest_hand_distances_m?.[i])} m)`}`).join(" · ")}</p>
@@ -1002,7 +1023,7 @@ export default function Home() {
                 <summary>Operator: controller identity and event evidence</summary>
                 <p>Separation reference: {status.geometry_reference?.source || "unavailable"}. Control geometry: {status.controller_decision?.geometry_source || "unavailable"}. Distances use tracked segment origins and a robot column proxy.</p>
                 <p>Xsens body: {status.body_tracking?.available ? `${status.body_tracking.segment_count} segments anchored to helmet` : status.body_tracking?.reason || "unavailable"}. Nearest segment: {status.body_tracking?.nearest_segment || "unavailable"}.</p>
-                <p>HMM phase inputs: {status.recognition_uses_xsens ? "head and Xsens body features" : "legacy head features; a body-trained phase model is not loaded"}. Xsens body geometry separately informs controller separation and hand gesture detection.</p>
+                <p>HMM phase inputs: {status.recognition_uses_xsens ? "head and Xsens body features" : "legacy head features; a body-trained phase model is not loaded"}. {isQualification ? "Q launch uses the supervised tracked HEAD clearance; controller scoring uses raw HEAD-to-TCP distance." : "Xsens body geometry informs controller separation."} Hand gestures need fresh Xsens.</p>
                 <p>Recording {status.participant_id} · block {status.block_label}. Assigned controller: <strong>{status.controller_condition || "unavailable"}</strong>.</p>
                 <p>Controller producing the latest decision: <strong>{CONTROLLER_NAMES[status.controller_decision?.condition || ""] || "unavailable — no identified controller decision"}</strong> ({status.controller_decision?.condition || "no identifier"}).</p>
                 {status.controller_decision?.condition && CONTROLLER_NAMES[status.controller_decision.condition] !== status.controller_condition && <p className="warnText">CONTROLLER MISMATCH: abort this attempt and inspect the recorded controller identity.</p>}
@@ -1018,17 +1039,17 @@ export default function Home() {
 
           <section className="studyLayout">
             {!status.recording && <aside className="automationReadiness" role="status">
-              <strong>{status.automation?.enabled
-                ? (status.automation.supported_collection_modes || ["qualification"]).includes(workspaceMode)
-                  ? isQualification ? "Automatic rehearsal enabled" : "Automatic participant trials enabled"
-                  : "Backend update required for participant automation"
-                : "Operator-confirmed mode: automation is off"}</strong>
-              <p>{status.automation?.enabled
-                ? (status.automation.supported_collection_modes || ["qualification"]).includes(workspaceMode)
-                  ? "Start once. Data saves automatically. Grip verification, retreat and lift advance automatically. Hold a hand at each of the four tracked corners for one second, then move clear for lowering and supported release."
-                  : "Restart the updated backend with Start-Lab.cmd. The service currently running supports rehearsals only."
-                : "Start the lab with Start-Lab.cmd to enable automatic trials. Sensor and robot checks remain required."}</p>
+              <strong>{isQualification && automaticQSelected ? "Automatic Q trial selected" : "Supervised manual trials selected"}</strong>
+              <p>{isQualification && automaticQSelected
+                ? "Start once. Grip verification, retreat, lift and lowering advance automatically. Four tracked hand-corner dwells complete the task."
+                : "The operator confirms each real phase. Streams and assigned controller decisions save automatically; lift and lower requests remain governed by live tracking and controller output."}</p>
+              {isQualification && <div className="trialModeChoice" role="group" aria-label="Qualification control mode">
+                <button type="button" aria-pressed={!automaticQSelected} onClick={() => setAutomaticQSelected(false)}>Supervised manual</button>
+                <button type="button" aria-pressed={automaticQSelected} onClick={() => setAutomaticQSelected(true)}>Automatic Q trial</button>
+              </div>}
               {status.model_health?.warnings.map(warning => <p key={warning} className="warnText">{warning}</p>)}
+              {status.model_health?.warnings.length ? <p>The model warning does not block manual suction. Start is governed by the live rig preflight and the current study-code check.</p> : null}
+              {reviewCaptures > 0 && <p className="warnText">{reviewCaptures} recorded capture{reviewCaptures === 1 ? " needs" : "s need"} data review before analysis.</p>}
               {status.pipeline_error && <p className="warnText" role="alert">Capture/controller pipeline failed: {status.pipeline_error}. Restart the service.</p>}
             </aside>}
             {!status.recording && <article className="panel oneStepCard">
@@ -1075,7 +1096,7 @@ export default function Home() {
                     <span>{nextStudySlot.controller}</span>
                     <span>{nextStudySlot.event}</span>
                   </div>
-                  <small>{isQualification && status.automation?.enabled
+                  <small>{isQualification && automaticQSelected
                     ? "Automatic qualification: load → seal → retreat → lift → task → retreat → lower. Supported release is confirmed."
                     : "Single-press sequence. The selected controller gates lift/lower continuously, and suction releases only at the verified low support."}</small>
 
@@ -1086,6 +1107,7 @@ export default function Home() {
                   {currentPreflight.key === "ready" && (
                     <button className="stepPrimary" disabled={startBusy} onClick={() => void startRecording(nextStudySlot)}>{startBusy ? "Starting trial…" : `Start Block ${nextStudySlot.block} · Trial ${nextStudySlot.withinBlockTrial} — suction turns on`}</button>
                   )}
+                  {message && !message.startsWith("Dashboard proxy timed out") && <p className="feedback compactFeedback" role="alert">{message}</p>}
 
                   <details className="preflightDetails">
                     <summary>{readyPreflightCount}/5 systems ready <span>View all checks</span></summary>
@@ -1101,11 +1123,11 @@ export default function Home() {
               ) : (
                 <div className="oneStepAction completeAction"><span>SESSION COMPLETE</span><h2>All required trials and forms are complete</h2><p>Debrief the participant and preserve the session manifest.</p></div>
               )}
-              {message && (!dueStudyForm || status.recording) && <p className="feedback compactFeedback">{message}</p>}
+              {message && (status.recording || !message.startsWith("Dashboard proxy timed out")) && (!nextStudySlot || dueStudyForm || status.recording) && (!dueStudyForm || status.recording) && <p className="feedback compactFeedback">{message}</p>}
             </article>}
 
             <details className="panel studyDetails">
-              <summary><span>Session map</span><b>{acceptedStudyRuns}/9 captures passed</b></summary>
+              <summary><span>Session map</span><b>{acceptedStudyRuns}/9 captures logged{reviewCaptures ? ` · ${reviewCaptures} need review` : ""}</b></summary>
               <p>Capture checks cover labels and tracking. Final analysis eligibility requires a separate trial audit.</p>
               <details>
                 <summary>Operator: controller order for {participant || "no participant selected"}</summary>
@@ -1116,9 +1138,10 @@ export default function Home() {
                 {schedule.map(slot => {
                   const matches = participantRuns.filter(run => run.block_label === slot.block && run.within_block_trial === slot.withinBlockTrial);
                   const accepted = matches.some(acceptsStudyRun);
+                  const reviewed = matches.some(run => acceptsStudyRun(run) && run.quality.grade === "review");
                   const attempted = matches.length > 0;
                   return <div key={`${slot.block}-${slot.withinBlockTrial}`} className={accepted ? "trialSlot accepted" : attempted ? "trialSlot repeat" : "trialSlot"}>
-                    <span>{slot.block}{slot.withinBlockTrial}</span><strong>{slot.event}</strong><small>{accepted ? "✓ accepted" : attempted ? "repeat" : "waiting"}</small>
+                    <span>{slot.block}{slot.withinBlockTrial}</span><strong>{slot.event}</strong><small>{accepted ? reviewed ? "review needed" : "✓ logged" : attempted ? "repeat" : "waiting"}</small>
                   </div>;
                 })}
               </div>
