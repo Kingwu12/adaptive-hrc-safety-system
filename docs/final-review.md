@@ -2,6 +2,8 @@
 
 Please review the manuscript, assessment slides and speaking notes together. The current conclusion is an integrated physical prototype with exploratory findings; it does not claim that predictive control has demonstrated superior safety or efficiency.
 
+The shared [Final Paper folder](https://drive.google.com/drive/folders/1Fd2TvVo1fGsLQ9y54gfykwy-JKXkb9XW) contains the current paper, slides, Overleaf package and [editable Google Docs review copy](https://docs.google.com/document/d/1r2O7vDNjc5OZBHUNSifaxOeLNc655imUoNfXRv3IeTw). It is inside the existing project Drive under SEM 2 DOCS.
+
 ## Files to open
 
 - [Paper PDF](../paper/main.pdf): the current academic manuscript.
