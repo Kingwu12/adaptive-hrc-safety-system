@@ -1,48 +1,18 @@
-"""Prototype dynamic speed-and-separation envelope -- deterministic command bound.
+"""Prototype dynamic speed-and-separation envelope: a command bound.
 
-WHY THIS MODULE EXISTS (viva defence, in one line):
-    "The smart part can only ADD caution, never remove it."
+The simplified threshold is S(t) = max(0, v_proj(t))*T + C + Sa.
+For gap d-S, the requested speed limit is zero below the threshold, ramps
+linearly over the configured band, then reaches one.
 
-The sem-1 design let the adaptive controller reason its way to FULL speed inside
-the yellow band (e.g. "operator is retreating -> no need to slow"). That makes the
-learned model part of the SAFETY-CRITICAL path: a recognition error could raise the
-commanded speed. Certifying a learned model to that standard is the hard problem in
-the whole field. This module removes that burden.
+In SSM mode the adaptive controller caps its request by this envelope and also
+applies the shared fixed-red override. That arithmetic relationship holds for
+the same inputs and parameters; it does not establish physical safety or show
+that the dynamic rule is as safe as a fixed-zone rule in an installed cell.
 
-The envelope is a STATE-BLIND, SPEED-AWARE function of geometry alone. It implements
-the ISO/TS 15066 Speed-and-Separation Monitoring stop distance using the MEASURED
-approach speed v_proj instead of the fixed worst-case human speed K:
-
-    S(t) = max(0, v_proj(t)) * T + C + Sa
-
-and maps the current gap (d - S) to the MAXIMUM permissible speed fraction:
-
-    d <= S            -> 0.0            (must be stopped: too close for this speed)
-    S < d < S + ramp  -> (d - S)/ramp  (linear scale-down as separation tightens)
-    d >= S + ramp     -> 1.0           (full speed permitted)
-
-This is a DETERMINISTIC BOUND in a runtime-assurance / shielding pattern. The learned
-LHMM layer sits ON TOP and may only reduce the command below the envelope, never
-raise it above -- so a recognition error can at worst make the robot too cautious,
-not more permissive than this bound. This is locked by
-test_adaptive_never_exceeds_envelope. The prototype is not certified: T, uncertainty,
-robot stopping distance, swept-volume geometry, and the safety-rated output path must
-all be measured and validated for the installed cell before any safety claim.
-
-WHY v_proj, not K:  the fixed-K zone (K=1.6 m/s worst case) stops the robot for a
-stationary worker standing 1.1 m away, because it assumes they might lunge at full
-speed. The envelope reads the actual approach speed: a stationary worker (v_proj~=0)
-gets S = C + Sa, so the robot may keep moving -- exactly the efficiency the standard
-permits, WITHOUT any belief about intent. When the operator actually approaches at
-the nominal K, S rises to K*T + C + Sa == the old fixed red radius. The envelope is
-therefore never LESS safe than the fixed zone at the speed the zone assumed; it is
-only less conservative when the person is demonstrably moving slower.
-
-NOTE the envelope is NOT the absolute floor on its own: at v_proj~=0 its stop
-distance (C + Sa) is well inside the configured fixed RED radius. The fixed-zone RED
-hard-stop invariant is kept ON TOP of the envelope in the controllers, so a body
-inside the configured red radius always produces a stop request regardless of measured
-speed. Whether that request is safety-rated depends on the physical output chain.
+This is a standards-informed research model, not the complete protective
+separation calculation or a certified safety function. Sensor uncertainty,
+robot/human geometry, robot motion, reaction and stopping behaviour, and the
+physical output chain require independent treatment and validation.
 """
 
 from __future__ import annotations

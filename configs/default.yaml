@@ -5,7 +5,7 @@
 # during pilot calibration (see docs/experiment_plan.md) before any reported run.
 
 zones:
-  # ISO/TS 15066 Speed-and-Separation Monitoring protective distance:
+  # Simplified standards-informed prototype distance (not a validated safeguard):
   #   S0 = K*T + C + Sa
   K: 1.6            # human approach speed toward the robot (m/s), ISO/TS 15066 default
   T: 0.40           # system reaction + stopping time (s) -- PILOT PLACEHOLDER; measure end-to-end

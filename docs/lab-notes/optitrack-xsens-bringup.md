@@ -1,5 +1,7 @@
 # OptiTrack + Xsens + UR bring-up
 
+> Historical bring-up record for the older single-head `live_run.py` path. For the current body transform and hardware-free example, start with the [integration tutorial](../helmet-xsens-integration.md). The calibration command below predates the current `calibrate_mocap.py extrinsics --pairs` interface; do not copy it as a current command.
+
 ## Motive assets
 
 Create rigid bodies with stable, unique IDs (the names are for operators; the

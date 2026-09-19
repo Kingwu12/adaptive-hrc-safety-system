@@ -64,7 +64,7 @@ def cmd_sa(log_path: str) -> int:
     resid = np.linalg.norm(pos - pos.mean(axis=0), axis=1)
     print(f"n={len(pos)}  p50={np.percentile(resid,50)*1000:.1f} mm  "
           f"p99={np.percentile(resid,99)*1000:.1f} mm")
-    print(f"Sa (p99, use in configs/default.yaml envelope.Sa): "
+    print(f"Sa (p99, use in configs/default.yaml zones.Sa): "
           f"{np.percentile(resid,99):.4f} m")
     return 0
 

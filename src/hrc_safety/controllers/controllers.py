@@ -13,10 +13,10 @@
                                 above it.
 
 ARCHITECTURAL INVARIANT (locked by test_adaptive_never_exceeds_envelope):
-    commanded speed <= envelope-permitted speed, EVERY tick. The learned layers are
-    shielded by the envelope: a recognition or prediction error can only make the
-    robot MORE cautious, never faster. This is a runtime-assurance pattern, but the
-    prototype guard is not a certified safety function.
+    In SSM mode, commanded speed <= envelope-permitted speed for the same
+    observation, parameters and zone state. Other collaborative modes have
+    separate deterministic bounds. This software relationship does not validate
+    the sensing, geometry, physical output or safety of the installed system.
 
 SAFETY INVARIANT (locked by test_red_zone_always_stops_adaptive_even_if_model_says_working):
     A fixed-RED-zone breach forces a stop request, checked FIRST, regardless of any

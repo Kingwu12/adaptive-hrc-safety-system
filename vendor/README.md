@@ -1,7 +1,7 @@
-# OptiTrack NatNet client
+# Optional OptiTrack NatNet SDK client
 
-Copy the official `NatNetClient.py` from the OptiTrack NatNet SDK Python
-samples into this directory. It is intentionally not reimplemented here: the
-SDK sample tracks NatNet protocol/version changes and ships with Motive.
+The current dashboard uses the dependency-free `NatNetV4Listener` in [optitrack_transport.py](../src/hrc_safety/mocap/optitrack_transport.py). It does not require a vendor Python client.
 
-Expected path: `vendor/NatNetClient.py` (or pass `--natnet-client PATH`).
+The older `live_run.py` path can use `OptiTrackListener`, which loads an externally supplied `NatNetClient.py`. Obtain the matching Python sample and its companion modules from the official OptiTrack NatNet SDK. Place the required files here or provide the supported `--natnet-client` path to the older runner. Keep the SDK version and redistribution terms with any vendor files.
+
+These are separate receiver implementations; adding an SDK client does not change the dashboard's parser or give it protocol negotiation. See the [integration tutorial](../docs/helmet-xsens-integration.md) for its supported data path.

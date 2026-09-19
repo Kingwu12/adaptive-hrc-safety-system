@@ -1,5 +1,7 @@
 # System audit and technical guide — 9 September 2026
 
+> Dated audit: deployment status and test counts below refer to this revision. For the current source reading guide, use [architecture](architecture.md), [sensor integration](helmet-xsens-integration.md) and [reproducibility](reproducibility.md).
+
 The offline software audit found and repaired real faults. The system is **not yet demonstrated ready for another final comparative participant session**. The Central Windows lab PC is off; these changes have not been deployed or tested against its robot, sensors and native recording applications.
 
 Participant automation is implemented in the same guarded engine as rehearsal automation. There is no longer a Q-only software restriction. That answers whether the code can run automatically for participants; it does not establish model quality, physical stopping performance or validity of the earlier data.

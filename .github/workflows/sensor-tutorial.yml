@@ -1,0 +1,41 @@
+name: Sensor integration tutorial
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'src/hrc_safety/**'
+      - 'scripts/demo_sensor_fusion.py'
+      - 'tests/test_sensor_fusion_demo.py'
+      - 'tests/test_body_tracking.py'
+      - 'pyproject.toml'
+      - '.github/workflows/sensor-tutorial.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/hrc_safety/**'
+      - 'scripts/demo_sensor_fusion.py'
+      - 'tests/test_sensor_fusion_demo.py'
+      - 'tests/test_body_tracking.py'
+      - 'pyproject.toml'
+      - '.github/workflows/sensor-tutorial.yml'
+permissions:
+  contents: read
+jobs:
+  example:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    env:
+      PYTHONUTF8: '1'
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -e ".[dev]"
+      - name: Run the public example
+        run: python scripts/demo_sensor_fusion.py
+      - name: Verify transforms and tutorial contract
+        run: python -m pytest tests/test_sensor_fusion_demo.py tests/test_body_tracking.py

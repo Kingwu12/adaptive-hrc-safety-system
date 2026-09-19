@@ -1,8 +1,8 @@
 """Xsens MVN real-time network stream -> MocapBridge.
 
-The lab's tracker is an Xsens IMU suit (NOT OptiTrack; supersedes the
-transport half of docs/design/optitrack-bridge.md — the bridge, recorder,
-calibration and staleness design all carry over unchanged).
+Xsens supplies articulated poses alongside the OptiTrack optical helmet.
+The dashboard combines them with HelmetBodyTracker; the single-point bridge
+below is a compatibility path. See docs/helmet-xsens-integration.md.
 
 MVN Analyze streams UDP datagrams ("network streamer"). We parse message
 MXTP02 (segment position + quaternion, big-endian), retain every item and its

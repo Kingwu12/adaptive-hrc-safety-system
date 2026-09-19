@@ -1,5 +1,7 @@
 # OptiTrack Integration — Scoping Proposal
 
+> Historical proposal and updates. The current dashboard uses a different NatNet receiver and helmet-body path; start with the [integration tutorial](../helmet-xsens-integration.md). Commands and deployment claims below describe their dated revisions.
+
 > **UPDATE 2026-08-19 — OptiTrack is BACK, and its transport now exists.**
 > The lab has BOTH. `src/hrc_safety/mocap/natnet_transport.py` is a direct
 > depacketizer (no vendored SDK: Motive ships no macOS build), unicast with a

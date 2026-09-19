@@ -1,21 +1,21 @@
 #!/usr/bin/env python3
 """End-to-end simulation: fit models, run the THREE-RUNG ladder, print comparisons.
 
-Workflow (the EXACT workflow pilot data will follow):
+Synthetic software demonstration (separate from the empirical manuscript):
   1. load config; print zone + envelope geometry.
   2. generate a held-out TEST trace (with cued distractors + the slip).
   3. FIT emissions + transition matrix A from separately-seeded labelled TRAINING
      traces -- never from the test trace, never from hand-set numbers.
   4. run the THREE rungs over the identical test trace, writing JSONL decision logs:
        fixed_zone   -- deployed practice (fixed distance threshold)
-       dynamic_ssm  -- ISO/TS 15066 speed-aware envelope alone (the standards rung)
+       dynamic_ssm  -- simplified speed-aware prototype envelope
        adaptive     -- full system (envelope floor + LHMM state + horizon prediction)
   5. print the fitted A, the LHMM recognition report, a 3-column metric table, and an
      ABLATION table (full system minus prediction; full minus the state layer), and
-     write a machine-readable metrics JSON that the paper-table generator consumes.
+     write a machine-readable metrics JSON for the legacy simulation-table generator.
 
-Reported pilot results replace the synthetic ones; synthetic data never appears in
-the paper (see docs/experiment_plan.md).
+These outputs are not inputs to the canonical empirical manuscript.
+See docs/reproducibility.md and scripts/build_paper.py for the paper pipeline.
 """
 
 from __future__ import annotations

@@ -1,211 +1,108 @@
-# adaptive-hrc-safety-system
+# Human–robot collaboration: Xsens, OptiTrack and adaptive separation control
 
-Reference implementation for the Monash FYP (2026) paper
-**"Evaluating Safety and Coordination in Context-Aware Speed and Separation Monitoring for Human–Robot Ceiling-Panel Installation"**
-(Wu, Siniakov, Magila).
+Research software for a Monash University final-year project investigating human–robot ceiling-panel installation with a UR10 CB3 and a lightweight panel surrogate. The system combines an OptiTrack helmet pose with an articulated Xsens skeleton, extracts movement features, and compares fixed-zone, reactive and predictive control.
 
-## Paper and presentation review
+**Start with the [Xsens + OptiTrack integration tutorial](docs/helmet-xsens-integration.md).** It explains coordinate transforms, quaternion conventions, timing checks and implementation, with an executable example that requires no lab equipment.
 
-Start with [the paper PDF](paper/main.pdf), [the assessment presentation](presentation/FYP-assessment-presentation-v2.pptx), and [the team review guide](docs/final-review.md). The [assessor preparation guide](docs/assessor-preparation.md) explains the algorithms, equations, findings and likely questions in plain language. The [presentation guide](presentation/FYP-presentation-guide.md) contains the speaking order and rehearsal plan.
+| I want to… | Start here |
+|---|---|
+| Understand how the two tracking systems are combined | [Integration tutorial and worked example](docs/helmet-xsens-integration.md) |
+| Run the code without hardware | [Quickstart below](#run-without-hardware) |
+| Understand the controllers and data flow | [System architecture](docs/architecture.md) |
+| Reproduce simulations, model checks or the paper | [Reproducibility guide](docs/reproducibility.md) |
+| Find setup, capture and historical lab documentation | [Documentation index](docs/README.md) |
+| Review the research | [Paper PDF](paper/main.pdf), [presentation](presentation/FYP-assessment-presentation-v2.pptx), [team review](docs/final-review.md) |
+| Contribute or build on this work | [Contribution guide](CONTRIBUTING.md) |
 
-`paper/main.tex` remains the canonical manuscript. Google Docs is a review copy; proposed changes should be reconciled into LaTeX. These are review materials, not a journal submission or acceptance. The public repository contains analysis code and manuscript summaries; raw participant records are stored separately. See [paper build instructions](paper/README.md).
+## What this project provides
 
-A UR10 CB3 holds a lightweight surrogate panel while a human performs the approved task.
-This repository is a research prototype, not a certified safety system. We compare
-**three rungs** of safety logic over the **identical** trace:
+- A Python parser for Xsens MXTP02 position/quaternion packets and a NatNet 4 receiver for OptiTrack rigid bodies and marker sets.
+- A helmet-anchored, 23-segment body representation in OptiTrack and robot-base coordinates.
+- Three separation controllers, phase recognition using a Gaussian-mixture HMM, and a separate kinematic boundary-breach predictor.
+- A local experiment dashboard, recording and task-sequencing code, offline analysis, and the canonical LaTeX manuscript.
 
-1. **Fixed-zone** (`FixedZoneController`) — deployed practice: a fixed worst-case
-   distance threshold, zone → command, nothing else.
-2. **Dynamic envelope** (`DynamicSSMController`) — a simplified, standards-informed
-   speed-and-separation comparator using the **measured** approach speed, and no
-   learned model.
-3. **Adaptive** (`EnvelopeAdaptiveController`) — the full system: the envelope as a
-   deterministic **command bound**, with a *Recognise → Predict → Adapt* layer (Layered HMM state
-   recognition + kinematic horizon prediction) **shielded** on top — it may only ADD
-   caution, never exceed the envelope.
+This is a research prototype. Its distance calculation uses tracked segment origins and a vertical column beneath the robot TCP; it does not represent complete human, robot or panel surfaces. Robot commands use ordinary RTDE speed scaling and Dashboard pause, which are not safety-rated outputs. Software tests establish implementation behaviour, not physical safeguarding performance.
 
-The current scope and real-run gates are in
-[`docs/research-readiness-audit-2026-09-02.md`](docs/research-readiness-audit-2026-09-02.md).
-Older design notes use “certified floor” as architecture shorthand; that wording is not
-a certification claim and has been superseded by the readiness audit.
+## Run without hardware
 
-For the complete participant workflow in team-readable language, start with
-[`docs/team-experiment-guide.md`](docs/team-experiment-guide.md). It explains the
-three controllers, three scenarios, nine-trial schedule, five questionnaire handoffs,
-operator roles, measurements, analysis logic and no-go boundaries in one place.
+Use **Python 3.12** for the development path. Run these commands from the repository root. The package declares Python 3.10+ compatibility; other versions need their own validation.
 
-Automatic grip/retreat/lift/lower sequencing supports **P-code participant studies
-and Q-code rehearsals**, using the same checks and sequence. On Windows, run
-`Setup-Lab.cmd` once, then double-click `Check-Lab.cmd` and `Start-Lab.cmd`.
-The `.cmd` launchers call Python and Node directly; no PowerShell script, venv
-activation or execution-policy change is required. Bring the prepared offline kit
-and follow [the one-hour Windows handoff](docs/windows-lab-2026-09-16.md). Read [the automatic-trial handoff](docs/automatic-trial-qualification.md)
-for operation, physical setup assumptions, tests and fault behaviour.
-For a policy or backend error, use [Windows diagnosis and repair](docs/windows-startup-repair.md)
-before retrying launchers. Existing services are never automatically terminated.
+Windows PowerShell:
 
-**Participant-day materials:** print the [participant handout](output/pdf/participant-handout.pdf)
-for participants and the [operator session script](output/pdf/operator-session-script.pdf)
-for the team. Edit [the shared wording](docs/participant-session-pack.md), then run
-`python scripts/build_participant_pack.py` with `reportlab` installed to rebuild the PDFs.
+```powershell
+py -3.12 -m venv .venv
+.venv\Scripts\python.exe -m pip install -e ".[dev]"
+.venv\Scripts\python.exe scripts/demo_sensor_fusion.py
+.venv\Scripts\python.exe -m pytest tests/test_sensor_fusion_demo.py tests/test_body_tracking.py
+```
 
-## Quickstart
+macOS / Linux:
 
 ```bash
-python -m venv .venv && source .venv/bin/activate
-pip install -e ".[dev]"
+python3.12 -m venv .venv
+.venv/bin/python -m pip install -e ".[dev]"
+.venv/bin/python scripts/demo_sensor_fusion.py
+.venv/bin/python -m pytest tests/test_sensor_fusion_demo.py tests/test_body_tracking.py
+```
 
-pytest                          # must be fully green (safety invariants are locked here)
+The example prints transformed segment positions, shows that a common Xsens translation offset cancels, and demonstrates rejection of stale or incomplete input. It uses the production parser and body tracker with explicitly synthetic inputs. It opens no sockets and sends no robot commands.
+
+In later examples, `python` means the Python executable in this environment. To explore the controller simulation:
+
+```text
 python scripts/run_simulation.py
+python scripts/live_run.py --selftest
 ```
 
-`run_simulation.py` prints the zone + envelope geometry, the **fitted** transition
-matrix, the LHMM recognition report, a **3-rung** metric table, and an **ablation** table
-(full system minus prediction; minus the state layer). It writes per-tick decision logs
-to `data/logs/{fixed_zone,dynamic_ssm,adaptive}.jsonl` and a machine-readable metrics
-JSON to `data/analysis/metrics.json`.
+Simulation writes synthetic decision logs to `data/logs/` and metrics to `data/analysis/metrics.json`; it may replace the committed simulation examples there. These outputs are separate from the empirical manuscript. See [reproducibility](docs/reproducibility.md) before using a replay command or rebuilding study results.
 
-```bash
-python scripts/replay.py --controller all   # offline replay/ablation over a logged trace
+## How the streams meet
 
-# Local Xsens experiment console (run both in separate terminals)
-python scripts/dashboard_server.py          # localhost-only sensor service
-cd dashboard && npm run dev                 # open http://localhost:3000
-
-# After collecting labelled pilot loops (requires >=3 complete three-phase loops).
-# Install the training-only Gaussian-mixture fitter, filter out bring-up files,
-# and validate on people absent from model fitting.
-python -m pip install -e ".[training]"
-python scripts/train_pilot_hmm.py --participants P03,P04,P05 --validation participant --check-only
-python scripts/train_pilot_hmm.py --participants P03,P04,P05 --validation participant
-# Training writes pilot_hmm_candidate.json. It does not replace the active model.
-# Promotion requires causal validation and a separately qualified study release.
-
-# On a Windows 10/11 machine, run Xsens Analyze/Animate with the Awinda
-# dongle attached. Stream Position + Quaternion over UDP to this Mac:9763.
-# Before a real run, the console must show Xsens 23/23 segments. Schema v3
-# persists every segment XYZ + quaternion and refuses pelvis-only recording.
-# The run cannot start until calibration was marked within five minutes and a
-# visible, unique native MVN filename/path is entered.
-
-# After the 10 pre-study qualification runs (replace P06 with the pilot ID):
-python scripts/verify_xsens_capture.py data/xsens/P06-T*.jsonl \
-  --trial-batch --min-captures 10 \
-  --report data/verification/prestudy-xsens-batch.json
-# Commit the verified implementation, then freeze the exact study release:
-python scripts/freeze_study_release.py data/verification/prestudy-xsens-batch.json
-python scripts/research_readiness.py --stage collection
-
-# Optional group viewing on trusted lab Wi-Fi (remote browsers are view-only)
-python scripts/dashboard_server.py --share
-cd dashboard && npm run dev -- --host 0.0.0.0
-make paper                                  # regenerate result tables; build the PDF if latexmk present
+```mermaid
+flowchart LR
+    X["Xsens: 23 segment poses"] --> B["HelmetBodyTracker: head-relative transform"]
+    O["OptiTrack: helmet pose"] --> B
+    E["OptiTrack to robot calibration"] --> B
+    B --> G["Segment-origin distance and motion"]
+    T["Live robot TCP"] --> G
+    O --> H["Head movement features and phase HMM"]
+    G --> C["Fixed / reactive / predictive controllers"]
+    H --> C
+    B --> D["Hand-to-panel gesture detection"]
+    P["OptiTrack panel markers"] --> D
+    C --> L["Dashboard and trial records"]
+    D --> L
 ```
 
-## Pipeline
+The combination is a geometric anchoring transform. It removes a common Xsens translation offset by expressing segment positions relative to the Xsens head, then places that skeleton using the tracked helmet. Source freshness is checked, but the streams are not hardware-clock synchronized or temporally interpolated. The [tutorial](docs/helmet-xsens-integration.md) gives the equations and limitations.
 
-```
- raw operator position (x,y,z)
-        │
-        ▼
- FeatureExtractor ──► FeatureFrame(d, d_dot, speed, v_proj, v_lat_frac, a_proj, torso_facing)
-        │                 (d = distance to the robot's OCCUPIED COLUMN, not the TCP point)
-        ▼
-Layered GMM-HMM (observation: d, v_proj, speed, heading alignment)
-        │          (upper task phase: approaching/working/retreating · lower: stationary/walking)
-        │  step(x) → posterior p_t
-        ▼
- Independent event prediction   time_to_breach(d, v_proj, a_proj) → rapid-intrusion risk
-        │              (constant-accel; one-step p@A kept as superseded component)
-        ▼
- DynamicSSMEnvelope   S(t)=max(0,v_proj)·T+C+Sa  →  prototype command bound
-        │
-        ▼
- ZoneModel (fixed red = S0, yellow = margin·S0, exit hysteresis; RED hard stop on top)
-        │
-        ▼
- Controller ── FixedZoneController        (zone → command; deployed practice)
-            ├─ DynamicSSMController        (simplified envelope comparator)
-            └─ EnvelopeAdaptiveController  (min(envelope, model); SAFETY INVARIANT first)
-        │
-        ▼
- DecisionRecord ──► JsonlLogger ─┬─► MockRobot   (records commands)
-                                 └─► URRobot      (ur-rtde: speed slider + Dashboard pause/play)
+## Research and manuscript
+
+**Evaluating Safety and Coordination in Context-Aware Speed and Separation Monitoring for Human–Robot Ceiling-Panel Installation** — Zenan Wu, Luke Siniakov and Michael Magila, Monash University, 2026. Primary supervisor: Associate Professor Yihai Fang. Technical and laboratory support: Yizhe (Will) Wang.
+
+The manuscript reports prototype integration, model-development validation, and exploratory telemetry and questionnaire findings. It does not establish a statistically supported controller ranking. See the methods and limitations in the [paper](paper/main.pdf) for the analysed samples and scope.
+
+[`paper/main.tex`](paper/main.tex) is the canonical manuscript; Google Docs is a team review copy. The repository includes generated empirical tables and figures so the paper can be compiled without private study records. Full analysis requires the controlled-access inputs described in [paper/README.md](paper/README.md). Existing development recordings in `data/` are distinct from the final study inputs; see the [data guide](data/README.md).
+
+```text
+python -m pip install -e ".[paper]"
+python scripts/build_paper.py --compile-only --engine /path/to/tectonic
 ```
 
-## Layout
+`latexmk` is also supported. Omit `--engine` when a supported engine is on PATH. The manuscript is a project paper, not a claim of journal acceptance. The [assessor preparation guide](docs/assessor-preparation.md) explains the main technical questions.
 
-| Path | What it owns |
-|------|--------------|
-| `configs/default.yaml` | Every tunable (zones, envelope, horizon, features, LHMM, controller, scenario, robot) |
-| `src/hrc_safety/features.py` | Feature extraction; distance to the occupied column |
-| `src/hrc_safety/zones.py` | Fixed ISO/TS 15066 zone model + exit hysteresis (the RED hard floor) |
-| `src/hrc_safety/envelope.py` | **Dynamic envelope** — speed-aware prototype command bound |
-| `src/hrc_safety/horizon.py` | **Horizon prediction** — time-to-breach + risk fusion |
-| `src/hrc_safety/lhmm/` | Hand-rolled Layered HMM (upper + lower); fit/step/viterbi |
-| `src/hrc_safety/prediction.py` | One-step prediction (Eq.1) — **superseded** anticipation; kept for the ablation |
-| `src/hrc_safety/controllers/` | The three rungs (fixed-zone / dynamic-SSM / envelope-adaptive) |
-| `src/hrc_safety/metrics.py` | Head-to-head metrics (interruption burden, sensitivity/specificity, lead time) |
-| `src/hrc_safety/analysis.py` | One harness that builds a named controller + scores it (shared SSOT) |
-| `src/hrc_safety/logging_schema.py` | Shared `DecisionRecord` + JSONL logger |
-| `src/hrc_safety/mocap/xsens_transport.py` | Full MXTP02 packet capture plus pelvis compatibility view |
-| `src/hrc_safety/sim/` | Synthetic scenario generator (with distractors) + trace runner |
-| `src/hrc_safety/robot/` | `MockRobot` + `URRobot` (ur-rtde) |
-| `scripts/run_simulation.py` | End-to-end fit → run 3 rungs + ablation → compare → emit metrics JSON |
-| `scripts/replay.py` | Offline replay: run any controller over a logged trace (free ablation) |
-| `scripts/make_paper_tables.py` | Derive `paper/tables/*.tex` from the metrics JSON (zero hand transcription) |
-| `paper/` | IEEEtran paper skeleton (`main.tex`, `refs.bib`, auto-generated `tables/`) |
-| `Makefile` | `make paper` — regenerate tables and build the PDF (latexmk) |
-| `sim/ursim/` | URSim docker-compose for command-path validation |
-| `tests/test_core.py` | Unit + smoke tests (locks the safety invariants) |
-| `docs/design/sem2-redesign.md` | The sem-2 design record — each change with a plain-English WHY |
-| `docs/experiment_plan.md` | Physical footprint, pilot calibration, ethics, findings |
+## Repository map
 
-## FOUR NON-NEGOTIABLES
+| Directory | Contents |
+|---|---|
+| [`src/hrc_safety/`](src/hrc_safety/) | Tracking, features, controllers, HMM, robot interfaces and simulation |
+| [`scripts/`](scripts/) | Entry points for demonstrations, experiments, calibration and analysis |
+| [`tests/`](tests/) | Parser, geometry, control, capture and dashboard regression tests |
+| [`configs/`](configs/) | Prototype parameters and the recorded lab calibration |
+| [`dashboard/`](dashboard/) | Browser-based experiment console |
+| [`data/`](data/README.md) | Development artifacts, model snapshots and synthetic examples |
+| [`docs/`](docs/README.md) | Learning guides, operational runbooks and historical records |
+| [`paper/`](paper/README.md) | Canonical LaTeX manuscript and generated assets |
+| [`presentation/`](presentation/) | Assessment slides and rehearsal guide |
 
-1. **RED zone ⇒ stop request in BOTH conditions, ALWAYS.** The software invariant is
-   checked first in the adaptive decision function, before any model belief or the
-   (speed-aware) envelope, and is locked by
-   `test_red_zone_always_stops_adaptive_even_if_model_says_working`. **Never merge
-   anything that weakens this test.**
-2. **The reported transition matrix `A` and mixture emissions MUST be fitted from labelled
-   pilot data.** The hand-set values in the config are
-   cold-start priors only — reporting them would be circular validation.
-3. **Synthetic data never appears in reported results.** The `sim/` scenario exists only to
-   exercise the pipeline pilot data will flow through.
-4. **The adaptive command NEVER exceeds the deterministic envelope.** The learned layers are
-   shielded: `final speed = min(envelope, model)`, so a recognition or prediction error
-   can only add caution, never raise speed. Locked by
-   `test_adaptive_never_exceeds_envelope`. **Never merge anything that lets the model
-   command above the envelope floor.**
-
-## Optional: real robot / URSim
-
-```bash
-pip install -e ".[robot]"                       # ur-rtde
-docker compose -f sim/ursim/docker-compose.yml up
-python scripts/demo_ursim.py --log adaptive        # replay a logged rung onto URSim live (see also --log fixed_zone)
-```
-
-`URRobot` maps full/reduced speed to the RTDE speed slider and a stop request to Dashboard
-pause plus slider zero. That path is **not safety-rated**. It is for URSim and controlled
-engineering bring-up only; participant SSM trials require an independently validated
-safeguard output through the robot safety chain.
-
-## Paper (LaTeX) — numbers flow from data to the PDF
-
-The paper lives in `paper/` (IEEEtran two-column). Result tables are **auto-generated**:
-
-```
-run_simulation.py → data/analysis/metrics.json → make_paper_tables.py → paper/tables/*.tex → main.tex → PDF
-```
-
-No result number is ever typed into the paper by hand — the metrics JSON is the single
-source, the `.tex` tables derive from it, and `main.tex` `\input`s them. `make paper`
-runs the whole chain (and builds the PDF if `latexmk` is installed; otherwise it prints a
-note and leaves the up-to-date tables in place).
-
-**Overleaf:** import this GitHub repo directly into Overleaf (New Project → Import from
-GitHub) so Luke/Michael can edit `main.tex` without git. Overleaf compiles the committed
-tables; re-run `make paper` and push to refresh them. All committed table numbers are
-**synthetic** pipeline-validation placeholders and are replaced by pilot data.
+For physical installation, use the [Windows handoff](docs/windows-lab-2026-09-16.md) and [automatic-trial qualification guide](docs/automatic-trial-qualification.md). The saved IP addresses, helmet mounting assumptions, taught poses and extrinsics describe one installation; they must be checked for a different lab. One-off motion scripts and dated lab notes are preserved for provenance, not presented as a new installation's quickstart.

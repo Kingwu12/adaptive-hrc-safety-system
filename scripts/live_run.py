@@ -12,9 +12,10 @@ Safety posture:
   - tracking staleness (> bridge window) -> PROTECTIVE_STOP (never optimistic)
   - Ctrl-C leaves the robot stopped; restoring speed requires an explicit flag
 
---record writes the SAME raw JSONL schema as record_mocap.py, so every live
-run is also a trace that replays offline through ALL rungs (scripts/replay.py
-is the scoring path; one live trial, three scored controllers).
+--record writes the raw JSONL schema used by record_mocap.py. It is not a direct
+input to scripts/replay.py, which consumes generated or .npz traces; replaying a
+live record needs an explicit validated conversion. The "fused" option here
+co-records streams and does not invoke the dashboard's HelmetBodyTracker.
 
 --selftest runs the whole chain on a scripted fake stream (approach -> dwell
 -> dropout) with MockRobot and a simulated clock -- bench-tests the wiring

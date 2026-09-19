@@ -1,8 +1,10 @@
 """NatNet bridge: Motive rigid-body stream -> 60 Hz pipeline ticks.
 
-Design (docs/design/optitrack-bridge.md):
-- ONE rigid body (torso cluster), position only.
-- Decimate/hold Motive's 120-240 Hz stream to the pipeline tick rate.
+This source-agnostic bridge holds one position per input stream. In the
+dashboard, one instance holds the optical head in robot coordinates and another
+holds the Xsens compatibility point. Full-body anchoring happens separately in
+HelmetBodyTracker (see docs/helmet-xsens-integration.md).
+- Hold the latest received position at the pipeline tick rate.
 - Drop-out: hold last position + staleness flag; > staleness_s stale means
   tracking loss -> caller falls back to worst-case (never optimistic).
 - Optional rigid extrinsics (mocap frame -> robot-base frame), solved by
@@ -28,7 +30,7 @@ class TickSample:
     position: np.ndarray     # (3,) in robot-base frame if extrinsics given
     stale: bool              # True => tracking loss; treat as worst-case
     age_s: float             # seconds since last received mocap sample
-    motive_timestamp: float  # raw Motive timestamp of the held sample
+    motive_timestamp: float  # source value; dashboard NatNet uses frame/rate, Xsens uses time code
 
 
 def load_extrinsics(path: str) -> tuple[np.ndarray, np.ndarray]:
