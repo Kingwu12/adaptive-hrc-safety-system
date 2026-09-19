@@ -53,3 +53,16 @@ dashboard/tsconfig.tsbuildinfo
 /logs/
 data/service-logs/
 .lab-offline/
+
+# Participant-level study records and local audit paths are private inputs.
+data/questionnaires/
+data/recovered-trial-inventory.json
+data/analysis/questionnaires/
+data/analysis/recovered/
+data/analysis/verification.json
+paper/build-verification.json
+paper/visual-verification.json
+/work/
+
+# Share the compiled review manuscript alongside its canonical LaTeX source.
+!paper/main.pdf

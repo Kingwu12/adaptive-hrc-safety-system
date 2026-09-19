@@ -101,11 +101,9 @@ def _model_validation_table(model: dict) -> str:
         [
             "\\begin{table}[t]",
             "\\centering",
-            "\\caption{Leave-one-participant-out phase-recognition development "
-            "validation from the active model artifact. Offline Viterbi decoding "
-            "uses the complete trial; the causal forward filter is the estimate "
-            "closest to live operation. These are model-development diagnostics, "
-            "not safety outcomes or final participant-study results.}",
+            "\\caption{Leave-one-operator-out phase-recognition validation on the "
+            "development set. Viterbi decoding uses the full sequence; the causal "
+            "filter uses present and past observations.}",
             "\\label{tab:model-validation}",
             "\\begin{tabular}{lr}",
             "\\toprule",
@@ -123,11 +121,8 @@ def _model_validation_table(model: dict) -> str:
             f"Retreating recall & {recalls['retreating']:.3f} \\\\",
         ]
     )
-    if folds:
-        fold_text = ", ".join(
-            f"{_escape(str(f['participant_id']))}: {f['accuracy']:.3f}" for f in folds
-        )
-        lines.append(f"Fold accuracy & \\multicolumn{{1}}{{l}}{{{fold_text}}} \\\\")
+    for fold in folds:
+        lines.append(f"Offline fold {_escape(str(fold['participant_id']))} accuracy & {fold['accuracy']:.3f} " + r" \\")
     lines.extend(["\\bottomrule", "\\end{tabular}", "\\end{table}"])
     return "\n".join(lines) + "\n"
 

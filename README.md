@@ -1,8 +1,14 @@
 # adaptive-hrc-safety-system
 
 Reference implementation for the Monash FYP (2026) paper
-**"Comparing Static and Adaptive Safety Logic in Human-Robot Ceiling Panel Installation"**
+**"Evaluating Safety and Coordination in Context-Aware Speed and Separation Monitoring for Human–Robot Ceiling-Panel Installation"**
 (Wu, Siniakov, Magila).
+
+## Paper and presentation review
+
+Start with [the paper PDF](paper/main.pdf), [the assessment presentation](presentation/FYP-assessment-presentation-v2.pptx), and [the team review guide](docs/final-review.md). The [assessor preparation guide](docs/assessor-preparation.md) explains the algorithms, equations, findings and likely questions in plain language. The [presentation guide](presentation/FYP-presentation-guide.md) contains the speaking order and rehearsal plan.
+
+`paper/main.tex` remains the canonical manuscript. Google Docs is a review copy; proposed changes should be reconciled into LaTeX. These are review materials, not a journal submission or acceptance. The public repository contains analysis code and manuscript summaries; raw participant records are stored separately. See [paper build instructions](paper/README.md).
 
 A UR10 CB3 holds a lightweight surrogate panel while a human performs the approved task.
 This repository is a research prototype, not a certified safety system. We compare

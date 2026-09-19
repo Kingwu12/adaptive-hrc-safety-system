@@ -3,7 +3,7 @@
 
 \begin{table}[t]
 \centering
-\caption{Leave-one-participant-out phase-recognition development validation from the active model artifact. Offline Viterbi decoding uses the complete trial; the causal forward filter is the estimate closest to live operation. These are model-development diagnostics, not safety outcomes or final participant-study results.}
+\caption{Leave-one-operator-out phase-recognition validation on the development set. Viterbi decoding uses the full sequence; the causal filter uses present and past observations.}
 \label{tab:model-validation}
 \begin{tabular}{lr}
 \toprule
@@ -19,7 +19,9 @@ Causal-filter balanced accuracy & 0.725 \\
 Approaching recall & 0.693 \\
 Working recall & 0.923 \\
 Retreating recall & 0.654 \\
-Fold accuracy & \multicolumn{1}{l}{P03: 0.812, P04: 0.817, P05: 0.832} \\
+Offline fold P03 accuracy & 0.812  \\
+Offline fold P04 accuracy & 0.817  \\
+Offline fold P05 accuracy & 0.832  \\
 \bottomrule
 \end{tabular}
 \end{table}

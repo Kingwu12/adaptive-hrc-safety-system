@@ -21,6 +21,10 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+paper = [
+    "matplotlib>=3.6",
+    "pypdf>=5.0",
+]
 dev = [
     "pytest>=7.0",
     "matplotlib>=3.6",
