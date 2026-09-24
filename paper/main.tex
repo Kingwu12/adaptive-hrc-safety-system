@@ -498,6 +498,20 @@ for time integrals. In total 40 rows carry a stale-tracking flag. Controller dec
 exist in \DecisionRows{} rows, of which 110 indicate unavailable tracking and
 invoke the conservative controller state.
 
+Zone entries and stop onsets (Table~\ref{tab:trials}) follow the task
+structure: every trial contains two to seven entries into the red zone, which
+correspond to the loading, working and unloading approaches the task requires,
+so red-zone entries are not a count of hazardous events. Stop onsets separate
+the controllers more clearly. Fixed and reactive trials contain six to nine
+protective-stop onsets each, of which three to five last at least 1~s. The
+four predictive trials contain 15, 20, 29 and 73 onsets, but only two or three
+per trial last at least 1~s; the remainder are stop segments shorter than
+0.5~s in which the command alternated rapidly between stop and run. The
+predictive policy therefore did not hold the robot stopped for longer, but it
+switched the stop request far more often, and P24~T01, the only trial with the
+anchored segment-origin geometry, shows the most switching (68 segments under
+0.5~s).
+
 Across ten non-clean cue windows, fresh joint telemetry exceeds the diagnostic
 motion threshold for \EventMotionSeconds{}~s of observed intervals. The measurements confirm robot motion during labelled event windows.
 Among \EventFreshRows{} fresh telemetry rows in these windows, motion counts are
@@ -598,10 +612,16 @@ although errors in geometry or timing still affect that envelope.
 The development results indicate that phase recognition is strongest during the
 longer working phase. The lower causal balanced accuracy compared with overall
 accuracy shows why phase accuracy alone is an insufficient measure of practical
-benefit. Additional caution from a persistent state estimate could increase
-interruption, particularly around short approach/retreat transitions. The reactive
-reference is therefore an important comparator when assessing the added value
-of learned context.
+benefit. The stop-onset counts make the cost concrete: the predictive policy
+produced two to nine times as many protective-stop onsets as the fixed and
+reactive policies in the same task, almost all of them sub-0.5-s segments in
+which phase caution and the intrusion predictor toggled the request near a
+threshold. This chattering is a controller-design defect rather than a
+property of the task, and it is largest under the segment-origin geometry,
+whose body-distance input is noisier than the head point. Hysteresis or a
+minimum stop dwell on the learned inputs would remove it without touching the
+deterministic envelope. The reactive reference is therefore an important
+comparator when assessing the added value of learned context.
 
 Equation~\ref{eq:bound} also constrains the expected benefit. For identical SSM
 inputs, parameters and zone state, the predictive policy cannot request a higher
@@ -664,14 +684,12 @@ not evidence of equivalent safety.
 The study design specified four system measures (human--robot distance, number
 of speed reductions and stops, number of yellow/red zone entries and task
 completion time) and four experience measures (safety, comfort, predictability
-and trust) for comparison between static and adaptive safety. Distance is
-reported directly (Table~\ref{tab:trials}, Figs.~\ref{fig:geometry} and
-\ref{fig:trace}). Speed reductions and stops are represented by the
-zero-request proportion and the command trace rather than by event counts,
-because intentional holds and proximity responses cannot be separated in the
-recorded stream. Zone entries were not counted, and capture span is reported
-in place of task completion time because operator actions fall within the
-span. Safety and trust are reported as intake/end ratings, comfort through the
+and trust) for comparison between static and adaptive safety. Distance, zone entries and stop onsets are reported per trial
+(Table~\ref{tab:trials}, Figs.~\ref{fig:geometry} and \ref{fig:trace}), with
+the caveat that red-zone entries and a share of the stop time arise from the
+loading and unloading approaches the task requires, so they are not counts of
+unnecessary interruption. Capture span is reported in place of task completion
+time because operator actions fall within the span. Safety and trust are reported as intake/end ratings, comfort through the
 relaxed and calm items, and predictability through the speed-legibility item.
 The static-versus-adaptive comparison remains open for the linkage and
 exposure reasons set out below.
