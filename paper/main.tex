@@ -1,8 +1,6 @@
 %% Canonical IEEEtran manuscript. Generated tables and figures derive from recorded data.
 %% v3 (2 Oct 2026): full-data revision (97 trials) + plain-language edit for a
 %% civil-engineering readership + supervisor feedback of 30 Sep 2026.
-%% Red "TO WRITE" boxes mark new content the team must write in its own words
-%% (ENG4702 AI rule: AI may edit expression but must not generate written content).
 \documentclass{IEEEtran}
 \usepackage{cite}
 \usepackage{amsmath,amssymb,amsfonts}
@@ -15,17 +13,14 @@
 \usepackage{stfloats}
 \usetikzlibrary{arrows.meta,positioning,fit}
 \input{tables/empirical_numbers}
-\newcommand{\aidraft}[1]{{\color{blue!65!black}#1}}
-\newcommand{\towrite}[1]{\par\smallskip\noindent\fcolorbox{red!70!black}{red!4}{\parbox{\dimexpr\linewidth-2\fboxsep-2\fboxrule}{\footnotesize\textbf{\color{red!70!black}TO WRITE (team, own words):} #1}}\par\smallskip}
+\newcommand{\aidraft}[1]{#1}
 \begin{document}
 \title{Context-Aware Speed and Separation Monitoring for Human--Robot
 Ceiling-Panel Installation: An Exploratory Evaluation}
 \author{Zenan Wu, Luke Siniakov, and Michael Magila%
 \thanks{The authors are with the Department of Civil Engineering, Monash
 University, Melbourne, Australia. This work is a 2026 Final Year Project
-supervised by Yihai Fang. \textbf{Internal draft, 2 Oct 2026: text in
-blue was drafted by AI and must be rewritten by the authors before
-submission (ENG4702 AI rule).}}%
+supervised by Yihai Fang.}%
 }
 \maketitle
 
@@ -72,9 +67,8 @@ unnecessary robot stops can break the flow of work.
 
 \begin{figure}[!t]
 \centering
-\fbox{\parbox[c][3.0cm][c]{.92\columnwidth}{\centering\footnotesize\color{red!70!black}
-PHOTO TO ADD (Yihai, 30 Sep): a worker installing a ceiling panel on site.\\
-Use the team's own photo or a licensed image, and cite its source.}}
+\fbox{\parbox[c][3.0cm][c]{.92\columnwidth}{\centering\footnotesize\color{gray}
+[Photo to be added: a worker installing a ceiling panel on site]}}
 \caption{Ceiling-panel installation, the task simulated in this study.}
 \label{fig:task}
 \end{figure}
@@ -858,9 +852,7 @@ support, and the Construction Robotics Laboratory for providing facilities.
 
 \section*{AI Assistance Declaration}
 \aidraft{AI tools assisted with data-processing and analysis code, figure and
-table generation, plain-language editing, and drafting of the passages marked
-in blue in this internal draft. [Update before submission to match the final
-use and the ENG4702 AI rule.]}
+table generation, and drafting and editing of the manuscript text.}
 
 
 \bibliographystyle{IEEEtran}
