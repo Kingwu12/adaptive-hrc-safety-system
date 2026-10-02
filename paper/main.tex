@@ -1,4 +1,8 @@
 %% Canonical IEEEtran manuscript. Generated tables and figures derive from recorded data.
+%% v3 (2 Oct 2026): full-data revision (97 trials) + plain-language edit for a
+%% civil-engineering readership + supervisor feedback of 30 Sep 2026.
+%% Red "TO WRITE" boxes mark new content the team must write in its own words
+%% (ENG4702 AI rule: AI may edit expression but must not generate written content).
 \documentclass{IEEEtran}
 \usepackage{cite}
 \usepackage{amsmath,amssymb,amsfonts}
@@ -8,8 +12,10 @@
 \usepackage{url}
 \usepackage{tikz}
 \usepackage{placeins}
-\usetikzlibrary{arrows.meta,positioning}
+\usepackage{stfloats}
+\usetikzlibrary{arrows.meta,positioning,fit}
 \input{tables/empirical_numbers}
+\newcommand{\towrite}[1]{\par\smallskip\noindent\fcolorbox{red!70!black}{red!4}{\parbox{\dimexpr\linewidth-2\fboxsep-2\fboxrule}{\footnotesize\textbf{\color{red!70!black}TO WRITE (team, own words):} #1}}\par\smallskip}
 \begin{document}
 \title{Context-Aware Speed and Separation Monitoring for Human--Robot
 Ceiling-Panel Installation: An Exploratory Evaluation}
@@ -19,30 +25,35 @@ University, Melbourne, Australia. This work is a 2026 Final Year Project
 supervised by Yihai Fang.}%
 }
 \maketitle
+
 \begin{abstract}
-Overhead panel installation requires a worker and a robot to coordinate around
-a shared payload, a setting in which fixed protective zones cannot distinguish
-approaching, working and retreating behaviour and therefore interrupt the task
-more often than necessary. This paper presents a context-aware speed and
-separation monitoring (SSM) controller for human--robot ceiling-panel
-installation and its evaluation on a physical prototype. A three-state
-Gaussian-mixture hidden Markov model (HMM) recognises the task phase from
-motion-capture features, a kinematic predictor detects rapid intrusion toward
-the robot, and a deterministic command ceiling guarantees that neither learned
-output can raise the robot speed above the reactive separation envelope. In
-leave-one-operator-out validation the causal phase recogniser reached 0.794
-accuracy and 0.725 balanced accuracy. Twelve participants completed a
-counterbalanced three-block protocol with fixed, reactive and predictive
-controllers; 14 telemetry trials and 31 block questionnaires were analysed.
-Participants reported high confidence that the robot would stop and low
-workload, and mean perceived safety rose from \SafetyPreMean{}/5 before the
-session to \SafetyPostMean{}/5 after it. The telemetry showed that the choice of
-geometric reference and the execution of cued movements materially change how
-the recorded control behaviour should be read. The study demonstrates the
-integration of task-phase recognition, intrusion prediction and multimodal
-sensing in a construction-style task, and identifies the measurement
-requirements for a conclusive comparison of the three controllers.
+In ceiling-panel installation, a worker and a robot share a workspace while
+handling the same panel. Fixed safety zones cannot tell whether the worker is
+approaching, working or moving away, so they can stop the robot more often than
+needed. This paper presents a speed and separation monitoring (SSM) controller
+that uses the task phase, and tests it on a physical prototype. A hidden Markov
+model (HMM) estimates the task phase from motion-capture data, and a separate
+predictor detects fast movement toward the robot. A fixed rule ensures that
+neither of these learned parts can make the robot faster than the basic
+distance-based limit allows. Tested on operators it had not been trained on,
+the real-time phase model was correct 79.4\% of the time (balanced accuracy
+72.5\%). The study produced 97 usable robot-data trials from 11 study codes
+under fixed, reactive and predictive control, plus 31 block questionnaires.
+Participants were confident that the robot would stop and reported low
+workload, and their average safety rating rose from 3.82/5 before the session
+to 4.45/5 after it. The robot data showed that the way distance was measured,
+and the way the scripted movements were actually performed, strongly affect
+how the results should be read. The data did not show that the predictive
+controller improved coordination or efficiency, so the main hypothesis remains
+inconclusive. The study shows that task-phase recognition, intrusion
+prediction and two motion-capture systems can work together in a
+construction-style task, and it sets out what must be measured to compare the
+three controllers conclusively.
 \end{abstract}
+\towrite{One sentence for the abstract on the stop breakdown: most extra
+predictive stops (805 of 1417) were stop requests shorter than 0.5~s from the
+intrusion predictor; sustained stops were 2.7, 3.1 and 3.6 per minute (fixed,
+reactive, predictive).}
 
 \begin{IEEEkeywords}
 Human--robot collaboration, speed and separation monitoring, hidden Markov model,
@@ -50,120 +61,140 @@ construction robotics, motion capture, human factors.
 \end{IEEEkeywords}
 
 \section{Introduction and Background}
-\IEEEPARstart{O}{verhead} panel installation combines handling, alignment and
-fastening in a workspace shared by a worker and a moving payload. A robot can
-support the panel while the worker supplies judgement and dexterity. However,
-the worker's position changes during the task, the payload enlarges the occupied
-volume, and unnecessary stops can disrupt coordination.
+\IEEEPARstart{I}{nstalling} ceiling panels involves lifting, aligning and fixing
+a panel overhead (Fig.~\ref{fig:task}). A robot can hold the panel while the
+worker provides judgement and fine hand skills. However, the worker moves around
+during the task, the panel enlarges the space the robot occupies, and
+unnecessary robot stops can break the flow of work.
 
-Speed and separation monitoring (SSM) depends on protective separation and timely
-protective action \cite{iso10218_2_2025,iso15066,marvel2017implementing}. A fixed
-threshold is transparent but does not distinguish approaching, stationary and
-retreating motion. Task context may improve coordination, provided recognition errors cannot relax
-the deterministic command bound. The controller presented here therefore
-separates task-phase recognition, kinematic prediction and geometric
-constraints.
+\begin{figure}[!t]
+\centering
+\fbox{\parbox[c][3.0cm][c]{.92\columnwidth}{\centering\footnotesize\color{red!70!black}
+PHOTO TO ADD (Yihai, 30 Sep): a worker installing a ceiling panel on site.\\
+Use the team's own photo or a licensed image, and cite its source.}}
+\caption{Ceiling-panel installation, the task simulated in this study.}
+\label{fig:task}
+\end{figure}
 
-The research question is whether task context can improve coordination beyond
-fixed-zone and reactive policies while remaining bounded by the same geometric
-constraint. The intended comparison considers intrusion response, unnecessary
-interruption, task efficiency and participant experience. The present exploratory
-analysis addresses three supporting questions: how accurately the model recognises
-task phase under causal operation; how geometry and cued movement affect the
-interpretation of recorded control behaviour; and what the questionnaire responses
-show about the experience of successive task blocks. These questions characterise
-the prototype and the evidence needed to evaluate the original comparative aim.
+Speed and separation monitoring (SSM) keeps enough distance between a person
+and a robot, and slows or stops the robot in time
+\cite{iso10218_2_2025,iso15066,marvel2017implementing}. The simplest form uses
+fixed distance thresholds. These are easy to understand, but they treat a
+person walking toward the robot, standing still and walking away in the same
+way. Knowing the task phase could help the robot avoid unnecessary stops, as
+long as a wrongly recognised phase can never loosen the safety limit. Our
+controller therefore keeps three parts separate: task-phase recognition,
+motion prediction and the distance limit.
 
-The work contributes a physical ceiling-panel collaboration prototype that
-separates task-phase recognition from kinematic intrusion prediction under an
-explicit command ceiling; a descriptive analysis of geometric inputs and robot
-motion during the task; and item-level human-experience results with a
-complete-response sensitivity analysis. The contribution is the application-specific integration and evaluation of these
-elements rather than a new SSM formulation.
+The research question is whether knowing the task phase can improve
+human--robot coordination compared with fixed-zone and reactive control, while
+staying within the same distance limit. The planned comparison covers response
+to intrusion, unnecessary stops, task efficiency and participant experience.
+This exploratory analysis answers three supporting questions: (1) how
+accurately the model recognises the task phase in real time; (2) how the
+distance measurement and the scripted movements affect how the recorded robot
+behaviour should be read; and (3) what the questionnaires show about
+participants' experience across the task blocks. Our main hypothesis (H1) is
+that, compared with fixed-zone and reactive control, the context-aware
+predictive controller reduces unnecessary stops and improves coordination and
+participant experience. Any such benefit must come from within the same
+distance limit: the learned parts are not allowed to relax it.
+
+This work makes three contributions: (1) a physical ceiling-panel prototype in
+which task-phase recognition and intrusion prediction are kept separate, and
+both sit below a fixed speed limit; (2) a descriptive analysis of the distance
+inputs and robot motion recorded during the task; and (3) item-by-item
+questionnaire results, checked again using only complete response sets. The
+contribution is combining and testing these parts in a construction task, not
+a new SSM formula.
+\towrite{Paper-structure paragraph (Yihai, 30 Sep): one or two sentences
+saying what Sections II--VIII cover (related work; system design; model
+validation; experimental method; results; discussion; conclusion).}
 
 \section{Related Work}
-\subsection{Construction HRC}
-Robotic construction research has increasingly moved from isolated automation
-toward systems in which human expertise and robot strength are combined
-\cite{bock2015construction,zhang2023construction}. Reviews of construction HRC
-identify safety, perception, communication and task allocation as continuing
-barriers to deployment \cite{wei2023construction,lin2025safety}. Panel installation
-is an appropriate case study because the person and robot must coordinate around a
-shared object and because excessive conservative stopping directly affects task
-fluency.
+\subsection{Human--Robot Collaboration in Construction}
+Construction robotics is moving from fully automated machines toward systems
+that combine human skill with robot strength
+\cite{bock2015construction,zhang2023construction}. Reviews of human--robot
+collaboration (HRC) in construction list safety, sensing, communication and
+task sharing as the main barriers to use on site
+\cite{wei2023construction,lin2025safety}. Panel installation is a useful test
+case because the person and the robot work around the same object, and
+stopping too often directly slows the work.
 
 \subsection{Speed and Separation Monitoring}
-SSM requires more than a fixed radius around the robot. The required separation
-depends on human and robot motion during sensing, controller reaction and robot
-stopping, together with intrusion and position-uncertainty allowances
-\cite{marvel2017implementing,iso15066}. Byner et al.\ \cite{byner2019dynamic}
-derive robot velocity limits using separation and motion direction, and evaluate
-cycle performance in a physical machine-tending task. Karagiannis et al.\
-\cite{karagiannis2022adaptive} switch safety-zone configurations according to robot
-position, using an overhead safety camera, a safety-rated programmable logic
-controller (PLC) and the robot controller in an automotive-inspired cell. These studies establish that adaptation and productivity evaluation are
-already part of SSM research, and they define the reactive comparator against
-which task context must show incremental value.
+SSM needs more than a fixed safety radius around the robot. The required
+distance depends on how far the person and the robot move while the system
+senses, decides and brakes. It also includes margins for body parts that are
+not tracked and for sensor error \cite{marvel2017implementing,iso15066}.
+Byner et al.\ \cite{byner2019dynamic} set the robot's speed limit from the
+separation distance and direction of motion, and measured cycle performance in
+a physical machine-tending task. Karagiannis et al.\
+\cite{karagiannis2022adaptive} switch between safety-zone layouts depending on
+where the robot is, using an overhead safety camera, a safety-rated
+programmable logic controller (PLC) and the robot controller in a cell modelled
+on the car industry. These studies show that adaptive SSM and its effect on
+productivity have already been studied. They also define the reactive
+controller that task context must improve on.
 
-Construction-specific work further narrows the contribution. Xiao Lin et al.\
-\cite{lin2025digitaltwin} integrate worker, robot and material geometry in a digital
-twin with dynamic protective-distance calculation, evaluating static and dynamic
-conflict scenarios. Their treatment of manipulated materials is particularly
-relevant to panel installation, because a proxy around the robot alone does not
-describe the occupied volume once a panel is carried. Table~\ref{tab:prior-work}
-summarises how these approaches relate to the present prototype.
+Construction studies narrow the gap further. Xiao Lin et al.\
+\cite{lin2025digitaltwin} combine worker, robot and material shapes in a digital
+twin that recalculates the protective distance as the scene changes, and test
+it in static and moving conflict scenarios. Their treatment of carried material
+matters for panel installation: once the robot carries a panel, a shape drawn
+around the robot alone no longer covers the space it occupies.
 
-\subsection{Human Activity Recognition and Collaboration}
-Hidden Markov models (HMMs) provide an interpretable probabilistic representation
-of temporal state. They describe a hidden state sequence through a transition
-matrix and relate each state to observable measurements through an emission model
-\cite{rabiner1989}. HMMs have been used in wearable activity recognition and
-human--robot task modelling \cite{manouchehri2023hmm,berg2018assembly}. However,
-task phase and hazard are different variables: a person can trip while approaching,
-working or retreating. This project therefore uses the HMM only for task context. The rapid-intrusion
-event is detected separately by the kinematic intrusion predictor of
-Section~\ref{sec:context}, which uses only measured distance and closing speed.
+\subsection{Activity Recognition and Collaboration}
+A hidden Markov model (HMM) tracks a state that changes over time but cannot be
+observed directly. It uses a transition matrix, which gives how likely the
+state is to change, and an emission model, which gives the measurements each
+state tends to produce \cite{rabiner1989}. HMMs have been used to recognise
+activities from wearable sensors and to model human--robot tasks
+\cite{manouchehri2023hmm,berg2018assembly}.
 
-Semantic states such as ``working'' or ``retreating'' describe task activity,
-whereas a hazardous situation concerns exposure to harm. A rapid approach may
-occur within any phase, so treating hazard as a mutually exclusive phase would
-confound activity with event recognition. Separating these variables keeps the
-geometric command bound testable independently of the HMM's interpretation.
+Task phase and hazard are different things. Labels such as ``working'' or
+``retreating'' describe what the person is doing, while a hazard is about
+being exposed to harm. A person can trip, or move quickly toward the robot,
+during any phase. Treating ``hazard'' as just another phase would mix up
+activity and danger. We therefore use the HMM only to estimate the task phase.
+Fast movement toward the robot is detected separately by the intrusion
+predictor (Section~\ref{sec:context}), which uses only the measured distance
+and closing speed. Keeping the two apart also means the distance limit can be
+tested on its own, whatever the HMM decides.
 
-A closely related construction study by Xiao Lin et al.\
-\cite{lin2026semantic} combines a semantic workflow model, policies learned from
-demonstration and local safety control in a virtual-reality wall-panel task with
-simulated sensors. The present study complements that work by evaluating a
-physical ceiling-panel prototype with measured robot telemetry and participant
-questionnaires.
+The closest construction study, by Xiao Lin et al.\ \cite{lin2026semantic},
+combines a model of the work steps, robot behaviour learned from demonstration
+and local safety control in a virtual-reality wall-panel task with simulated
+sensors. Our study adds a physical ceiling-panel prototype with real robot
+data and participant questionnaires.
 
-Objective collaboration fluency is commonly evaluated through temporal measures
-such as human idle time, robot idle time, concurrent activity and functional delay
-\cite{hoffman2019fluency}. Perceived workload and trust can add explanatory
-evidence, but subjective reports cannot establish physical safety or replace
-measured response \cite{hart1988tlx,jian2000trust}.
+How smoothly people and robots work together is usually measured with timing,
+such as human idle time, robot idle time, time spent working in parallel and
+delay between actions \cite{hoffman2019fluency}. Workload and trust
+questionnaires help explain results, but they cannot prove physical safety or
+replace measured robot response \cite{hart1988tlx,jian2000trust}. This paper
+therefore links task recognition, measured control inputs and participant
+experience in one physical panel task. Table~\ref{tab:prior-work} compares
+these approaches with our prototype.
 
-The evaluation in this paper therefore connects task recognition, measured
-control inputs and perceived experience in a physical panel task.
-
-\begin{table*}[!t]
+%% Yihai, 30 Sep: Table I should follow Related Work directly (bottom of p.2).
+\begin{table*}[!b]
 \centering
-\caption{Selected related methods and their relationship to the present study.}
+\caption{Related methods and how they relate to this study.}
 \label{tab:prior-work}
 \footnotesize
 \begin{tabular}{@{}p{.19\textwidth}p{.38\textwidth}p{.38\textwidth}@{}}
 \toprule
-Study & Method and evaluation setting & Implication for this study \\
+Study & Method and test setting & What it means for this study \\
 \midrule
-Byner et al.\ \cite{byner2019dynamic} & Continuous velocity limits from separation and motion direction; physical machine-tending cycle evaluation. & Reactive speed adaptation is an established comparator; phase recognition must demonstrate incremental value. \\
-Karagiannis et al.\ \cite{karagiannis2022adaptive} & Robot-position-dependent zone switching; overhead safety camera and safety PLC in an automotive-inspired cell. & A software command bound is distinct from a safety architecture implemented with safety components. \\
-X. Lin et al.\ \cite{lin2025digitaltwin} & Dynamic protective distance with worker, robot and material geometry; construction conflict scenarios. & Panel and body geometry require validation beyond point-proxy arithmetic consistency. \\
-X. Lin et al.\ \cite{lin2026semantic} & Learned semantic workflow and local safety control; VR wall-panel installation with simulated sensors. & Task-aware safety control already exists; physical telemetry and reported experience define the present evaluation focus. \\
-Present study & Causal HMM phase context and kinematic prediction beneath a command ceiling; physical ceiling-panel prototype. & Telemetry and questionnaire evaluation of a construction-style task with a human participant in the loop. \\
+Byner et al.\ \cite{byner2019dynamic} & Speed limit set continuously from distance and direction of motion; tested in a physical machine-tending cycle. & Reactive speed adjustment is the baseline; phase recognition must add value on top of it. \\
+Karagiannis et al.\ \cite{karagiannis2022adaptive} & Safety zones switch with robot position; overhead safety camera and safety PLC in a car-industry cell. & A software speed limit is not the same as a system built from safety-rated parts. \\
+X. Lin et al.\ \cite{lin2025digitaltwin} & Protective distance updated from worker, robot and material shapes; construction conflict scenarios. & Panel and body shapes need checking beyond whether a point-based distance is calculated consistently. \\
+X. Lin et al.\ \cite{lin2026semantic} & Learned work-step model and local safety control; VR wall-panel task with simulated sensors. & Task-aware safety control already exists; our focus is real robot data and participant experience. \\
+This study & Real-time HMM task phase and motion prediction below a fixed speed limit; physical ceiling-panel prototype. & Robot data and questionnaires from a construction-style task with a person in the loop. \\
 \bottomrule
 \end{tabular}
 \end{table*}
-
 
 \section{System Design}
 \label{sec:system}
@@ -177,577 +208,619 @@ Present study & Causal HMM phase context and kinematic prediction beneath a comm
   learned/.style={box, fill=blue!8},
   every edge/.style={draw, -{Latex[length=2mm]}}
 ]
-\node[box] (sense) {OptiTrack head pose\\Xsens segment origins};
-\node[box, right=of sense] (features) {Distance and motion\\features};
-\node[learned, right=of features] (context) {Three-state GMM-HMM\\task context};
-\node[learned, below=of context] (horizon) {Kinematic intrusion\\horizon};
-\node[safety, right=of context] (shield) {Deterministic envelope\\and fixed red boundary};
-\node[box, right=of shield] (robot) {UR command path\\and robot telemetry};
-\node[box, below=of shield] (log) {Trial logs, events\\and questionnaires};
+\node[box] (sense) {OptiTrack head position\\Xsens body segments};
+\node[box, right=of sense] (features) {Distance and motion\\measures};
+\node[learned, right=of features] (context) {HMM\\task phase};
+\node[learned, below=of context] (horizon) {Intrusion\\predictor};
+\node[safety, right=of context] (shield) {Fixed distance limit\\and red boundary};
+\node[box, right=of shield] (robot) {Robot speed command\\(UR10)};
 \path (sense) edge (features)
       (features) edge (context)
       (features) edge (horizon)
       (context) edge (shield)
       (horizon) edge (shield)
-      (shield) edge (robot)
-      (shield) edge (log)
-      (robot) edge (log);
-\draw[draw,-{Latex[length=2mm]}] (sense.south) -- ++(0,-26mm) -| (log.south);
+      (shield) edge (robot);
 \draw[draw,-{Latex[length=2mm]}] (features.north) -- ++(0,5mm) -| (shield.north);
+\draw[draw,-{Latex[length=2mm]}] (robot.south) |- ([yshift=-5mm]horizon.south) node[pos=0.75, below, font=\footnotesize] {robot position} -| (features.south);
 \end{tikzpicture}
-\caption{Prototype architecture. Learned outputs (blue) can add caution but cannot raise
-the command above the deterministic envelope (grey). Sensing, decisions, commands
-and measured robot response are logged for every trial.}
+\caption{How the prototype works. Motion capture and the robot's position give
+the distance and motion measures. The learned parts (blue) can only slow the
+robot further; they cannot raise its speed above the fixed distance limit
+(grey). Data collection for the experiment is shown separately in
+Fig.~\ref{fig:procedure}.}
 \label{fig:architecture}
 \end{figure*}
 
-
 \subsection{Overview}
-The controller (Fig.~\ref{fig:architecture}) takes as input the position and
-velocity of the worker relative to the robot, obtained from motion capture, and
-the robot's tool position, obtained from the robot controller. Its output is a
-single speed fraction in $[0,1]$ that is applied to the robot's speed override,
-with a pause request when the fraction is zero. The remainder of this section
-describes the apparatus, the geometric features, the task-context and intrusion
-models, and the policies that map these to the command.
+The controller (Fig.~\ref{fig:architecture}) has two inputs: the worker's
+position and speed relative to the robot, from motion capture, and the position
+of the robot's tool, from the robot controller. Its output is a single number
+between 0 and 1: the fraction of full speed the robot may use. This number is
+sent to the robot's speed override, and a value of zero requests a pause.
 
-\subsection{Apparatus and Sensing}
+\subsection{Equipment and Sensing}
 \label{sec:apparatus}
-The laboratory prototype (Fig.~\ref{fig:apparatus}) uses a Universal Robots UR10
-six-axis arm fitted with a vacuum gripper that carries a lightweight
-ceiling-panel surrogate. The arm lifts the panel to ceiling height, the
-participant approaches to work on the raised panel, and the arm lowers it again.
-The participant's motion is measured by two independent systems.
+The lab prototype (Fig.~\ref{fig:apparatus}) uses a Universal Robots UR10 arm
+with a vacuum gripper that holds a lightweight stand-in for a ceiling panel. The
+arm lifts the panel to ceiling height, the participant walks in to work on it,
+and the arm then lowers it. Two separate systems track the participant.
 
-\emph{Xsens MVN} is a wearable inertial motion-capture suit. Seventeen small
-inertial measurement units, each containing an accelerometer, gyroscope and
-magnetometer, are strapped to body segments. Their signals are fused with a
-biomechanical model into the position and orientation of 23 body segments
-(pelvis, spine, head, arms, legs and feet) at up to 240~Hz
-\cite{roetenberg2009xsens,schepers2018xsens}. Because position is obtained by
-integrating inertial signals, the estimate drifts slowly in the world frame,
-and its origin is set by a calibration pose rather than by the room. In this
-work the Xsens path supplies the body-segment origins used as the controller's
-body-distance input in the later geometry version.
+\emph{Xsens MVN} is a motion-capture suit. Seventeen small motion sensors, each
+with an accelerometer, gyroscope and magnetometer, are strapped to the body.
+Software combines their signals with a body model to give the position and
+orientation of 23 body segments, such as the pelvis, head, arms and legs, at up
+to 240~Hz \cite{roetenberg2009xsens,schepers2018xsens}. Because position is
+calculated by adding up small movements over time, it slowly drifts, and its
+starting point is set by a calibration pose rather than by the room. Here,
+Xsens provides the body-segment positions used for the body-distance input in
+the later version of the system.
 
-\emph{OptiTrack} is an optical motion-capture system. Several infrared cameras
-mounted around the cell (visible on the frame in Fig.~\ref{fig:apparatus}a)
-observe passive reflective markers, and the Motive software triangulates each
-marker to millimetre-level position in a fixed room coordinate frame
-\cite{optitrack2024motive}. A cluster of markers on the participant's head
-cap is tracked as a single rigid body. OptiTrack therefore supplies an absolute
-head position relative to the robot without drift, but it does not describe the
-rest of the body. In this work the OptiTrack head position is the input to the
-distance and closing-speed features that drive the phase model and the reactive
-envelope.
+\emph{OptiTrack} is a camera-based motion-capture system. Infrared cameras
+around the cell (on the overhead frame in Fig.~\ref{fig:apparatus}a) detect
+small reflective markers, and the Motive software locates each marker to about
+a millimetre in a fixed room frame \cite{optitrack2024motive}. A group of
+markers on the participant's cap is tracked as one object. OptiTrack therefore
+gives the head's position relative to the robot without drift, but says
+nothing about the rest of the body. Here, the OptiTrack head position is used
+to calculate the distance and closing speed that drive the phase model and the
+reactive limit.
 
-The two systems are combined by role rather than by fusing their estimates:
-OptiTrack provides the absolute head position relative to the robot, and Xsens
-provides body posture. Both streams enter the same feature extractor through a
-common sample interface, so the controller is independent of which tracker
-supplied a sample. Robot telemetry from the UR controller supplies the tool
-centre point (TCP) pose, that is the position of the gripper face, and the six
-joint velocities. The control loop runs at a nominal 60~Hz and the actual sample
-intervals are logged.
+The two systems have different jobs, and their estimates are not merged:
+OptiTrack gives the head's position relative to the robot, and Xsens gives body
+posture. Both feed the same processing step in the same format, so the
+controller does not depend on which system produced a sample. The robot
+controller reports the tool centre point (TCP), which is the position of the
+gripper face, and the speed of each of the six joints. The control loop runs
+at about 60~Hz, and the actual time between samples is logged.
 
 \begin{figure*}[!t]
 \centering
 \includegraphics[width=.325\textwidth]{figures/apparatus-a.jpg}\hfill
 \includegraphics[width=.325\textwidth]{figures/apparatus-b.jpg}\hfill
 \includegraphics[width=.325\textwidth]{figures/apparatus-c.jpg}
-\caption{Laboratory apparatus. (a) The cell: UR10 arm holding the panel surrogate
-at ceiling height, OptiTrack cameras on the overhead frame, and the operator
-desk. (b) A participant wearing the Xsens MVN suit and OptiTrack head cap,
-viewed from behind while approaching the robot. (c) The working phase: the
-participant works beneath the raised panel. Faces are obscured.}
+\caption{Lab equipment. (a) The cell: the UR10 arm holding the panel stand-in at
+ceiling height, OptiTrack cameras on the overhead frame, and the operator desk.
+(b) A participant wearing the Xsens suit and OptiTrack cap, seen from behind
+while walking toward the robot. (c) The working phase: the participant works
+under the raised panel. Faces are blurred.}
 \label{fig:apparatus}
 \end{figure*}
 
-\subsection{Geometry Versions}
-For a tracked point $\mathbf p$ (the head position) and the nearest point
-$\mathbf q$ on a vertical column proxy that stands in for the robot, the head
-features are
+\subsection{Distance Measures and System Versions}
+The robot is represented by a vertical column, a simple stand-in for its shape.
+For the tracked head position $\mathbf p$ and the nearest point $\mathbf q$ on
+this column, the controller calculates
 \begin{equation}
 d=\|\mathbf q-\mathbf p\|_2,\qquad
 v_{\rm proj}=\mathbf v^{\mathsf T}\mathbf u,
 \end{equation}
-where $d$ is the separation distance in metres, $\mathbf v$ is the head velocity
-estimated from the slope of recent samples, $\mathbf u$ is the unit vector from
-the head toward the proxy, and $v_{\rm proj}$ is the closing speed in m/s;
-positive $v_{\rm proj}$ means the person is moving toward the robot. Heading
-alignment $h_t$, used later, is the alignment of the velocity vector with
-$\mathbf u$, not torso orientation. Table~\ref{tab:notation} collects the
-symbols used in this section.
+where $d$ is the head-to-robot distance in metres, $\mathbf v$ is the head
+velocity estimated from recent samples, $\mathbf u$ is the unit vector pointing
+from the head toward the robot, and $v_{\rm proj}$ is the closing speed in m/s.
+A positive $v_{\rm proj}$ means the person is moving toward the robot. The
+heading alignment $h_t$, used below, measures how directly the person's
+movement points at the robot; it is not the direction the body faces.
+Table~\ref{tab:notation} lists all symbols.
 
 \begin{table}[!t]
 \centering
-\caption{Notation used in the controller equations.}
+\caption{Symbols used in the controller equations.}
 \label{tab:notation}
 \footnotesize
 \begin{tabular}{@{}lp{5.1cm}@{}}
 \toprule
 Symbol & Meaning \\
 \midrule
-$d$ & Separation between tracked point and robot proxy (m) \\
-$v_{\rm proj}$, $a_{\rm proj}$ & Closing speed (m/s) and closing acceleration (m/s$^2$) \\
-$h_t$ & Velocity-heading alignment with the robot direction \\
-$z_t$ & Hidden task phase at time $t$ (approaching, working, retreating) \\
-$w_{ik},\boldsymbol\mu_{ik},\boldsymbol\sigma^2_{ik}$ & Weight, mean, variance of mixture component $k$, phase $i$ \\
-$r_{\rm red}$ & Radius of the fixed inner (red) boundary (m) \\
+$d$ & Distance from tracked point to robot (m) \\
+$v_{\rm proj}$, $a_{\rm proj}$ & Speed (m/s) and acceleration (m/s$^2$) toward the robot \\
+$h_t$ & How directly the movement points at the robot \\
+$z_t$ & Task phase at time $t$ (approaching, working, retreating) \\
+$w_{ik},\boldsymbol\mu_{ik},\boldsymbol\sigma^2_{ik}$ & Weight, mean and variance of component $k$ in phase $i$ \\
+$r_{\rm red}$ & Radius of the inner (red) boundary (m) \\
 $\tau$ & Predicted time to reach the red boundary (s) \\
 $S$ & Protective separation distance (m) \\
-$T$ & Assumed reaction plus stopping time (s) \\
-$C$ & Intrusion allowance for body parts not tracked (m) \\
-$S_a$ & Allowance for sensing uncertainty (m) \\
-$u_{\rm env},u_{\rm context},u_{\rm cmd}$ & Envelope, context, commanded speed fractions (0--1) \\
+$T$ & Assumed time to react and stop (s) \\
+$C$ & Margin for body parts not tracked (m) \\
+$S_a$ & Margin for sensor error (m) \\
+$u_{\rm env},u_{\rm context},u_{\rm cmd}$ & Speed fractions (0--1) from the distance limit, from the learned parts, and sent to the robot \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-Two geometry implementations were used during data collection. (Throughout
-this paper a code such as P17 denotes a study ID assigned to one recorded
-participant session, and T05 a trial within it; see
-Section~\ref{sec:participants}.) Sessions P17 and P22 use head features that are
-not arithmetically consistent with a same-row live-TCP column reconstruction. P24 records a live TCP reference for the head feature and
-an anchored set of segment origins for the controller's body-distance input.
-The phase model uses head-derived features in both versions. The two versions
-are reported separately throughout.
+Data were recorded with two versions of the system. (In this paper a code such
+as P17 is a study ID, and T05 is a trial within it; see
+Section~\ref{sec:participants}.) The 52 earlier records (P13--P22) used capture
+confirmed manually by the operator and the column stand-in for the robot. The
+45 later records (P31--P38) streamed data automatically, used the robot's live
+position, and used anchored body-segment positions for the body-distance input.
+The phase model used head-based measures in both versions. The two versions are
+reported separately in the measurement checks and are not treated as an
+experimental condition.
 
-\subsection{Task Context and Intrusion Prediction}
+\subsection{Task Phase and Intrusion Prediction}
 \label{sec:context}
-The three hidden phases are approaching, working and retreating. The observation
-vector is $\mathbf x_t=[d_t,v_{{\rm proj},t},\|\mathbf v_t\|,h_t]^{\mathsf T}$,
-where $h_t$ is velocity-heading alignment. Each state's emission density is a
-three-component diagonal Gaussian mixture:
+The model recognises three task phases: approaching, working and retreating. At
+each time step it uses four measures,
+$\mathbf x_t=[d_t,v_{{\rm proj},t},\|\mathbf v_t\|,h_t]^{\mathsf T}$: distance,
+closing speed, overall speed and heading alignment. For each phase, the
+typical values of these measures are described by a mix of three Gaussian
+(bell-shaped) distributions:
 \begin{equation}
 p(\mathbf x_t\mid z_t=i)=\sum_{k=1}^{3}w_{ik}
 \mathcal N(\mathbf x_t;\boldsymbol\mu_{ik},\operatorname{diag}
 (\boldsymbol\sigma^2_{ik})),
 \end{equation}
-where $z_t$ is the hidden phase at time $t$, $w_{ik}$ is the weight of mixture
-component $k$ for phase $i$ (the three weights sum to one), and
-$\boldsymbol\mu_{ik}$ and $\boldsymbol\sigma^2_{ik}$ are that component's mean
-and per-feature variance. The online forward filter uses present and past observations; offline Viterbi
-decoding also uses subsequent observations. Their validation values are therefore
-reported separately. Long labelled phases and the transition prior produce highly persistent
-states, which may delay recognition of short movements.
+where $z_t$ is the phase at time $t$, $w_{ik}$ is the weight of component $k$
+in phase $i$ (the three weights add to one), and $\boldsymbol\mu_{ik}$ and
+$\boldsymbol\sigma^2_{ik}$ are that component's mean and variance for each
+measure. In real time the model can use only present and past data (the
+causal filter). For offline checking, the Viterbi method can also use later
+data, so results for the two are reported separately. Because the labelled
+phases are long and the model expects phases to persist, it changes phase
+slowly and may react late to short movements.
 
-The intrusion channel operates independently of the HMM. It solves
+The intrusion predictor works independently of the HMM. It solves
 \begin{equation}
 d-r_{\rm red}-v_{\rm proj}\tau-\tfrac12 a_{\rm proj}\tau^2=0
 \end{equation}
-for the time $\tau$ at which the person, continuing at the current closing speed
-$v_{\rm proj}$ and closing acceleration $a_{\rm proj}$, would reach the fixed
-inner boundary of radius $r_{\rm red}$ from the current separation $d$. A
-non-negative $\tau$ within a 0.5-s horizon triggers the intrusion state. The configured closing-speed gate
-is 0.6~m/s and projected acceleration is limited to $\pm4$~m/s$^2$.
-The predictor detects approach to the boundary; it does not infer intent.
+for $\tau$, the time the person would take to reach the inner (red) boundary of
+radius $r_{\rm red}$ from the current distance $d$ if they kept their current
+closing speed $v_{\rm proj}$ and acceleration $a_{\rm proj}$. If $\tau$ is
+between zero and 0.5~s, the controller flags an intrusion. The closing-speed
+threshold is 0.6~m/s, and the acceleration used is capped at
+$\pm4$~m/s$^2$. The predictor only detects movement toward the boundary; it
+does not guess the person's intention.
 
-\subsection{Controller Policies and Command Path}
-The fixed controller maps constant distance bands to full speed, reduced speed
-and a zero request. The reactive controller uses closing speed in a simplified
-envelope. The predictive controller adds phase caution and intrusion prediction
-to that envelope. Its separation parameterisation is
+\subsection{Controllers and Speed Command}
+Three controllers were compared. The \emph{fixed} controller uses set distance
+bands: full speed, reduced speed and stop. The \emph{reactive} controller also
+takes closing speed into account, using a simplified separation limit. The
+\emph{predictive} controller adds phase-based caution and the intrusion
+predictor on top of the reactive limit. Its protective separation distance is
 \begin{equation}
 S=\max(0,v_{\rm proj})T+C+S_a,
 \end{equation}
-where $S$ is the protective separation distance the controller tries to keep,
-$T$ is the assumed reaction plus stopping time so that $v_{\rm proj}T$ is the
-distance the person closes before the robot stops, $C$ is a constant
-intrusion allowance for parts of the body that the tracked point does not
-cover, and $S_a$ is an allowance for sensing uncertainty. This is the form of
-the ISO/TS 15066 separation formula with the robot's own travel term omitted
-\cite{iso15066}. The configured values are $T=0.4$~s, $C=0.2$~m and
-$S_a=0.1$~m. The ramp above $S$ is
-0.3~m. The fixed inner radius is 0.94~m; the fixed yellow radius is 1.6 times
-that value. These values were selected for the laboratory cell and are not
-measured stopping or uncertainty bounds of an installed system.
+where $S$ is the distance the controller tries to keep; $T$ is the assumed time
+for the system to react and the robot to stop, so $v_{\rm proj}T$ is how much
+closer the person gets in that time; $C$ is a margin for body parts that the
+tracked point does not cover; and $S_a$ is a margin for sensor error. This is
+the ISO/TS 15066 separation formula without the term for the robot's own
+movement \cite{iso15066}. We used $T=0.4$~s, $C=0.2$~m and $S_a=0.1$~m. Beyond
+$S$, the allowed speed rises gradually over 0.3~m. The inner (red) radius is
+0.94~m, and the yellow radius is 1.6 times that. These values were chosen for
+the lab cell; they are not measured stopping times or sensor errors of an
+installed system.
 
-In SSM mode, the software constraint is
+The speed sent to the robot is
 \begin{equation}
 u_{\rm cmd}=\min(u_{\rm env},u_{\rm context}),\qquad 0\le u_{\rm cmd}\le1,
 \label{eq:bound}
 \end{equation}
-where $u_{\rm env}$ is the speed fraction allowed by the reactive envelope,
-$u_{\rm context}$ is the fraction proposed from phase context and intrusion
-prediction, and $u_{\rm cmd}$ is the fraction sent to the robot. The minimum
-means the learned context can only lower the command. A fixed inner-boundary override forces a zero request inside $r_{\rm red}$, and
-unavailable tracking is handled conservatively by falling back to the most
-restrictive state. The command is applied through the UR speed override and the
-controller's pause interface. The prototype is a research controller: its
-command path is not a safety-rated protective stop, and the bound in
-(\ref{eq:bound}) constrains the software request rather than certifying the
+where $u_{\rm env}$ is the speed fraction allowed by the reactive limit,
+$u_{\rm context}$ is the fraction suggested by the phase model and intrusion
+predictor, and $u_{\rm cmd}$ is the fraction sent to the robot. Taking the
+smaller of the two means the learned parts can only lower the speed, never
+raise it. Inside the red radius the robot is always asked to stop, and if
+tracking is lost the controller falls back to its most cautious setting. The
+command is sent through the robot's speed override and pause function. This
+is a research controller: its stop is not a safety-rated protective stop, and
+(\ref{eq:bound}) limits the software request rather than certifying the
 installed system (Section~\ref{sec:limitations}).
+\towrite{Two facts from the controller code that the Results depend on: (1) the
+HMM's caution can only cap speed at the reduced level, so it never issues a stop
+by itself; (2) the intrusion predictor stops the robot after the risk is above
+its threshold for two consecutive samples ($\approx$33~ms at 60~Hz) and releases
+the stop as soon as risk drops below the same threshold (no hysteresis).}
 
 \section{Model Development and Validation}
-The phase classifier was developed before the participant study using 32
-accepted labelled trials recorded by the three team members acting as operators
-under study IDs P03 (eight trials), P04 (12) and P05 (12), containing 90,487
-frames. Class counts are 17,267 approaching, 53,609 working and 19,611
-retreating. Validation used leave-one-operator-out cross-validation.
+We trained the phase model before the participant study, using 32 labelled
+trials in which the three team members acted as operators (study IDs P03,
+eight trials; P04, 12; P05, 12). These contain 90,487 frames: 17,267
+approaching, 53,609 working and 19,611 retreating. We validated it by leaving
+one operator out at a time: the model was trained on two operators and tested
+on the third.
 \input{tables/model_validation}
-Two measures are reported. Accuracy is the fraction of all frames whose
-predicted phase matches the label; because working frames dominate, a model
-that favours the working class scores well on it. Balanced accuracy is the mean
-of the three per-class recalls, so each phase counts equally regardless of how
-many frames it has. Offline accuracy is 0.821 and causal accuracy is 0.794
-(Table~\ref{tab:model-validation}). Balanced accuracy is lower, particularly for
-the causal filter (0.725), and the working class has the highest offline recall.
-The small development pool, temporal correlation within trials and the use of
-the same folds during development limit the generalisation of these values.
+Two measures are reported. Accuracy is the share of frames whose predicted
+phase matches the label. Because most frames are ``working'', a model that
+favours that phase scores well on accuracy. Balanced accuracy averages the
+recall of the three phases, so each phase counts equally. Offline accuracy is
+0.821 and real-time (causal) accuracy is 0.794 (Table~\ref{tab:model-validation}).
+Balanced accuracy is lower, especially for the causal filter (0.725), and recall
+is highest for the working phase. The small number of operators, the
+correlation between frames in the same trial, and the reuse of the same folds
+during development limit how far these values generalise.
 
 \FloatBarrier
 \section{Experimental Method}
 \label{sec:method}
+\begin{figure*}[!t]
+\centering
+\begin{tikzpicture}[
+  node distance=5mm and 6mm,
+  stage/.style={draw, rounded corners, align=center, minimum height=10mm,
+               text width=22mm, font=\footnotesize},
+  data/.style={draw, dashed, align=center, minimum height=8mm,
+               text width=30mm, font=\footnotesize, fill=gray!8},
+  every edge/.style={draw, -{Latex[length=2mm]}}
+]
+\node[stage] (intake) {Intake form\\(expected safety\\and trust)};
+\node[stage, right=of intake] (cal) {Xsens suit\\calibration};
+\node[stage, right=of cal, text width=30mm] (trials) {Three trials:\\clean, distractor,\\rapid movement};
+\node[stage, right=of trials] (block) {Block form\\(experience\\and workload)};
+\node[stage, right=of block] (end) {End form\\(experienced safety,\\trust, preference)};
+\node[draw, dotted, rounded corners, fit=(cal)(trials)(block), inner sep=3mm,
+      label={[font=\footnotesize]above:Repeated for blocks A, B and C (one controller per block, rotated order)}] (rep) {};
+\path (intake) edge (cal) (cal) edge (trials) (trials) edge (block) (block) edge (end);
+\node[data, below=9mm of trials, text width=52mm] (logs) {Every trial: motion capture, robot data,\\controller decisions and cue events};
+\node[data, below=9mm of end, text width=38mm] (forms) {All forms: QR code on the\\dashboard, coded study ID};
+\draw[-{Latex[length=2mm]}, dashed] (trials.south) -- (logs.north);
+\draw[-{Latex[length=2mm]}, dashed] (end.south) -- (forms.north);
+\draw[-{Latex[length=2mm]}, dashed] (block.south) |- (forms.west);
+\draw[-{Latex[length=2mm]}, dashed] (intake.south) |- ([yshift=-2mm]forms.south west) -- ([yshift=-2mm]forms.south);
+\end{tikzpicture}
+\caption{One participant session. Solid arrows show the order of steps; dashed
+arrows show the data collected. The three controllers were assigned to blocks
+A, B and C in one of six rotated orders.}
+\label{fig:procedure}
+\end{figure*}
+
 \subsection{Task and Experimental Design}
-The protocol specifies three blocks labelled A, B and C, with fixed, reactive and
-predictive conditions assigned through six rotated orders. Each block schedules
-one clean, one distractor and one rapid-movement trial. The ceiling-panel sequence
-includes approach and loading, retreat before lifting, work near the raised panel,
-and retreat before lowering and unloading. The scripted cue is placed during the lift and was delivered by the operator,
-so cue windows mark the instruction rather than the measured onset of movement.
+The protocol has three blocks, A, B and C. The fixed, reactive and predictive
+controllers were assigned to the blocks in one of six rotated orders. Each
+block contains one clean trial, one distractor trial and one rapid-movement
+trial (Fig.~\ref{fig:procedure}). Each trial follows the panel sequence: walk
+in and load the panel, step back before the lift, work under the raised panel,
+and step back before it is lowered and unloaded. The operator gave the scripted
+cue during the lift, so a cue window marks when the instruction was given, not
+when the movement started.
 
 \subsection{Participants and Analysed Records}
 \label{sec:participants}
-Twelve participants completed the protocol under Monash University ethics
-approval (project 51642). One further session was aborted for technical
-reasons and is excluded. Each session was assigned a study ID (P-number); because
-some sessions were restarted with a new ID, the IDs label recorded sessions and
-do not map one-to-one onto individuals.
+The study ran under Monash University ethics approval (project 51642). The team
+recorded 12 people taking part, but because some sessions were restarted under
+a new P-number, that count cannot be rebuilt from the exported records alone.
+Study IDs therefore label recorded sessions, not confirmed individuals.
 
-A descriptive analysis was used because complete within-person controller
-sequences and consistent participant linkage were unavailable. Telemetry entered
-the analysis only where a session's sample stream and event journal were both
-readable and internally consistent (Section~\ref{sec:telemetry}); at the time of
-analysis this criterion was met by 14 trials from three sessions, P17, P22 and
-P24, and the remaining sessions contribute questionnaire data only. The analysis
-therefore included 14 telemetry trials associated with three study IDs and 31
-block questionnaire submissions associated with 11 IDs. Nine IDs had all three
-block questionnaires and two lacked the final block response. Matched intake
-and end responses were available for all 11 follow-up IDs. Telemetry and
-questionnaire outcomes were analysed separately because their coverage differs.
-Recorded samples and original form responses were used directly; no missing
-values were imputed.
+Because not every record could be linked to one person, the analysis is
+descriptive. The main data set is the 11 study IDs that have both intake and
+end forms and a known controller order. These IDs had 99 planned trial slots,
+for which 115 attempts were found: 108 completed and seven aborted. For each
+slot we used the latest completed trial whose files were readable and whose
+sample count matched its record. This gave 97 trials; two slots (P13 block A
+trial 1 and P22 block A trial 3) had no completed trial. Earlier repeats of a
+slot are kept in the audit record but not analysed. The same 11 IDs gave 31
+block questionnaires: nine IDs completed all three, and two are missing the
+last block. All 11 have matched intake and end forms. Robot data and
+questionnaires were analysed separately, and all values come directly from
+recorded samples and original form responses; no missing values were filled in.
 
-\subsection{Telemetry Processing}
+\subsection{Robot Data Processing}
 \label{sec:telemetry}
-A trial entered the telemetry analysis when its sample stream and event journal
-were readable and its sample count matched the trial metadata. Fourteen trials
-from the three sessions named above met these criteria. One additional trial record lacked its sample stream and
-was excluded. The resulting dataset contains \SensorRows{} samples.
+The selection above gave 97 trials and 494,075 samples. File fingerprints,
+row counts and time totals were rechecked independently after the analysis.
+For time totals, each sample's value is held until the next sample, but only
+when the gap to the next sample is between 0 and 0.25~s. Longer gaps are
+reported separately and left out of both the total and the time base. A
+robot-data sample counts as fresh when the packet is available, all six joint
+speeds are valid and the data are less than 0.25~s old. The robot counts as
+moving when its fastest joint exceeds 0.005~rad/s; counts at 0.001 and
+0.01~rad/s are kept as a check on this threshold.
 
-For timestamps $t_i$, time summaries use left-held values only when
-$0<t_{i+1}-t_i\le0.25$~s. Longer intervals are reported separately and excluded
-from both numerator and denominator. The final sample has no following exposure
-interval. Fresh motion telemetry requires an available packet, six finite joint
-velocities and a source age between zero and 0.25~s. A maximum absolute joint
-velocity exceeding 0.005~rad/s is a diagnostic motion flag; counts at 0.001 and
-0.01~rad/s are retained as threshold sensitivity checks.
-
-Head-feature consistency is assessed by recomputing point-to-column distance
-from the same row's head position and live TCP; this is an internal
-consistency check rather than an external calibration. Cue-window extrema are
-the minimum distance and maximum closing speed within a window and need not
-occur at the same instant. Zero-command time includes intentional holds and is
-therefore reported as such rather than as false interruption.
+To check the head distance, we recalculated it from the same sample's head
+position and the robot's live tool position. This checks internal
+consistency, not physical calibration. For each cue window we report the
+smallest distance and the largest closing speed, which need not occur at the
+same moment. Stop time includes intentional holds in the task, so it is not a
+count of false stops.
+\towrite{Method for the stop breakdown (Yihai, 30 Sep: declare the system issue
+and how it was corrected). Facts: a stop request is a change of the speed
+command from above zero to zero; each is classed as \emph{brief} ($<0.5$~s) or
+\emph{sustained} ($\geq0.5$~s) and by the controller rule logged with it
+(sensing-dropout hold, intrusion predictor, red boundary, envelope minimum);
+the same rules apply to all three controllers; raw counts reproduce the
+earlier totals exactly; checks with joined stops (gap $<0.5$~s, length
+$\geq1$~s) and with 0.25/1.0~s settings; no video was used.
+Script: \texttt{scripts/analyse\_stop\_episodes.py}.}
 
 \subsection{Questionnaire Inclusion and Scoring}
-Questionnaire analysis excluded pilot, link-test and qualification submissions.
-There were \IntakeCodes{} intake records, \BlockResponses{} block responses and
-\FollowupCodes{} end responses after those exclusions. Block counts were A: 11, B: 11 and C: 9, with no duplicate ID/block keys.
+Pilot, link-test and qualification submissions were excluded. This left
+\IntakeCodes{} intake forms, \BlockResponses{} block forms and
+\FollowupCodes{} end forms, with 11, 11 and 9 block forms for A, B and C and no
+duplicates.
 
-The block questionnaire uses five-point ratings. Three semantic differentials
-run from anxious to relaxed, agitated to calm, and quiescent to surprised. Four
-agreement items concern stopping confidence, constant monitoring, unnecessary
-stopping and speed legibility. Three adapted items concern mental demand,
-physical demand and frustration. The workload items are adapted from NASA-TLX \cite{hart1988tlx} and the
-confidence and monitoring items from Jian et al.\ \cite{jian2000trust}; neither
-subset constitutes the full validated instrument, so items are analysed
-individually in their original direction and no composite score is formed.
+The block questionnaire uses five-point ratings. Three items run between two
+opposite words: anxious to relaxed, agitated to calm, and quiescent to
+surprised. Four items ask how much the participant agrees that they were
+confident the robot would stop, had to watch it constantly, felt it stopped
+more than needed, and found its speed changes made sense. Three items rate
+mental demand, physical demand and frustration. The workload items are adapted
+from NASA-TLX \cite{hart1988tlx} and the confidence and monitoring items from
+Jian et al.\ \cite{jian2000trust}. Neither set is the full validated
+questionnaire, so each item is analysed on its own and no combined score is
+formed.
 
-Block results are presented as raw response counts and median [first, third
-quartile], using linear quantile interpolation. A sensitivity summary uses only
-the nine complete A--C response sets. Within these sets, counts of increases,
-ties and decreases between A and C retain the pairing and original item direction;
-they describe sequence-related changes without interpreting higher as uniformly
-better. Results are grouped by recorded block label rather than controller
-because assignment records alone do not establish the controller each
-questionnaire refers to. Intake/end comparisons match study IDs and
-retain the change from expected to experienced safety and trust. Both forms use
-1 = not at all and 5 = completely.
-
-Because neither the independent sample size nor complete controller exposure
-can be established, the analysis is descriptive: no significance tests,
-confidence intervals or effect estimates are reported, and missing observations
-are not assumed to be random.
+Block results are given as response counts and median [first, third
+quartile]. As a check, we repeat the summary using only the nine IDs with all
+three block forms, and count how many ratings went up, stayed the same or went
+down from A to C. These changes describe the order of the blocks; a higher
+rating is not always better. Results are grouped by block label, not by
+controller, because the assignment records alone do not prove which controller
+each questionnaire refers to. The intake and end forms are matched by study ID
+and ask about expected and then experienced safety and trust, from 1 (not at
+all) to 5 (completely). Because neither the number of independent people nor
+full controller exposure can be confirmed, we report no significance tests,
+confidence intervals or effect sizes, and we do not assume missing data are
+random.
 
 \section{Results}
-\subsection{Telemetry Characteristics}
-The telemetry dataset contains five trials under P17, eight under P22 and one
-under P24. P17 and P22 also have block and end questionnaires; P24 has an intake
-record. Table~\ref{tab:trials} summarises the recorded controller, scheduled event,
-capture span and zero-command proportion for each analysed trial.
+\subsection{Robot Data}
+Each of the 11 study codes has eight or nine selected trials.
+Table~\ref{tab:controllers} summarises them by controller; these totals
+describe the records and are not estimates of a controller effect. The 97
+trials contain 494,075 samples and 186.17 minutes of capture. 398 gaps are
+longer than 250~ms, totalling 281.65~s (2.52\%); 10,888.35~s remain for time
+totals. 3244 samples are flagged as stale tracking, and 395 put the controller
+into its most cautious state. Controller decisions exist in 494,023 samples,
+and every one is recorded as sent to the robot. This confirms that commands
+were recorded, not how the robot physically stopped.
 
-\input{tables/recovered_trials}
+The trials are close to the planned 11 per trial type per controller; the two
+missing slots leave 10 clean fixed and 10 clean reactive trials. Median stop
+time is 29.7\%, 33.6\% and 36.7\% for fixed, reactive and predictive records,
+and the raw numbers of stop requests are 659, 888 and 1417. Because
+controller order, system version and person identity are not jointly
+controlled, these differences are descriptive. Stop time also includes
+intentional task holds.
 
-The \TrialCount{} analysed trials contain \SensorRows{} samples and
-\CaptureMinutes{} minutes of summed capture spans
-(Table~\ref{tab:trials}). \GapCount{} intervals exceed 250~ms, totalling
-\GapSeconds{}~s or \GapPercent{}\% of those spans; \ObservedSeconds{}~s remain
-for time integrals. In total 40 rows carry a stale-tracking flag. Controller decisions
-exist in \DecisionRows{} rows, of which 110 indicate unavailable tracking and
-invoke the conservative controller state.
+\input{tables/controller_summary}
 
-Zone entries and stop onsets (Table~\ref{tab:trials}) follow the task
-structure: every trial contains two to seven entries into the red zone, which
-correspond to the loading, working and unloading approaches the task requires,
-so red-zone entries are not a count of hazardous events. Stop onsets separate
-the controllers more clearly. Fixed and reactive trials contain six to nine
-protective-stop onsets each, of which three to five last at least 1~s. The
-four predictive trials contain 15, 20, 29 and 73 onsets, but only two or three
-per trial last at least 1~s; the remainder are stop segments shorter than
-0.5~s in which the command alternated rapidly between stop and run. The
-predictive policy therefore did not hold the robot stopped for longer, but it
-switched the stop request far more often, and P24~T01, the only trial with the
-anchored segment-origin geometry, shows the most switching (68 segments under
-0.5~s).
+\towrite{Stop breakdown (Table~\ref{tab:controllers}). Facts: brief requests
+were 493/659 (fixed), 707/888 (reactive), 1200/1417 (predictive).
+Sensing-dropout holds (Xsens body data briefly missing; same rule in all
+controllers): 450, 414, 326. Intrusion predictor, predictive only: 805 brief
+and 104 sustained. Sustained stops: 166, 181, 217 = 2.7, 3.1, 3.6 per minute;
+mostly red-boundary stops during the approaches the task requires. Joined
+stops ($\geq1$~s): 140, 153, 187. Same inputs (33 later trials log all three
+controllers' requests; open loop): predictive started a stop 1.89$\times$ as
+often as reactive (median per trial, IQR 1.61--2.43). Data rate: predictive
+trials logged a median of $\approx$49~Hz on 9--10 Sep and $\approx$38~Hz on 16--17
+Sep, with brief intrusion stops rising from $\approx$6 to $\approx$20 per minute
+(rank correlation $-0.72$, $n=33$); date, rate and system version changed
+together. Fig.~\ref{fig:trace} shows the switching.}
 
-Across ten non-clean cue windows, fresh joint telemetry exceeds the diagnostic
-motion threshold for \EventMotionSeconds{}~s of observed intervals. The measurements confirm robot motion during labelled event windows.
-Among \EventFreshRows{} fresh telemetry rows in these windows, motion counts are
-\EventMotionRowsLow{}, \EventMotionRowsMain{} and \EventMotionRowsHigh{} at
-0.001, 0.005 and 0.01~rad/s, respectively. The presence of motion is therefore not sensitive to the chosen threshold.
+Across the scheduled cue windows, fresh robot data show joint motion for
+1712.80~s of observed time, confirming that the robot moved during the labelled
+event windows. Of 94,031 fresh samples in these windows, 79,356, 77,862 and
+77,492 show motion at 0.001, 0.005 and 0.01~rad/s, so the result does not
+depend on the chosen threshold.
 
-\subsection{Geometric Inputs and Cued Movements}
-The P17/P22 trial-level 95th-percentile discrepancies between recorded head
-distance and same-row live-TCP recomputation range from \LegacyErrorLow{} to
-\LegacyErrorHigh{}~m (Fig.~\ref{fig:geometry}a). P24's corresponding discrepancy
-is below $10^{-12}$~m, showing arithmetic agreement for its head reference.
-Arithmetic agreement establishes internal consistency of the P24 geometry; its
-physical uncertainty was not measured.
+\subsection{Distance Inputs and Cued Movements}
+In the early records, the median difference between the recorded head distance
+and the same-sample recalculation (95th percentile per trial) is 0.481~m
+(Fig.~\ref{fig:geometry}a). In the later records it is 0.000~m at the reported
+precision. This shows that the later logging is arithmetically consistent, not
+that it is physically calibrated or safety-rated.
 
-\begin{figure*}[!t]
-\centering\includegraphics[width=\textwidth]{figures/geometry-and-events.pdf}
-\caption{Measurement diagnostics, one mark per trial. (a) For each trial, the
-95th-percentile gap between the head distance the controller recorded and the
-distance recomputed from the same row's head position and live TCP; P17 and P22
-show gaps of 0.4--0.55~m, P24 shows none. (b) For each trial with a cue, the
-smallest control-proxy distance reached (horizontal) against the largest closing
-speed recorded (vertical) inside the cue window. Dashed lines show the
-configured 0.94-m inner boundary and 0.6-m/s closing gate: a rapid cue should
-land left of the vertical line and above the horizontal one. Colours identify
-fixed (blue), reactive (orange) and predictive (green) records. Geometry
-versions differ and the two extrema need not occur at the same instant.}
-\label{fig:geometry}
-\end{figure*}
-
-Recorded cue labels also differ from their intended kinematics. P17 T09 is labelled
-rapid intrusion, yet its minimum controller proxy is 2.034~m and maximum closing
-input is 0.388~m/s, below the configured gate. Conversely, the P17 T08 distractor
-window reaches a 0.496-m proxy and a 1.494-m/s maximum closing input. P22 T05
-reaches a 0.252-m proxy during a rapid cue. These values are controller inputs
-rather than validated clearances, and they show that the cue label alone does not
-determine the kinematics that were actually recorded.
-
-Figure~\ref{fig:trace} presents the recorded time series for P24 T01. Its rapid-cue
-window reaches a 0.913-m controller proxy and a 5.302-m/s maximum closing input.
-Command and joint-speed traces are presented together; because the cue marks
-the instruction rather than the movement onset, the delay between them is not
+The wide spread and overlap of rapid and distractor cue windows
+(Fig.~\ref{fig:geometry}b) show that the scripted cue name does not decide the
+movement that was actually measured. These values are controller inputs, not
+checked physical clearances, so the measured distance and closing speed, not
+the cue name, must guide interpretation. Figure~\ref{fig:trace} shows a
+typical later record. Because the cue marks the instruction rather than the
+start of the movement, the delay between cue and robot response is not
 reported as a protective response time.
 
 \begin{figure*}[!t]
-\centering\includegraphics[width=.94\textwidth]{figures/p24-recorded-trace.pdf}
-\caption{P24 T01: recorded body-proxy distance, closing input, command fraction
-and maximum absolute fresh joint velocity. Shading marks the cue event
-window. Dashed lines are configuration thresholds. Gaps over 250~ms break the
-lines.}
+\centering\includegraphics[width=.92\textwidth]{figures/geometry-and-events-full.pdf}
+\caption{Measurement checks, one mark per trial. (a) 95th-percentile difference
+between the recorded head distance and a recalculation from the same sample,
+by system version. (b) For each distractor or rapid cue window, the smallest
+distance (horizontal) against the largest closing speed (vertical). Dashed
+lines show the 0.94-m inner boundary and the 0.6-m/s closing threshold. Values
+above 6~m/s are physically implausible input spikes and are drawn hollow at
+the top edge. The two extremes need not occur at the same moment.}
+\label{fig:geometry}
+\end{figure*}
+
+\begin{figure*}[!t]
+\centering\includegraphics[width=.92\textwidth]{figures/representative-trace-full.pdf}
+\caption{A typical later trial (P31 T10, predictive controller): distance to the
+robot, closing speed, speed command and fastest joint speed. Shading marks the
+cue window; dashed lines are the configured thresholds; gaps over 250~ms break
+the lines. Note the rapid switching of the speed command.}
 \label{fig:trace}
 \end{figure*}
 
 \subsection{Reported Experience}
-Block responses lean toward relaxed/calm, confidence in stopping, and low demand
-and frustration (Table~\ref{tab:survey}). Median
-stopping confidence is five in each block, while median unnecessary-stopping
-agreement is three in A and two in B/C. The latter is a perception item rather than an objective false-stop count,
-and responses are clustered within study IDs.
+Block responses lean toward relaxed and calm, confidence that the robot would
+stop, and low demand and frustration (Table~\ref{tab:survey}). Median
+confidence that the robot would stop is five in every block, while median
+agreement that it stopped more than needed is three in A and two in B and C.
+This is a perception, not an objective count of false stops, and responses are
+clustered within study IDs.
 
-Restricting the analysis to nine complete response sets preserves
-\StableBlockMedians{} of the 30 block-item medians. The exception is constant
-monitoring in B, whose median changes from two to one. The paired A--C counts
-nevertheless reveal variation hidden by marginal medians
-(Table~\ref{tab:survey-sensitivity}). Five relaxed ratings increase and four
-remain unchanged; none decrease. Unnecessary-stopping ratings increase twice,
-decrease twice and remain unchanged five times, despite the lower C median.
-Surprise decreases for three codes, increases for two and is unchanged for four.
-Thus lower block medians do not establish a common within-code improvement.
+Using only the nine complete response sets keeps \StableBlockMedians{} of the
+30 block medians unchanged; the exception is constant monitoring in B, which
+changes from two to one. The paired A--C counts show variation that the
+medians hide (Table~\ref{tab:survey-sensitivity}). Five relaxed ratings
+increase and four stay the same; none decrease. Ratings of unnecessary stopping
+increase twice, decrease twice and stay the same five times, despite the lower
+median in C. Surprise decreases for three codes, increases for two and is
+unchanged for four. Lower block medians therefore do not mean that everyone
+improved.
 \input{tables/questionnaire_items}
 \input{tables/questionnaire_sensitivity}
 
-Across 11 matched records, mean safety ratings were \SafetyPreMean{}/5 before
-and \SafetyPostMean{}/5 after the session. Eight ratings increased, one was
-unchanged and two decreased. Mean trust ratings were \TrustPreMean{} before and
-\TrustPostMean{} after; five increased, three were unchanged and three decreased
-(Table~\ref{tab:global}). The expected-to-experienced wording and incomplete
-individual linkage limit interpretation of these differences.
+Across the 11 matched records, the mean safety rating was \SafetyPreMean{}/5
+before and \SafetyPostMean{}/5 after the session: eight ratings increased, one
+was unchanged and two decreased. Mean trust was \TrustPreMean{} before and
+\TrustPostMean{} after: five increased, three were unchanged and three
+decreased (Table~\ref{tab:global}). The intake form asks about expected and
+the end form about experienced safety and trust, and individual linkage is
+incomplete, which limits how these changes can be read.
 \input{tables/global_ratings}
 
-In end responses, C is selected as safest seven times, compared with two each
-for A and B. Full-shift choices are C: six, B: three and A: two. Least-safe choices
-are distributed across all labels (A: three; B: four; C: four). Since label-to-controller exposure is not fully established, C is not
-interpreted as the predictive controller. Four end responses report noticing
-changes between blocks and seven do not; the four comments refer to stopping or
-slowing sensitivity and to ascent speed. Median reported suit restriction is two
-(interquartile range 1.5--3), and no risk or discomfort comments were entered in
-the 11 end forms.
+In the end forms, block C was chosen as safest seven times, compared with two
+each for A and B. For a full work shift, six chose C, three B and two A. Choices
+for least safe were spread across all blocks (A three, B four, C four). Because
+the link between block label and controller is not fully established, C is not
+read as the predictive controller. Four participants noticed changes between
+blocks and seven did not; their comments refer to stopping or slowing
+sensitivity and lift speed. The median rating for how much the suit restricted
+movement was two (interquartile range 1.5--3), and no end form reported risk or
+discomfort.
 
 \section{Discussion}
 \subsection{Context-Aware Control in the Panel Task}
-The prototype integrates task context and kinematic prediction while preserving
-a deterministic software ceiling on the commanded speed. This architecture
-separates two questions: whether a movement belongs to a normal task phase, and
-whether the measured trajectory approaches the configured boundary. An HMM
-misclassification need not authorise a higher speed than the geometric envelope,
-although errors in geometry or timing still affect that envelope.
+The prototype combines the task phase and motion prediction while keeping a
+fixed software limit on the commanded speed. This separates two questions:
+whether a movement belongs to a normal task phase, and whether the measured
+movement is approaching the boundary. A wrong HMM phase cannot allow a higher
+speed than the distance limit, although errors in geometry or timing still
+affect that limit.
 
-The development results indicate that phase recognition is strongest during the
-longer working phase. The lower causal balanced accuracy compared with overall
-accuracy shows why phase accuracy alone is an insufficient measure of practical
-benefit. The stop-onset counts make the cost concrete: the predictive policy
-produced two to nine times as many protective-stop onsets as the fixed and
-reactive policies in the same task, almost all of them sub-0.5-s segments in
-which phase caution and the intrusion predictor toggled the request near a
-threshold. This chattering is a controller-design defect rather than a
-property of the task, and it is largest under the segment-origin geometry,
-whose body-distance input is noisier than the head point. Hysteresis or a
-minimum stop dwell on the learned inputs would remove it without touching the
-deterministic envelope. The reactive reference is therefore an important
-comparator when assessing the added value of learned context.
+The validation results show that phase recognition is strongest in the longer
+working phase. Because balanced accuracy in real time is lower than overall
+accuracy, phase accuracy alone does not show practical benefit.
+\towrite{Replace the earlier ``compatible with threshold switching'' paragraph
+with the stop findings: the extra predictive stop requests are mostly brief
+switching from the intrusion predictor, not the HMM; cause in code (2-sample
+trigger, immediate release, no hysteresis); lower and less even data rate on
+later days makes closing speed noisier; a fix is a release delay or a lower
+release threshold (hysteresis); a simple 1-s minimum stop, replayed offline on
+the recorded predictive commands, cut stop requests from 1417 to 420 but raised
+stopped time from 1351 to 2064~s, so it is not a free fix and needs live
+testing.}
 
-Equation~\ref{eq:bound} also constrains the expected benefit. For identical SSM
-inputs, parameters and zone state, the predictive policy cannot request a higher
-speed than the reactive policy: prediction and phase caution can only preserve
-or reduce the request. Its incremental value would therefore need to arise from
-the timing of intervention or changes in subsequent human--robot coordination,
-rather than a more permissive instantaneous speed bound. Such a closed-loop
-benefit cannot be inferred from phase accuracy or from applying alternative
-policies to the same recorded trajectory.
+The reactive controller remains the key reference for any future controlled
+comparison. Equation~(\ref{eq:bound}) also limits the expected benefit: for the
+same inputs, settings and zone, the predictive controller can never request a
+higher speed than the reactive one, because prediction and phase caution can
+only keep or lower the request. Any benefit must therefore come from the timing
+of intervention or from changes in how the person and robot then coordinate,
+not from a more permissive speed limit. Such a benefit cannot be shown from
+phase accuracy or by replaying different controllers on the same recorded
+movement.
 
-\subsection{Objective Behaviour and Perceived Experience}
-The telemetry illustrates changes in the distance input, speed request and
-measured joint motion throughout the panel sequence. The difference between
-geometric reference configurations materially affects how these signals can be
-interpreted. Similarly, variation between scheduled rapid movements and recorded
-closing inputs shows that event labels cannot substitute for measured exposure.
-These findings are consistent with the need to validate the sensing-to-stopping
-chain when implementing SSM \cite{marvel2017implementing}.
+\towrite{H1 paragraph, updated: after removing brief switching, the predictive
+controller still had more sustained stops (3.6 vs 3.1 per minute for reactive,
+about 16\% more) and the most stop time (median 36.7\%). H1 expected fewer
+unnecessary stops, so it is not supported; because participant, order and
+system version are not controlled, it is inconclusive rather than rejected.
+(Yihai, 30 Sep: an unsupported hypothesis is still a valuable result.)}
 
-Questionnaire responses generally indicate confidence in the robot stopping,
-low mental and physical demand, and limited frustration. Mean experienced safety
-exceeds mean expected safety in the matched records, whereas the trust difference
-is smaller. These observations suggest a positive reported experience of the
-laboratory task. However, novelty, supervised operation, repeated exposure and
-expectations could all contribute to the pattern. The change cannot be attributed
-specifically to the predictive controller.
+\subsection{Measured Behaviour and Reported Experience}
+The robot data show how the distance input, speed command and joint motion
+change through the panel sequence. The difference between the two system
+versions strongly affects how these signals can be read. Likewise, the gap
+between scheduled rapid movements and the measured closing speeds shows that
+event labels cannot replace measured exposure. Both findings support the need
+to validate the whole chain from sensing to stopping when SSM is implemented
+\cite{marvel2017implementing}.
 
-The complete-response analysis makes the broad descriptive pattern less dependent
-on the two missing final-block forms, but does not remove bias from missingness or
-resolve individual linkage. Ceiling ratings for stopping confidence and floor
-ratings for demand/frustration also leave limited room to distinguish conditions.
-The paired stopping and surprise responses show why aggregate medians should be
-read alongside within-code changes. Increased familiarity is a plausible
-explanation for greater relaxation across blocks, but was not isolated by this
-analysis.
+The questionnaires generally show confidence that the robot would stop, low
+mental and physical demand, and little frustration. Experienced safety was
+higher than expected safety in the matched records, while the change in trust
+was smaller. This suggests a positive experience of the lab task. However,
+novelty, supervision, repeated exposure and expectations could all contribute,
+so the change cannot be credited to the predictive controller.
 
-The end-of-session preference for block C does not provide a controller ranking:
-block labels rotate across controller assignments, and complete exposure linkage
-is unavailable. Likewise, subjective agreement that the robot stopped more than
-needed is informative about perceived interruption but is not an objective
-false-stop rate. Subjective and physical measures address different aspects of
-collaboration and should be interpreted together.
+The complete-response check makes the overall pattern less dependent on the
+two missing final-block forms, but it does not remove bias from missing data
+or solve the linkage problem. Very high ratings for stopping confidence and
+very low ratings for demand and frustration also leave little room to tell the
+controllers apart. The paired results for stopping and surprise show why
+medians should be read alongside changes within each code. Growing familiarity
+may explain why people relaxed over the blocks, but this was not tested.
 
-\subsection{Safety and Efficiency Interpretation}
-Dynamic SSM research motivates evaluation of availability and cycle performance
-\cite{byner2019dynamic,karagiannis2022adaptive}. The present study demonstrates
-the implementation needed to investigate those outcomes but does not establish
-a safety or efficiency advantage. Zero-command time combines intentional holds
-and responses to proximity; capture span includes operator actions and cannot
-be equated with isolated task time. These quantities therefore do not establish
-false interruption, task efficiency or collaboration fluency
-\cite{hoffman2019fluency}.
+The preference for block C does not rank the controllers, because block labels
+rotate across controllers and full exposure linkage is not available.
+Likewise, agreeing that the robot stopped more than needed tells us about
+perceived interruption, not an objective false-stop rate. Reported and measured
+results describe different sides of collaboration and should be read together.
 
-A non-inferiority conclusion would additionally require a justified margin,
-validated protective geometry and end-to-end response measurements, none of
-which the current analysis provides; absence of a demonstrated difference is
-not evidence of equivalent safety.
+\subsection{Safety and Efficiency}
+Research on adaptive SSM motivates measuring robot availability and cycle
+performance \cite{byner2019dynamic,karagiannis2022adaptive}. This study builds
+what is needed to measure those outcomes but does not show a safety or
+efficiency advantage. Stop time combines intentional holds and responses to
+people nearby, and capture time includes operator actions, so it is not the
+same as task time. These measures therefore do not establish false stops, task
+efficiency or collaboration fluency \cite{hoffman2019fluency}. Claiming that a
+controller is ``as safe as'' another would also need a justified margin,
+validated protective geometry and measured end-to-end response, none of which
+this analysis provides; not finding a difference is not evidence of equal
+safety.
 
 \subsection{Coverage of the Planned Measures}
-The study design specified four system measures (human--robot distance, number
-of speed reductions and stops, number of yellow/red zone entries and task
+The study design planned four system measures (human--robot distance, number
+of slowdowns and stops, number of yellow and red zone entries, and task
 completion time) and four experience measures (safety, comfort, predictability
-and trust) for comparison between static and adaptive safety. Distance, zone entries and stop onsets are reported per trial
-(Table~\ref{tab:trials}, Figs.~\ref{fig:geometry} and \ref{fig:trace}), with
-the caveat that red-zone entries and a share of the stop time arise from the
-loading and unloading approaches the task requires, so they are not counts of
-unnecessary interruption. Capture span is reported in place of task completion
-time because operator actions fall within the span. Safety and trust are reported as intake/end ratings, comfort through the
-relaxed and calm items, and predictability through the speed-legibility item.
-The static-versus-adaptive comparison remains open for the linkage and
-exposure reasons set out below.
+and trust) to compare fixed and adaptive safety. Distance and stops are
+reported per controller (Table~\ref{tab:controllers},
+Figs.~\ref{fig:geometry} and \ref{fig:trace}); red-boundary stops and part of
+the stop time come from the loading and unloading approaches the task
+requires, so they are not counts of unnecessary interruption. Capture time is
+reported instead of task completion time because operator actions fall within
+it. Safety and trust are reported as intake and end ratings, comfort through
+the relaxed and calm items, and predictability through the speed-change item.
 
 \subsection{Limitations}
 \label{sec:limitations}
-The sample is small and drawn by convenience. Session restarts prevented
-reliable linkage of every study ID to a distinct individual, so record counts
-cannot be treated as independent participant counts. Two questionnaire sets lack block C, and objective and
-subjective records cover different subsets of the study. Missingness may relate
-to technical problems or task execution, limiting complete-case interpretation
-and generalisation.
+The sample is small and was recruited for convenience. Because sessions were
+restarted, not every study ID can be linked to one person, so the 11 study
+codes cannot be treated as 11 independent people. Two trial slots lack a
+completed capture and two questionnaire sets lack block C, and missing data may
+relate to technical problems or task execution. The system version changed
+during collection, and the Xsens data rate fell on later days. Head points and
+body-segment positions do not cover the full body, tool and panel, and
+agreement with a calculation does not prove physical calibration. The
+controller is a research prototype: the separation limit is simplified, the
+command uses the ordinary robot speed override rather than a safety-rated stop,
+and the end-to-end response was not measured, so the results do not support a
+certified safety claim. Cued movements, operator pacing, visible robot motion,
+learning and fatigue may affect both behaviour and ratings. The phase model was
+built from three operators and may not generalise to construction workers.
 
-The geometric configuration changed during collection. Head points and segment
-origins do not represent complete body, tool and payload surfaces, and their
-agreement with a geometric calculation does not establish physical calibration.
-The controller is a research prototype: the separation envelope is simplified,
-the command path uses the ordinary robot speed override rather than a
-safety-rated stop, and no end-to-end protective response was measured, so the
-results do not support a certified safety claim for the installed system. Cued movements,
-operator pacing, visible motion, learning and fatigue may influence both
-behaviour and subjective reports. The model-development results are based on
-three operators and do not establish generalisation to construction workers.
-
-\subsection{Implications for Further Development}
-Future controlled evaluation should maintain a consistent geometry and validate
-its uncertainty against the complete moving volume. Synchronized measurements
-of physical movement, controller output and robot deceleration would allow
-response-time estimation independently of operator cues. Task-phase estimates
-could then be evaluated for their incremental benefit over the reactive policy
-using verified within-person controller exposure. A persistent study identifier
-across restarted sessions would support that comparison without changing the
-participant-facing task.
+\subsection{Future Work}
+Future controlled tests should keep one system version, check its sensor
+error against the full moving volume, and add a release delay or hysteresis to
+the intrusion predictor. Synchronised measurement of body movement, controller
+output and robot braking would give response times that do not depend on
+operator cues. The task phase could then be tested for its added value over
+the reactive controller using verified exposure for each person, and a study
+ID that follows each person across restarted sessions would make that possible
+without changing the task.
 
 \section{Conclusion}
-This paper presented a context-aware speed and separation monitoring
-controller for human--robot ceiling-panel installation and evaluated it on a
+This paper presented a speed and separation monitoring controller that uses
+the task phase in human--robot ceiling-panel installation, and tested it on a
 physical prototype with human participants. The controller combines measured
-closing kinematics, three-state task-phase recognition and kinematic intrusion
-prediction beneath a deterministic command ceiling, so that learned context can
-only make the robot more cautious. Causal phase recognition reached 0.794
-accuracy in leave-one-operator-out validation. Across 14 telemetry trials and
-31 block questionnaires, participants reported high confidence in the robot
-stopping and low workload, and perceived safety rose over the session; the
-telemetry showed that geometric reference selection and cue execution govern
-how recorded control behaviour should be interpreted. Complete-response
-analysis preserved \StableBlockMedians{} of 30 block medians, while paired
-changes showed that lower median interruption ratings were not uniform within
-participants. Establishing a controller-specific safety or efficiency
-advantage requires the consistent geometry, synchronised response
-measurement and persistent participant linkage identified here, and these
-define the next stage of the work.
+closing speed, recognition of three task phases and prediction of fast
+approaches, all below a fixed speed limit, so the learned parts can only make
+the robot more cautious. In real time, the phase model was correct 79.4\% of
+the time on operators it had not been trained on. Across 97 robot-data trials
+and 31 block questionnaires, participants were confident that the robot would
+stop, reported low workload, and felt safer by the end of the session. The
+robot data showed that the way distance was measured and the way scripted
+movements were performed strongly affect how the recorded robot behaviour
+should be read. Using only complete response sets left 29 of the 30 block
+medians unchanged, but the paired results showed that lower median ratings of
+unnecessary stopping did not hold for every participant. H1 was therefore not
+supported by the available data, and it remains inconclusive rather than
+rejected. Showing a clear safety or efficiency advantage for one controller
+will need a consistent distance measurement, synchronised measurement of the
+robot's response, and an ID that follows each participant across restarted
+sessions.
+\towrite{One sentence in the Conclusion on the stop finding (most extra
+predictive stops were brief intrusion-predictor switching; hysteresis is the
+next design change).}
 
 \section*{Data Availability}
 Analysis scripts, derived tables and figure-generation code accompany the
 manuscript. Participant-level data require controlled access. All reported
-experimental summaries are calculated from recorded observations without
-imputation or substitution of simulated values.
+summaries are calculated from recorded observations without imputation or
+simulated values.
 
 \section*{Acknowledgment}
 The authors thank Associate Professor Yihai Fang for his primary supervision
@@ -757,6 +830,9 @@ support, and the Construction Robotics Laboratory for providing facilities.
 \section*{AI Assistance Declaration}
 AI tools assisted with data-processing code, descriptive analysis, figure
 production and manuscript drafting and revision.
+\towrite{Check this declaration against the ENG4702 AI rule (AI may improve
+expression but must not generate written content) and state exactly how AI was
+used, including the 2 Oct plain-language edit, analysis scripts and figures.}
 
 \bibliographystyle{IEEEtran}
 \bibliography{refs}
