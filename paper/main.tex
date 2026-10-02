@@ -15,6 +15,7 @@
 \usepackage{stfloats}
 \usetikzlibrary{arrows.meta,positioning,fit}
 \input{tables/empirical_numbers}
+\newcommand{\aidraft}[1]{{\color{blue!65!black}#1}}
 \newcommand{\towrite}[1]{\par\smallskip\noindent\fcolorbox{red!70!black}{red!4}{\parbox{\dimexpr\linewidth-2\fboxsep-2\fboxrule}{\footnotesize\textbf{\color{red!70!black}TO WRITE (team, own words):} #1}}\par\smallskip}
 \begin{document}
 \title{Context-Aware Speed and Separation Monitoring for Human--Robot
@@ -22,7 +23,9 @@ Ceiling-Panel Installation: An Exploratory Evaluation}
 \author{Zenan Wu, Luke Siniakov, and Michael Magila%
 \thanks{The authors are with the Department of Civil Engineering, Monash
 University, Melbourne, Australia. This work is a 2026 Final Year Project
-supervised by Yihai Fang.}%
+supervised by Yihai Fang. \textbf{Internal draft, 2 Oct 2026: text in
+blue was drafted by AI and must be rewritten by the authors before
+submission (ENG4702 AI rule).}}%
 }
 \maketitle
 
@@ -45,15 +48,15 @@ to 4.45/5 after it. The robot data showed that the way distance was measured,
 and the way the scripted movements were actually performed, strongly affect
 how the results should be read. The data did not show that the predictive
 controller improved coordination or efficiency, so the main hypothesis remains
-inconclusive. The study shows that task-phase recognition, intrusion
+inconclusive. \aidraft{Most of its extra stop requests were brief: 805 of
+1417 lasted under 0.5~s and came from the intrusion predictor, and sustained
+stops were 2.7, 3.1 and 3.6 per minute for the fixed, reactive and predictive
+controllers.} The study shows that task-phase recognition, intrusion
 prediction and two motion-capture systems can work together in a
 construction-style task, and it sets out what must be measured to compare the
 three controllers conclusively.
 \end{abstract}
-\towrite{One sentence for the abstract on the stop breakdown: most extra
-predictive stops (805 of 1417) were stop requests shorter than 0.5~s from the
-intrusion predictor; sustained stops were 2.7, 3.1 and 3.6 per minute (fixed,
-reactive, predictive).}
+
 
 \begin{IEEEkeywords}
 Human--robot collaboration, speed and separation monitoring, hidden Markov model,
@@ -107,9 +110,11 @@ inputs and robot motion recorded during the task; and (3) item-by-item
 questionnaire results, checked again using only complete response sets. The
 contribution is combining and testing these parts in a construction task, not
 a new SSM formula.
-\towrite{Paper-structure paragraph (Yihai, 30 Sep): one or two sentences
-saying what Sections II--VIII cover (related work; system design; model
-validation; experimental method; results; discussion; conclusion).}
+\aidraft{The rest of this paper is organised as follows. Section~II reviews related
+work, and Section~III describes the prototype and its controllers. Section~IV
+reports how the phase model was developed and validated, and Section~V
+describes the experiment. Section~VI presents the results, Section~VII
+discusses them and their limitations, and Section~VIII concludes.}
 
 \section{Related Work}
 \subsection{Human--Robot Collaboration in Construction}
@@ -406,11 +411,13 @@ command is sent through the robot's speed override and pause function. This
 is a research controller: its stop is not a safety-rated protective stop, and
 (\ref{eq:bound}) limits the software request rather than certifying the
 installed system (Section~\ref{sec:limitations}).
-\towrite{Two facts from the controller code that the Results depend on: (1) the
-HMM's caution can only cap speed at the reduced level, so it never issues a stop
-by itself; (2) the intrusion predictor stops the robot after the risk is above
-its threshold for two consecutive samples ($\approx$33~ms at 60~Hz) and releases
-the stop as soon as risk drops below the same threshold (no hysteresis).}
+
+\aidraft{Two details of the controller matter for the results. First, the HMM's
+phase caution can only cap the speed at the reduced level, so it never stops
+the robot on its own. Second, the intrusion predictor issues a stop once the
+risk has stayed above its threshold for two consecutive samples (about 33~ms
+at 60~Hz) and releases it as soon as the risk falls back below the same
+threshold; there is no separate, lower release threshold.}
 
 \section{Model Development and Validation}
 We trained the phase model before the participant study, using 32 labelled
@@ -512,15 +519,17 @@ consistency, not physical calibration. For each cue window we report the
 smallest distance and the largest closing speed, which need not occur at the
 same moment. Stop time includes intentional holds in the task, so it is not a
 count of false stops.
-\towrite{Method for the stop breakdown (Yihai, 30 Sep: declare the system issue
-and how it was corrected). Facts: a stop request is a change of the speed
-command from above zero to zero; each is classed as \emph{brief} ($<0.5$~s) or
-\emph{sustained} ($\geq0.5$~s) and by the controller rule logged with it
-(sensing-dropout hold, intrusion predictor, red boundary, envelope minimum);
-the same rules apply to all three controllers; raw counts reproduce the
-earlier totals exactly; checks with joined stops (gap $<0.5$~s, length
-$\geq1$~s) and with 0.25/1.0~s settings; no video was used.
-Script: \texttt{scripts/analyse\_stop\_episodes.py}.}
+
+\aidraft{The recorded stop counts were checked for a known system issue: the speed
+command sometimes switched rapidly between stop and run. To separate this
+switching from real stops, every stop request (a change of the command from
+above zero to zero) was classed by duration, as \emph{brief} (under 0.5~s) or
+\emph{sustained} (0.5~s or longer), and by the controller rule logged with it:
+sensing-dropout hold, intrusion predictor, red boundary or envelope minimum.
+The same rules were applied to all three controllers, and the raw counts
+reproduce the earlier totals for every trial. As a check, stops were also
+joined when separated by less than 0.25, 0.5 or 1.0~s and counted only if they
+lasted at least 0.5 or 1.0~s. No video was used.}
 
 \subsection{Questionnaire Inclusion and Scoring}
 Pilot, link-test and qualification submissions were excluded. This left
@@ -574,19 +583,31 @@ intentional task holds.
 
 \input{tables/controller_summary}
 
-\towrite{Stop breakdown (Table~\ref{tab:controllers}). Facts: brief requests
-were 493/659 (fixed), 707/888 (reactive), 1200/1417 (predictive).
-Sensing-dropout holds (Xsens body data briefly missing; same rule in all
-controllers): 450, 414, 326. Intrusion predictor, predictive only: 805 brief
-and 104 sustained. Sustained stops: 166, 181, 217 = 2.7, 3.1, 3.6 per minute;
-mostly red-boundary stops during the approaches the task requires. Joined
-stops ($\geq1$~s): 140, 153, 187. Same inputs (33 later trials log all three
-controllers' requests; open loop): predictive started a stop 1.89$\times$ as
-often as reactive (median per trial, IQR 1.61--2.43). Data rate: predictive
-trials logged a median of $\approx$49~Hz on 9--10 Sep and $\approx$38~Hz on 16--17
-Sep, with brief intrusion stops rising from $\approx$6 to $\approx$20 per minute
-(rank correlation $-0.72$, $n=33$); date, rate and system version changed
-together. Fig.~\ref{fig:trace} shows the switching.}
+\aidraft{Most stop requests were brief: 493 of 659 for the fixed controller, 707 of
+888 for the reactive controller and 1200 of 1417 for the predictive controller
+lasted less than 0.5~s (Table~\ref{tab:controllers}). Two causes account for
+most of them. The sensing-dropout hold, which pauses the arm when fresh Xsens
+body data are briefly missing and is shared by all three controllers,
+produced 450, 414 and 326 brief requests. The intrusion predictor, used only
+by the predictive controller, produced 805 brief and 104 sustained requests.
+Sustained stops were much closer between controllers: 166, 181 and 217, or
+2.7, 3.1 and 3.6 per minute of observed time, and most were red-boundary stops
+during the approaches the task requires. Joining stops less than 0.5~s apart
+and counting only those of at least 1~s gave the same order (140, 153 and
+187).
+
+In the 33 later trials, the log also records what all three controllers would
+have requested at each sample from the same inputs. On these identical inputs
+the predictive controller started a stop 1.89 times as often as the reactive
+controller (median per trial; interquartile range 1.61--2.43), so the
+switching comes from the controller itself rather than from differences in
+participants or order. These same-input values are open-loop and do not show
+how the person or robot would then have moved. The switching also grew over
+the study: predictive trials logged a median of about 49~Hz on 9--10 September
+and 38~Hz on 16--17 September, while brief intrusion-predictor stops rose from
+about 6 to 20 per minute (rank correlation $-0.72$, $n=33$). Date, data rate
+and system version changed together, so their effects cannot be separated.
+Fig.~\ref{fig:trace} shows the switching in one trial.}
 
 Across the scheduled cue windows, fresh robot data show joint motion for
 1712.80~s of observed time, confirming that the robot moved during the labelled
@@ -682,15 +703,20 @@ affect that limit.
 The validation results show that phase recognition is strongest in the longer
 working phase. Because balanced accuracy in real time is lower than overall
 accuracy, phase accuracy alone does not show practical benefit.
-\towrite{Replace the earlier ``compatible with threshold switching'' paragraph
-with the stop findings: the extra predictive stop requests are mostly brief
-switching from the intrusion predictor, not the HMM; cause in code (2-sample
-trigger, immediate release, no hysteresis); lower and less even data rate on
-later days makes closing speed noisier; a fix is a release delay or a lower
-release threshold (hysteresis); a simple 1-s minimum stop, replayed offline on
-the recorded predictive commands, cut stop requests from 1417 to 420 but raised
-stopped time from 1351 to 2064~s, so it is not a free fix and needs live
-testing.}
+\aidraft{The predictive controller's higher raw stop count is mainly a switching
+effect, not more or longer holds. Of its 1417 stop requests, 805 were brief
+requests from the intrusion predictor; the HMM caused none, because its
+caution can only reduce speed. The predictor stops the robot after two samples
+above its threshold and releases as soon as the risk drops, so when a noisy
+closing-speed estimate hovers near the threshold, the command flips between
+stop and run. The lower and less even data rate on the later days makes the
+closing speed noisier and is consistent with the rise in switching. A release
+delay, or a release threshold set below the trigger threshold (hysteresis),
+should remove most of this switching without touching the fixed distance
+limit. A simple minimum stop time is not a free fix: replaying the recorded
+predictive commands with a 1-s minimum stop cut stop requests from 1417 to 420
+but raised stopped time from 1351 to 2064~s. The release rule therefore needs
+testing on live runs.}
 
 The reactive controller remains the key reference for any future controlled
 comparison. Equation~(\ref{eq:bound}) also limits the expected benefit: for the
@@ -702,12 +728,14 @@ not from a more permissive speed limit. Such a benefit cannot be shown from
 phase accuracy or by replaying different controllers on the same recorded
 movement.
 
-\towrite{H1 paragraph, updated: after removing brief switching, the predictive
-controller still had more sustained stops (3.6 vs 3.1 per minute for reactive,
-about 16\% more) and the most stop time (median 36.7\%). H1 expected fewer
-unnecessary stops, so it is not supported; because participant, order and
-system version are not controlled, it is inconclusive rather than rejected.
-(Yihai, 30 Sep: an unsupported hypothesis is still a valuable result.)}
+\aidraft{Removing the brief switching does not reverse the main result. The
+predictive controller still had more sustained stops than the reactive
+controller (3.6 against 3.1 per minute, about 16\% more) and the highest
+median stop time (36.7\%). H1 expected fewer unnecessary stops, so it is not
+supported by these data. Because participant, order and system version were
+not controlled, it cannot be rejected either, and it remains inconclusive. An
+unsupported hypothesis is still a useful result: it shows where the predictive
+layer costs robot availability and what must change before it can help.}
 
 \subsection{Measured Behaviour and Reported Experience}
 The robot data show how the distance input, speed command and joint motion
@@ -812,9 +840,10 @@ rejected. Showing a clear safety or efficiency advantage for one controller
 will need a consistent distance measurement, synchronised measurement of the
 robot's response, and an ID that follows each participant across restarted
 sessions.
-\towrite{One sentence in the Conclusion on the stop finding (most extra
-predictive stops were brief intrusion-predictor switching; hysteresis is the
-next design change).}
+
+\aidraft{Most of the predictive controller's extra stop requests were brief
+switching from the intrusion predictor rather than longer holds, which makes
+hysteresis on that predictor the next design change.}
 
 \section*{Data Availability}
 Analysis scripts, derived tables and figure-generation code accompany the
@@ -828,11 +857,11 @@ and academic guidance, Yizhe (Will) Wang for day-to-day technical and laboratory
 support, and the Construction Robotics Laboratory for providing facilities.
 
 \section*{AI Assistance Declaration}
-AI tools assisted with data-processing code, descriptive analysis, figure
-production and manuscript drafting and revision.
-\towrite{Check this declaration against the ENG4702 AI rule (AI may improve
-expression but must not generate written content) and state exactly how AI was
-used, including the 2 Oct plain-language edit, analysis scripts and figures.}
+\aidraft{AI tools assisted with data-processing and analysis code, figure and
+table generation, plain-language editing, and drafting of the passages marked
+in blue in this internal draft. [Update before submission to match the final
+use and the ENG4702 AI rule.]}
+
 
 \bibliographystyle{IEEEtran}
 \bibliography{refs}
