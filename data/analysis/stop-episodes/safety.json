@@ -1,0 +1,23 @@
+{
+ "fixed zone": {
+  "trials": 32,
+  "median_trial_duration_s": 112.47649999998976,
+  "median_closest_distance_m": 0.07793972413381033,
+  "red_time_pct": 28.531461195555696,
+  "stop_requested_in_red_pct": 100.0
+ },
+ "reactive SSM": {
+  "trials": 32,
+  "median_trial_duration_s": 113.60149999998976,
+  "median_closest_distance_m": 0.062412396333127625,
+  "red_time_pct": 31.315024596749467,
+  "stop_requested_in_red_pct": 100.0
+ },
+ "predictive SSM": {
+  "trials": 33,
+  "median_trial_duration_s": 109.01599999998871,
+  "median_closest_distance_m": 0.07939938884588017,
+  "red_time_pct": 32.027255648641024,
+  "stop_requested_in_red_pct": 100.0
+ }
+}

@@ -110,7 +110,7 @@ def trace_figure(raw):
     save(fig, 'representative-trace-full')
 
 
-def controller_table(rows, stops):
+def controller_table(rows, stops, safety):
     by = {c: [r for r in rows if r['controller_condition'] == c] for c in CONTROLLERS}
     sb = {c: [t for t in stops if t['controller_condition'] == c] for c in CONTROLLERS}
     def s(c, k): return sum(t['applied_causes'][k] for t in sb[c])
@@ -118,9 +118,11 @@ def controller_table(rows, stops):
     def ev(c, e): return sum(1 for r in by[c] if r['planned_event'] == e)
     lines = [
         ('Trials', lambda c: str(len(by[c]))),
-        ('Samples', lambda c: f"{sum(int(r['samples']) for r in by[c]):,}"),
-        ('Capture span (min)', lambda c: f"{sum(float(r['sample_span_s']) for r in by[c]) / 60:.1f}"),
         ('Clean / distractor / rapid', lambda c: f"{ev(c, 'clean')}/{ev(c, 'distractor')}/{ev(c, 'rapid intrusion')}"),
+        ('Median trial duration (s)', lambda c: f"{safety[c]['median_trial_duration_s']:.1f}"),
+        ('Median closest distance (m)', lambda c: f"{safety[c]['median_closest_distance_m']:.2f}"),
+        ('Time inside red boundary (\\%)', lambda c: f"{safety[c]['red_time_pct']:.1f}"),
+        ('Stop requested inside red (\\%)', lambda c: f"{safety[c]['stop_requested_in_red_pct']:.0f}"),
         ('Median stop time (\\%)', lambda c: f"{statistics.median(float(r['stop_command_pct_of_observed_time']) for r in by[c]):.1f}"),
         ('All stop requests', lambda c: str(sum(t['applied']['raw_onsets'] for t in sb[c]))),
         ('\\quad Brief: sensing dropout hold', lambda c: str(s(c, 'sensing dropout hold|brief'))),
@@ -149,6 +151,7 @@ def main():
     ap.add_argument('--selected', type=Path, required=True)
     ap.add_argument('--trace-raw', type=Path, required=True)
     ap.add_argument('--stops', type=Path, default=ROOT / 'data/analysis/stop-episodes/trials.json')
+    ap.add_argument('--safety', type=Path, default=ROOT / 'data/analysis/stop-episodes/safety.json')
     a = ap.parse_args()
     rows = list(csv.DictReader(a.selected.open()))
     assert len(rows) == 97
@@ -156,7 +159,7 @@ def main():
     assert {t['session_id'] for t in stops} == {r['session_id'] for r in rows}
     geometry_figure(rows)
     trace_figure(a.trace_raw)
-    controller_table(rows, stops)
+    controller_table(rows, stops, json.loads(a.safety.read_text()))
 
 
 if __name__ == '__main__':

@@ -39,14 +39,13 @@ the real-time phase model was correct 79.4\% of the time (balanced accuracy
 under fixed, reactive and predictive control, plus 31 block questionnaires.
 Participants were confident that the robot would stop and reported low
 workload, and their average safety rating rose from 3.82/5 before the session
-to 4.45/5 after it. The robot data showed that the way distance was measured,
-and the way the scripted movements were actually performed, strongly affect
-how the results should be read. The data did not show that the predictive
-controller improved coordination or efficiency, so the main hypothesis remains
-inconclusive. \aidraft{Most of its extra stop requests were brief: 805 of
-1417 lasted under 0.5~s and came from the intrusion predictor, and sustained
-stops were 2.7, 3.1 and 3.6 per minute for the fixed, reactive and predictive
-controllers.} The study shows that task-phase recognition, intrusion
+to 4.45/5 after it. We hypothesised that the predictive controller is as
+safe as fixed-zone control, the current industry approach, while keeping
+comparable efficiency. The safety indicators matched: every controller
+requested a stop whenever a person was inside the red boundary, and closest
+approach and time inside it were similar. Trials took about as long, but the
+predictive controller kept the robot stopped for more of each trial, so the
+hypothesis is only partly supported. The study shows that task-phase recognition, intrusion
 prediction and two motion-capture systems can work together in a
 construction-style task, and it sets out what must be measured to compare the
 three controllers conclusively.
@@ -67,7 +66,7 @@ unnecessary robot stops can break the flow of work.
 
 \begin{figure}[!t]
 \centering
-\includegraphics[width=.62\columnwidth]{figures/task-frame.jpg}
+\includegraphics[width=.5\columnwidth]{figures/task-frame.jpg}
 \caption{The ceiling-panel installation task in our lab: the robot holds the panel at ceiling height while the worker fixes it from below (frame from session video; face blurred).}
 \label{fig:task}
 \end{figure}
@@ -82,19 +81,19 @@ long as a wrongly recognised phase can never loosen the safety limit. Our
 controller therefore keeps three parts separate: task-phase recognition,
 motion prediction and the distance limit.
 
-The research question is whether knowing the task phase can improve
-human--robot coordination compared with fixed-zone and reactive control, while
-staying within the same distance limit. The planned comparison covers response
+The research question is whether a controller that knows the task phase can
+keep people as safe as the fixed-zone control used in practice today, while
+keeping the task efficient. The planned comparison covers response
 to intrusion, unnecessary stops, task efficiency and participant experience.
 This exploratory analysis answers three supporting questions: (1) how
 accurately the model recognises the task phase in real time; (2) how the
 distance measurement and the scripted movements affect how the recorded robot
 behaviour should be read; and (3) what the questionnaires show about
 participants' experience across the task blocks. Our main hypothesis (H1) is
-that, compared with fixed-zone and reactive control, the context-aware
-predictive controller reduces unnecessary stops and improves coordination and
-participant experience. Any such benefit must come from within the same
-distance limit: the learned parts are not allowed to relax it.
+that the context-aware predictive controller is as safe as fixed-zone control,
+the current industry approach, while maintaining comparable task efficiency.
+Its safety rests on the same distance limit: the learned parts are not allowed
+to relax it.
 
 This work makes three contributions: (1) a physical ceiling-panel prototype in
 which task-phase recognition and intrusion prediction are kept separate, and
@@ -574,6 +573,15 @@ controller order, system version and person identity are not jointly
 controlled, these differences are descriptive. Stop time also includes
 intentional task holds.
 
+The safety indicators were similar across controllers
+(Table~\ref{tab:controllers}). Whenever the measured distance was inside the
+0.94-m red boundary, all three controllers requested a stop 100\% of the time.
+The median closest distance per trial was 0.08, 0.06 and 0.08~m, and people
+spent 28.5\%, 31.3\% and 32.0\% of observed time inside the red boundary,
+mostly during the loading, working and unloading approaches the task requires.
+Median trial duration was 112.5, 113.6 and 109.0~s, so predictive trials were
+not slower overall, although the robot spent more of that time stopped.
+
 \input{tables/controller_summary}
 
 \aidraft{Most stop requests were brief: 493 of 659 for the fixed controller, 707 of
@@ -721,14 +729,21 @@ not from a more permissive speed limit. Such a benefit cannot be shown from
 phase accuracy or by replaying different controllers on the same recorded
 movement.
 
-\aidraft{Removing the brief switching does not reverse the main result. The
-predictive controller still had more sustained stops than the reactive
-controller (3.6 against 3.1 per minute, about 16\% more) and the highest
-median stop time (36.7\%). H1 expected fewer unnecessary stops, so it is not
-supported by these data. Because participant, order and system version were
-not controlled, it cannot be rejected either, and it remains inconclusive. An
-unsupported hypothesis is still a useful result: it shows where the predictive
-layer costs robot availability and what must change before it can help.}
+\aidraft{Against H1, the results split into two parts. On safety, we found no
+sign that the predictive controller was less safe than fixed-zone control: a
+stop was requested every time a person was inside the red boundary, closest
+approaches and time inside the boundary were similar, the learned parts can
+only lower the speed (Equation~(\ref{eq:bound})), and confidence that the
+robot would stop was high in every block. On efficiency, trials took about the
+same time (median 109.0 against 112.5~s), but the predictive controller kept
+the robot stopped for more of the trial (36.7\% against 29.7\%) and had more
+sustained stops (3.6 against 2.7 per minute), mostly because of the intrusion
+predictor. H1 is therefore partly supported: the safety part is consistent
+with the data, but comparable robot availability was not shown. Because
+participant, order and system version were not controlled, and equal safety
+cannot be formally established (Section~\ref{sec:safety-eff}), H1 remains
+inconclusive rather than confirmed or rejected. Fixing the predictor's
+switching is the clearest route to closing the efficiency gap.}
 
 \subsection{Measured Behaviour and Reported Experience}
 The robot data show how the distance input, speed command and joint motion
@@ -761,16 +776,18 @@ perceived interruption, not an objective false-stop rate. Reported and measured
 results describe different sides of collaboration and should be read together.
 
 \subsection{Safety and Efficiency}
+\label{sec:safety-eff}
 Research on adaptive SSM motivates measuring robot availability and cycle
 performance \cite{byner2019dynamic,karagiannis2022adaptive}. This study builds
 what is needed to measure those outcomes but does not show a safety or
 efficiency advantage. Stop time combines intentional holds and responses to
 people nearby, and capture time includes operator actions, so it is not the
 same as task time. These measures therefore do not establish false stops, task
-efficiency or collaboration fluency \cite{hoffman2019fluency}. Claiming that a
-controller is ``as safe as'' another would also need a justified margin,
-validated protective geometry and measured end-to-end response, none of which
-this analysis provides; not finding a difference is not evidence of equal
+efficiency or collaboration fluency \cite{hoffman2019fluency}. Formally
+showing that the predictive controller is as safe as fixed-zone control would
+also need a justified equivalence margin, validated protective geometry and
+measured end-to-end stopping response, none of which this analysis provides.
+The safety indicators are therefore consistent with H1 but do not prove equal
 safety.
 
 \subsection{Coverage of the Planned Measures}
@@ -781,9 +798,8 @@ and trust) to compare fixed and adaptive safety. Distance and stops are
 reported per controller (Table~\ref{tab:controllers},
 Figs.~\ref{fig:geometry} and \ref{fig:trace}); red-boundary stops and part of
 the stop time come from the loading and unloading approaches the task
-requires, so they are not counts of unnecessary interruption. Capture time is
-reported instead of task completion time because operator actions fall within
-it. Safety and trust are reported as intake and end ratings, comfort through
+requires, so they are not counts of unnecessary interruption. Trial duration
+includes operator actions, so it stands in for task completion time. Safety and trust are reported as intake and end ratings, comfort through
 the relaxed and calm items, and predictability through the speed-change item.
 
 \subsection{Limitations}
@@ -808,10 +824,8 @@ Future controlled tests should keep one system version, check its sensor
 error against the full moving volume, and add a release delay or hysteresis to
 the intrusion predictor. Synchronised measurement of body movement, controller
 output and robot braking would give response times that do not depend on
-operator cues. The task phase could then be tested for its added value over
-the reactive controller using verified exposure for each person, and a study
-ID that follows each person across restarted sessions would make that possible
-without changing the task.
+operator cues, and a study ID that follows each person across restarted
+sessions would allow verified within-person comparison of the controllers.
 
 \section{Conclusion}
 This paper presented a speed and separation monitoring controller that uses
@@ -822,21 +836,20 @@ approaches, all below a fixed speed limit, so the learned parts can only make
 the robot more cautious. In real time, the phase model was correct 79.4\% of
 the time on operators it had not been trained on. Across 97 robot-data trials
 and 31 block questionnaires, participants were confident that the robot would
-stop, reported low workload, and felt safer by the end of the session. The
-robot data showed that the way distance was measured and the way scripted
-movements were performed strongly affect how the recorded robot behaviour
-should be read. Using only complete response sets left 29 of the 30 block
+stop, reported low workload, and felt safer by the end of the session. Using only complete response sets left 29 of the 30 block
 medians unchanged, but the paired results showed that lower median ratings of
-unnecessary stopping did not hold for every participant. H1 was therefore not
-supported by the available data, and it remains inconclusive rather than
-rejected. Showing a clear safety or efficiency advantage for one controller
+unnecessary stopping did not hold for every participant. H1, that the
+predictive controller is as safe as fixed-zone control while keeping comparable
+efficiency, was partly supported: every controller requested a stop whenever a
+person was inside the red boundary, closest approaches were similar and trials
+took about the same time, but the robot spent more time stopped under
+predictive control, mostly because of brief switching in the intrusion
+predictor, which makes hysteresis the next design change. Formally showing equal safety and comparable availability
 will need a consistent distance measurement, synchronised measurement of the
 robot's response, and an ID that follows each participant across restarted
 sessions.
 
-\aidraft{Most of the predictive controller's extra stop requests were brief
-switching from the intrusion predictor rather than longer holds, which makes
-hysteresis on that predictor the next design change.}
+
 
 \section*{Data Availability}
 Analysis scripts, derived tables and figure-generation code accompany the
