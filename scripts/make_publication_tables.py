@@ -1,0 +1,94 @@
+"""Generate the v3.2 same-input table and number macros from the aggregate
+publication summaries (data/analysis/publication/*.json). No participant-level
+input is read, so this runs from a public checkout."""
+import json
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+PUB = ROOT / 'data/analysis/publication'
+OUT = ROOT / 'paper/tables'
+CTRL = [('fixed zone', 'Fixed zone'), ('reactive SSM', 'Reactive'), ('predictive SSM', 'Predictive')]
+
+
+def f(x, d=2):
+    return f'{x:.{d}f}'
+
+
+def main():
+    s = json.loads((PUB / 'summary-all.json').read_text())
+    q = json.loads((PUB / 'questionnaire-links.json').read_text())
+    lp = json.loads((PUB / 'latency-and-phase.json').read_text())
+    ol, pc, sens, cl = s['open_loop'], s['paired_contrasts'], s['distance_sensitivity'], s['closed_loop']
+
+    rows = []
+    for key, label in CTRL:
+        o = ol[key]
+        rows.append(f"{label} & {f(o['stop_s_per_min']['mean'], 1)} & {f(o['brief_per_min']['mean'], 1)} & "
+                    f"{f(o['unnecessary_s_per_min']['mean'])} & {f(o['mean_lead_s'])} & "
+                    f"{f(o['entries_covered_pct'], 0)} & {f(sens[key + ' | +0.05']['covered_pct'], 0)} \\\\")
+    table = r"""\begin{table}[!t]
+\centering
+\caption{Same-input comparison: all three controllers replayed on the identical
+recorded movement of all 12 participants (105 trials, %s~min, %d entries into
+the red boundary). Rates are per minute; unnecessary stops are stops with no
+entry into the red boundary within 1~s; lead is how long a stop had already been
+requested when the person entered the red boundary.}
+\label{tab:same-input}
+\footnotesize
+\setlength{\tabcolsep}{3pt}
+\begin{tabular}{@{}lrrrrrr@{}}
+\toprule
+ & Stop & Brief & Unneces- & Lead & \multicolumn{2}{c}{Entries covered (\%%)} \\
+\cmidrule(l){6-7}
+Controller & (s/min) & stops/min & sary (s/min) & (s) & measured & +5 cm error \\
+\midrule
+%s
+\bottomrule
+\end{tabular}
+\end{table}
+""" % (f(s['observed_min'], 0), s['entries'], '\n'.join(rows))
+    (OUT / 'same_input.tex').write_text(table)
+
+    def contrast(name):
+        return pc[name]
+    pf_u, pr_u = contrast('unnecessary_s_per_min: predictive SSM - fixed zone'), contrast('unnecessary_s_per_min: predictive SSM - reactive SSM')
+    pf_l, pr_l = contrast('mean_lead_s: predictive SSM - fixed zone'), contrast('mean_lead_s: predictive SSM - reactive SSM')
+    lat = cl['response_latency_s']['all']
+    la = lp['latency_s']
+    ph = lp['phase_summary_all']
+    m = {
+        'PubPeople': len(s['codes']), 'PubTrials': s['trials'], 'PubMinutes': f(s['observed_min'], 0), 'PubEntries': s['entries'],
+        'PubLeadPF': f(pf_l['mean_diff'], 3), 'PubLeadPFlo': f(pf_l['ci95'][0], 3), 'PubLeadPFhi': f(pf_l['ci95'][1], 3),
+        'PubLeadPR': f(pr_l['mean_diff'], 3),
+        'PubUnnecPF': f(pf_u['mean_diff']), 'PubUnnecPFlo': f(pf_u['ci95'][0]), 'PubUnnecPFhi': f(pf_u['ci95'][1]),
+        'PubUnnecPR': f(pr_u['mean_diff']),
+        'PubPminSign': f(pf_u['wilcoxon_p'], 4),
+        'PubCovFixedFive': f(sens['fixed zone | +0.05']['covered_pct'], 0),
+        'PubCovReactiveFive': f(sens['reactive SSM | +0.05']['covered_pct'], 0),
+        'PubCovPredFive': f(sens['predictive SSM | +0.05']['covered_pct'], 0),
+        'PubLatN': lat['n'], 'PubLatMed': f(lat['median'], 3), 'PubLatPninefive': f(lat['p95'], 3), 'PubLatMax': f(lat['max'], 3),
+        'PubXsensAgePninefive': f(la['xsens_age']['p95'], 3), 'PubXsensAgePninenine': f(la['xsens_age']['p99'], 3),
+        'PubTickPninefive': f(la['tick_interval_v2']['p95'], 3),
+        'PubPhaseAccMed': f(100 * ph['accuracy_median'], 0), 'PubPhaseAccLo': f(100 * ph['accuracy_range'][0], 0),
+        'PubPhaseAccHi': f(100 * ph['accuracy_range'][1], 0), 'PubPhaseBalMed': f(100 * ph['balanced_median'], 0),
+        'PubMinSepMoving': f(cl['min_separation_while_moving_m']),
+        'PubPushedPeople': len(cl['people_who_pushed_held_arm']),
+        'PubQPeople': q['people_with_block_ratings'], 'PubQBlocks': q['block_ratings'],
+        'PubQSafestFixed': q['end_of_session_choices']['felt_safest']['fixed zone']['count'],
+        'PubQSafestReactive': q['end_of_session_choices']['felt_safest']['reactive SSM']['count'],
+        'PubQSafestPred': q['end_of_session_choices']['felt_safest']['predictive SSM']['count'],
+        'PubQRelaxFirst': f(q['block_position']['anxious_relaxed']['means_first_second_third'][0]),
+        'PubQRelaxThird': f(q['block_position']['anxious_relaxed']['means_first_second_third'][2]),
+        'PubQRelaxP': f(q['block_position']['anxious_relaxed']['friedman_p'], 3),
+        'PubQPercR': f(q['perception_vs_measurement']['slowed_more_than_needed ~ m_unnec']['r_rm']),
+        'PubQPercP': f(q['perception_vs_measurement']['slowed_more_than_needed ~ m_unnec']['p']),
+        'PubQFriedmanMin': f(min(v['friedman_p'] for v in q['items'].values() if v['friedman_p'] is not None)),
+    }
+    (OUT / 'publication_numbers.tex').write_text(
+        '%% Generated by scripts/make_publication_tables.py from data/analysis/publication.\n' +
+        ''.join(f'\\newcommand{{\\{k}}}{{{v}}}\n' for k, v in m.items()))
+    print('\n'.join(rows)); print(m)
+
+
+if __name__ == '__main__':
+    main()

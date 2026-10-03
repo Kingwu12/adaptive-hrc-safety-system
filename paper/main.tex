@@ -1,6 +1,9 @@
 %% Canonical IEEEtran manuscript. Generated tables and figures derive from recorded data.
 %% v3 (2 Oct 2026): full-data revision (97 trials) + plain-language edit for a
 %% civil-engineering readership + supervisor feedback of 30 Sep 2026.
+%% v3.2 (3 Oct 2026, internal): all 12 participants, person identity check,
+%% exact same-input replay, measured robot stopping, distance-error sensitivity,
+%% questionnaires linked to controllers. Supervisor feedback on v3 still pending.
 \documentclass{IEEEtran}
 \usepackage{cite}
 \usepackage{amsmath,amssymb,amsfonts}
@@ -13,6 +16,7 @@
 \usepackage{stfloats}
 \usetikzlibrary{arrows.meta,positioning,fit}
 \input{tables/empirical_numbers}
+\input{tables/publication_numbers}
 \newcommand{\aidraft}[1]{#1}
 \begin{document}
 \title{Context-Aware Speed and Separation Monitoring for Human--Robot
@@ -29,26 +33,25 @@ In ceiling-panel installation, a worker and a robot share a workspace while
 handling the same panel. Fixed safety zones cannot tell whether the worker is
 approaching, working or moving away, so they can stop the robot more often than
 needed. This paper presents a speed and separation monitoring (SSM) controller
-that uses the task phase, and tests it on a physical prototype. A hidden Markov
-model (HMM) estimates the task phase from motion-capture data, and a separate
-predictor detects fast movement toward the robot. A fixed rule ensures that
-neither of these learned parts can make the robot faster than the basic
-distance-based limit allows. Tested on operators it had not been trained on,
-the real-time phase model was correct 79.4\% of the time (balanced accuracy
-72.5\%). The study produced 97 usable robot-data trials from 11 study codes
-under fixed, reactive and predictive control, plus 31 block questionnaires.
-Participants were confident that the robot would stop and reported low
-workload, and their average safety rating rose from 3.82/5 before the session
-to 4.45/5 after it. We hypothesised that the predictive controller is as
-safe as fixed-zone control, the current industry approach, while keeping
-comparable efficiency. The safety indicators matched: every controller
-requested a stop whenever a person was inside the red boundary, and closest
-approach and time inside it were similar. Trials took about as long, but the
-predictive controller kept the robot stopped for more of each trial, so the
-hypothesis is only partly supported. The study shows that task-phase recognition, intrusion
-prediction and two motion-capture systems can work together in a
-construction-style task, and it sets out what must be measured to compare the
-three controllers conclusively.
+that uses the task phase, and tests it on a physical prototype with
+\PubPeople{} participants. A hidden Markov model (HMM) estimates the task phase
+from motion-capture data, a separate predictor detects fast movement toward the
+robot, and a fixed rule ensures that neither learned part can make the robot
+faster than the basic distance-based limit allows. Because the system logged
+every input, we replayed all three controllers (fixed zone, reactive and
+predictive) on the identical recorded movement of all \PubTrials{} trials, and
+the replay matched every logged robot command. On the same movement, every
+controller had requested a stop at all \PubEntries{} entries into the red
+boundary. The predictive controller started stopping \PubLeadPF{}~s earlier
+than fixed-zone control and added \PubUnnecPF{}~s per minute of unnecessary
+stopping, consistently for all \PubPeople{} people. Its early stopping matters
+when the distance measurement is wrong: with a 5-cm distance error, a stop had
+already been requested at \PubCovPredFive\% of entries under predictive
+control, against \PubCovFixedFive\% under fixed-zone control. The robot
+reached standstill a median of \PubLatMed{}~s after a stop request (maximum
+\PubLatMax{}~s). Participants rated all three controllers as safe and could
+not tell them apart. The prediction therefore buys safety margin against
+measurement error at a small, unnoticed cost in robot availability.
 \end{abstract}
 
 
@@ -97,9 +100,10 @@ to relax it.
 
 This work makes three contributions: (1) a physical ceiling-panel prototype in
 which task-phase recognition and intrusion prediction are kept separate, and
-both sit below a fixed speed limit; (2) a descriptive analysis of the distance
-inputs and robot motion recorded during the task; and (3) item-by-item
-questionnaire results, checked again using only complete response sets. The
+both sit below a fixed speed limit; (2) an exact same-input comparison of the
+three controllers on the recorded movement of all 12 participants, including
+measured robot stopping and sensitivity to distance error; and (3) participant
+ratings linked to the controller that ran in each block. The
 contribution is combining and testing these parts in a construction task, not
 a new SSM formula.
 \aidraft{The rest of this paper is organised as follows. Section~II reviews related
@@ -428,6 +432,12 @@ Balanced accuracy is lower, especially for the causal filter (0.725), and recall
 is highest for the working phase. The small number of operators, the
 correlation between frames in the same trial, and the reuse of the same folds
 during development limit how far these values generalise.
+The \PubPeople{} participants were never used in training, so they form a further
+held-out test. Against the planned-cue phase labels, the real-time model was
+correct a median of \PubPhaseAccMed\% of the time per person (range
+\PubPhaseAccLo--\PubPhaseAccHi\%; balanced accuracy \PubPhaseBalMed\%). The labels
+mark when a cue was given rather than when the movement began, so this is a
+lower bound. Phase errors change only the yellow-zone speed limit, not stops.
 
 \FloatBarrier
 \section{Experimental Method}
@@ -475,23 +485,28 @@ when the movement started.
 
 \subsection{Participants and Analysed Records}
 \label{sec:participants}
-The study ran under Monash University ethics approval (project 51642). The team
-recorded 12 people taking part, but because some sessions were restarted under
-a new P-number, that count cannot be rebuilt from the exported records alone.
-Study IDs therefore label recorded sessions, not confirmed individuals.
+The study ran under Monash University ethics approval (project 51642). Twelve
+people took part. Some sessions were restarted under a new P-number, so we
+checked identity from the data before analysis. Each analysed study code is one
+continuous sitting of 25 to 35 minutes that contains a full rotated sequence of
+the three controllers, separated from the next sitting by about 30 minutes.
+The Xsens body profile was sometimes reused between people (two pairs of codes
+have identical segment lengths), so it cannot identify a person; the height of
+the tracked helmet, measured independently by OptiTrack, separates those codes
+(for example 1.75 against 1.81~m, with a spread of about $\pm$0.01~m within a
+code). One person was recorded under two codes on 17 September, confirmed by
+identical intake answers; these are merged.
 
-Because not every record could be linked to one person, the analysis is
-descriptive. The main data set is the 11 study IDs that have both intake and
-end forms and a known controller order. These IDs had 99 planned trial slots,
-for which 115 attempts were found: 108 completed and seven aborted. For each
-slot we used the latest completed trial whose files were readable and whose
-sample count matched its record. This gave 97 trials; two slots (P13 block A
-trial 1 and P22 block A trial 3) had no completed trial. Earlier repeats of a
-slot are kept in the audit record but not analysed. The same 11 IDs gave 31
-block questionnaires: nine IDs completed all three, and two are missing the
-last block. All 11 have matched intake and end forms. Robot data and
-questionnaires were analysed separately, and all values come directly from
-recorded samples and original form responses; no missing values were filled in.
+Eleven people have eight or nine analysed trials each (97 trials; two planned
+slots had no completed trial). The twelfth person has eight trials (three
+reactive and five predictive, with no fixed-zone block) that were excluded from
+the earlier analysis for phase order and a lower capture rate (about 26~Hz);
+they are included here because the same-input replay
+(Section~\ref{sec:telemetry}) gives all three controllers on their recorded
+movement. In total there are \PubTrials{} trials. Eleven people gave 31 block
+questionnaires (two are missing the last block); the twelfth completed only the
+intake form. Pilot, rehearsal and team sessions are excluded. No missing values
+were filled in.
 
 \subsection{Robot Data Processing}
 \label{sec:telemetry}
@@ -512,16 +527,35 @@ smallest distance and the largest closing speed, which need not occur at the
 same moment. Stop time includes intentional holds in the task, so it is not a
 count of false stops.
 
-\aidraft{The recorded stop counts were checked for a known system issue: the speed
-command sometimes switched rapidly between stop and run. To separate this
-switching from real stops, every stop request (a change of the command from
-above zero to zero) was classed by duration, as \emph{brief} (under 0.5~s) or
-\emph{sustained} (0.5~s or longer), and by the controller rule logged with it:
-sensing-dropout hold, intrusion predictor, red boundary or envelope minimum.
-The same rules were applied to all three controllers, and the raw counts
-reproduce the earlier totals for every trial. As a check, stops were also
-joined when separated by less than 0.25, 0.5 or 1.0~s and counted only if they
-lasted at least 0.5 or 1.0~s. No video was used.}
+\textbf{Same-input replay.} The controllers are fixed rules applied to logged
+inputs (distance, closing speed and acceleration, and body features), so each
+can be re-run on any recorded trial. We replayed all three controllers on the
+recorded inputs of every trial, with the same fail-safe holds the live system
+applied to all of them. Replay used the exact code and model version that ran:
+the first participant's sitting used an earlier version of the predictive
+controller's yellow-zone rule, and this was reproduced. The replayed command
+matched the logged robot command in every sample of all \PubTrials{} trials,
+and, in the later trials where the system also logged the other two
+controllers' requests, it matched those too. This gives a paired comparison of
+the three controllers on identical human movement, free of differences in
+person, order, learning and fatigue. It is open loop: it shows what each
+controller would have requested, not how the person or robot would then have
+moved.
+
+\textbf{Measures.} A stop is \emph{unnecessary} if the person is outside the
+red boundary and does not enter it within the next $H$~s ($H=1$~s; 0.5 and 2~s
+give the same ranking). For each entry into the red boundary, \emph{lead} is
+how long a stop had already been requested. To test sensitivity to distance
+error, entries and coverage are recomputed with the red boundary moved by
+$\pm$5 and $\pm$10~cm while the controllers are unchanged. Robot stopping time
+is measured from a stop request made while the tool was moving to the first
+sample at which the measured tool speed is below 0.005~m/s. Stop requests are
+also classed as brief (under 0.5~s) or sustained.
+
+\textbf{Statistics.} The person is the unit of analysis. Quantities are
+totalled per person and divided by that person's observed time. Paired
+differences are tested with the Wilcoxon signed-rank test, with 95\%
+confidence intervals from a bootstrap over people.
 
 \subsection{Questionnaire Inclusion and Scoring}
 Pilot, link-test and qualification submissions were excluded. This left
@@ -540,24 +574,22 @@ Jian et al.\ \cite{jian2000trust}. Neither set is the full validated
 questionnaire, so each item is analysed on its own and no combined score is
 formed.
 
-Block results are given as response counts and median [first, third
-quartile]. As a check, we repeat the summary using only the nine IDs with all
-three block forms, and count how many ratings went up, stayed the same or went
-down from A to C. These changes describe the order of the blocks; a higher
-rating is not always better. Results are grouped by block label, not by
-controller, because the assignment records alone do not prove which controller
-each questionnaire refers to. The intake and end forms are matched by study ID
-and ask about expected and then experienced safety and trust, from 1 (not at
-all) to 5 (completely). Because neither the number of independent people nor
-full controller exposure can be confirmed, we report no significance tests,
-confidence intervals or effect sizes, and we do not assume missing data are
-random.
+Every trial record states its block and the controller that ran, so each
+block questionnaire is linked to a controller. Items are compared between
+controllers with the Friedman test (people with all three blocks) and paired
+Wilcoxon tests, and against block position (first, second, third) to separate
+controller from order. End-form choices are mapped to controllers and compared
+with chance. Whether felt unnecessary stopping follows measured unnecessary
+stopping is tested with a within-person (repeated-measures) correlation. The
+intake and end forms ask about expected and then experienced safety and trust,
+from 1 (not at all) to 5 (completely).
 
 \section{Results}
 \subsection{Robot Data}
-Each of the 11 study codes has eight or nine selected trials.
-Table~\ref{tab:controllers} summarises them by controller; these totals
-describe the records and are not estimates of a controller effect. The 97
+The 97 trials of the eleven people with full sessions are summarised by the
+controller that actually ran (Table~\ref{tab:controllers}); these logged totals
+mix person, order and system version, and Section~\ref{sec:same-input} gives
+the paired comparison. The 97
 trials contain 494,075 samples and 186.17 minutes of capture. 398 gaps are
 longer than 250~ms, totalling 281.65~s (2.52\%); 10,888.35~s remain for time
 totals. 3244 samples are flagged as stale tracking, and 395 put the controller
@@ -568,10 +600,8 @@ were recorded, not how the robot physically stopped.
 The trials are close to the planned 11 per trial type per controller; the two
 missing slots leave 10 clean fixed and 10 clean reactive trials. Median stop
 time is 29.7\%, 33.6\% and 36.7\% for fixed, reactive and predictive records,
-and the raw numbers of stop requests are 659, 888 and 1417. Because
-controller order, system version and person identity are not jointly
-controlled, these differences are descriptive. Stop time also includes
-intentional task holds.
+and the raw numbers of stop requests are 659, 888 and 1417. Stop time also
+includes intentional task holds.
 
 The safety indicators were similar across controllers
 (Table~\ref{tab:controllers}). Whenever the measured distance was inside the
@@ -584,31 +614,49 @@ not slower overall, although the robot spent more of that time stopped.
 
 \input{tables/controller_summary}
 
-\aidraft{Most stop requests were brief: 493 of 659 for the fixed controller, 707 of
-888 for the reactive controller and 1200 of 1417 for the predictive controller
-lasted less than 0.5~s (Table~\ref{tab:controllers}). Two causes account for
-most of them. The sensing-dropout hold, which pauses the arm when fresh Xsens
-body data are briefly missing and is shared by all three controllers,
-produced 450, 414 and 326 brief requests. The intrusion predictor, used only
-by the predictive controller, produced 805 brief and 104 sustained requests.
-Sustained stops were much closer between controllers: 166, 181 and 217, or
-2.7, 3.1 and 3.6 per minute of observed time, and most were red-boundary stops
-during the approaches the task requires. Joining stops less than 0.5~s apart
-and counting only those of at least 1~s gave the same order (140, 153 and
-187).
+Most logged stop requests were brief (under 0.5~s): 493 of 659, 707 of 888 and
+1200 of 1417 for the fixed, reactive and predictive records. The shared
+sensing-dropout hold produced 450, 414 and 326 of them, and the predictive
+controller's intrusion predictor 805 brief and 104 sustained requests
+(Table~\ref{tab:controllers}).
 
-In the 33 later trials, the log also records what all three controllers would
-have requested at each sample from the same inputs. On these identical inputs
-the predictive controller started a stop 1.89 times as often as the reactive
-controller (median per trial; interquartile range 1.61--2.43), so the
-switching comes from the controller itself rather than from differences in
-participants or order. These same-input values are open-loop and do not show
-how the person or robot would then have moved. The switching also grew over
-the study: predictive trials logged a median of about 49~Hz on 9--10 September
-and 38~Hz on 16--17 September, while brief intrusion-predictor stops rose from
-about 6 to 20 per minute (rank correlation $-0.72$, $n=33$). Date, data rate
-and system version changed together, so their effects cannot be separated.
-Fig.~\ref{fig:trace} shows the switching in one trial.}
+\subsection{Same-Input Comparison}
+\label{sec:same-input}
+Table~\ref{tab:same-input} gives the replay of all three controllers on the
+identical movement of all \PubPeople{} people. On this movement every controller
+had requested a stop at all \PubEntries{} entries into the red boundary, and none
+ever requested motion inside it. The predictive controller started stopping
+earlier: its lead at each entry was \PubLeadPF{}~s longer than fixed-zone
+control (95\% CI \PubLeadPFlo{} to \PubLeadPFhi{}) and \PubLeadPR{}~s longer than
+reactive control, for all \PubPeople{} people ($p=\PubPminSign$). It also stopped
+more without need: \PubUnnecPF{}~s per minute more than fixed-zone control
+(95\% CI \PubUnnecPFlo{} to \PubUnnecPFhi{}) and \PubUnnecPR{}~s more than
+reactive control, again for all \PubPeople{} people ($p=\PubPminSign$). Most of
+the extra stop requests are brief switching. Unnecessary stopping is small for every
+controller: 94 to 98\% of stopped time is followed by an entry into the red
+boundary within 1~s, because the task keeps the worker inside the protective
+distance for long periods.
+
+\input{tables/same_input}
+
+\textbf{Distance error.} The 100\% coverage holds at the measured distance
+because all controllers share the red boundary. The reused body profiles put
+modelled body size off by up to about 5~cm. If the true distance were 5~cm
+smaller than measured, a stop would already have been requested at
+\PubCovPredFive\% of entries under predictive control, against
+\PubCovReactiveFive\% under reactive and \PubCovFixedFive\% under fixed-zone
+control (Table~\ref{tab:same-input}). The predictive advantage held for all
+\PubPeople{} people, and the result is the same at 10~cm. Early stopping
+therefore turns a small lead time into a large margin against measurement
+error.
+
+\textbf{Robot stopping.} The tool reached standstill a median of
+\PubLatMed{}~s after a stop request (95th percentile \PubLatPninefive{}~s,
+maximum \PubLatMax{}~s; \PubLatN{} requests made while the tool was moving). The
+tool moved inside the red boundary only while braking from a stop already
+requested, and never closer than \PubMinSepMoving{}~m under program motion. In
+\PubPushedPeople{} of the \PubPeople{} people the held arm was briefly pushed a
+few millimetres while the person worked under the panel.
 
 Across the scheduled cue windows, fresh robot data show joint motion for
 1712.80~s of observed time, confirming that the robot moved during the labelled
@@ -655,201 +703,124 @@ the lines. Note the rapid switching of the speed command.}
 
 \subsection{Reported Experience}
 Block responses lean toward relaxed and calm, confidence that the robot would
-stop, and low demand and frustration (Table~\ref{tab:survey}). Median
-confidence that the robot would stop is five in every block, while median
-agreement that it stopped more than needed is three in A and two in B and C.
-This is a perception, not an objective count of false stops, and responses are
-clustered within study IDs.
-
-Using only the nine complete response sets keeps \StableBlockMedians{} of the
-30 block medians unchanged; the exception is constant monitoring in B, which
-changes from two to one. The paired A--C counts show variation that the
-medians hide (Table~\ref{tab:survey-sensitivity}). Five relaxed ratings
-increase and four stay the same; none decrease. Ratings of unnecessary stopping
-increase twice, decrease twice and stay the same five times, despite the lower
-median in C. Surprise decreases for three codes, increases for two and is
-unchanged for four. Lower block medians therefore do not mean that everyone
-improved.
+stop, and low demand and frustration (Table~\ref{tab:survey}). Linked to the
+controller that ran in each block, no item differed between controllers
+(Friedman $p\ge\PubQFriedmanMin$ for all ten items, \PubQPeople{} people,
+\PubQBlocks{} blocks). Feeling relaxed rose with block order instead, from a mean
+of \PubQRelaxFirst{} in the first block to \PubQRelaxThird{} in the third
+($p=\PubQRelaxP$), whatever the controller. Agreement that the robot ``stopped
+more than it needed to'' did not follow the measured unnecessary stopping in
+the same block (within-person $r=\PubQPercR$, $p=\PubQPercP$).
 \input{tables/questionnaire_items}
-\input{tables/questionnaire_sensitivity}
 
 Across the 11 matched records, the mean safety rating was \SafetyPreMean{}/5
-before and \SafetyPostMean{}/5 after the session: eight ratings increased, one
-was unchanged and two decreased. Mean trust was \TrustPreMean{} before and
-\TrustPostMean{} after: five increased, three were unchanged and three
-decreased (Table~\ref{tab:global}). The intake form asks about expected and
-the end form about experienced safety and trust, and individual linkage is
-incomplete, which limits how these changes can be read.
+before and \SafetyPostMean{}/5 after the session, and mean trust was
+\TrustPreMean{} before and \TrustPostMean{} after (Table~\ref{tab:global}).
 \input{tables/global_ratings}
 
-In the end forms, block C was chosen as safest seven times, compared with two
-each for A and B. For a full work shift, six chose C, three B and two A. Choices
-for least safe were spread across all blocks (A three, B four, C four). Because
-the link between block label and controller is not fully established, C is not
-read as the predictive controller. Four participants noticed changes between
-blocks and seven did not; their comments refer to stopping or slowing
-sensitivity and lift speed. The median rating for how much the suit restricted
-movement was two (interquartile range 1.5--3), and no end form reported risk or
-discomfort.
+In the end forms, the block chosen as safest was most often the last one (C,
+seven times), but mapped to controllers the choices were fixed zone
+\PubQSafestFixed{}, reactive \PubQSafestReactive{} and predictive
+\PubQSafestPred{}, which is what chance would give. The preference for the last
+block is therefore an order effect, consistent with the rise in relaxation.
+Four participants noticed changes between blocks and seven did not. The median
+rating for how much the suit restricted movement was two of five, and no end
+form reported risk or discomfort.
 
 \section{Discussion}
-\subsection{Context-Aware Control in the Panel Task}
+\subsection{What Prediction Buys}
 The prototype combines the task phase and motion prediction while keeping a
-fixed software limit on the commanded speed. This separates two questions:
-whether a movement belongs to a normal task phase, and whether the measured
-movement is approaching the boundary. A wrong HMM phase cannot allow a higher
-speed than the distance limit, although errors in geometry or timing still
-affect that limit.
+fixed software limit on the commanded speed, so a wrong phase can never allow a
+higher speed than the distance limit. For the same inputs the predictive
+controller can therefore never request a higher speed than the reactive one;
+any benefit must come from when it intervenes. The same-input replay measures
+exactly this. Prediction moved the stop request earlier for every participant,
+and under a few centimetres of distance error that earlier request covered
+roughly twice as many boundary entries as fixed-zone control. The value of
+prediction in this task is therefore robustness to measurement error, which
+matters because body distance is the least certain input in the system.
 
-The validation results show that phase recognition is strongest in the longer
-working phase. Because balanced accuracy in real time is lower than overall
-accuracy, phase accuracy alone does not show practical benefit.
-\aidraft{The predictive controller's higher raw stop count is mainly a switching
-effect, not more or longer holds. Of its 1417 stop requests, 805 were brief
-requests from the intrusion predictor; the HMM caused none, because its
-caution can only reduce speed. The predictor stops the robot after two samples
-above its threshold and releases as soon as the risk drops, so when a noisy
-closing-speed estimate hovers near the threshold, the command flips between
-stop and run. The lower and less even data rate on the later days makes the
-closing speed noisier and is consistent with the rise in switching. A release
-delay, or a release threshold set below the trigger threshold (hysteresis),
-should remove most of this switching without touching the fixed distance
-limit. A simple minimum stop time is not a free fix: replaying the recorded
-predictive commands with a 1-s minimum stop cut stop requests from 1417 to 420
-but raised stopped time from 1351 to 2064~s. The release rule therefore needs
-testing on live runs.}
+The cost is brief switching. The intrusion predictor stops the robot after two
+samples above its threshold and releases as soon as the risk drops, so a noisy
+closing-speed estimate near the threshold makes the command flip between stop
+and run. This added under one second of unnecessary stopping per minute, and
+participants did not notice it: no rating differed between controllers. A
+release delay or hysteresis on the predictor should remove most of the
+switching without touching the fixed distance limit, but a simple minimum stop
+time is not a free fix, because it lengthens every stop.
 
-The reactive controller remains the key reference for any future controlled
-comparison. Equation~(\ref{eq:bound}) also limits the expected benefit: for the
-same inputs, settings and zone, the predictive controller can never request a
-higher speed than the reactive one, because prediction and phase caution can
-only keep or lower the request. Any benefit must therefore come from the timing
-of intervention or from changes in how the person and robot then coordinate,
-not from a more permissive speed limit. Such a benefit cannot be shown from
-phase accuracy or by replaying different controllers on the same recorded
-movement.
+\aidraft{Against H1, the predictive controller was at least as safe as
+fixed-zone control on every measure we could compute: it had requested a stop
+at every boundary entry, earlier than the other controllers, and with more
+margin against distance error. Comparable efficiency was not fully shown: trials
+took about the same time, but the robot was stopped for slightly more of each
+trial. H1 is therefore supported on safety and partly supported on efficiency.}
 
-\aidraft{Against H1, the results split into two parts. On safety, we found no
-sign that the predictive controller was less safe than fixed-zone control: a
-stop was requested every time a person was inside the red boundary, closest
-approaches and time inside the boundary were similar, the learned parts can
-only lower the speed (Equation~(\ref{eq:bound})), and confidence that the
-robot would stop was high in every block. On efficiency, trials took about the
-same time (median 109.0 against 112.5~s), but the predictive controller kept
-the robot stopped for more of the trial (36.7\% against 29.7\%) and had more
-sustained stops (3.6 against 2.7 per minute), mostly because of the intrusion
-predictor. H1 is therefore partly supported: the safety part is consistent
-with the data, but comparable robot availability was not shown. Because
-participant, order and system version were not controlled, and equal safety
-cannot be formally established (Section~\ref{sec:safety-eff}), H1 remains
-inconclusive rather than confirmed or rejected. Fixing the predictor's
-switching is the clearest route to closing the efficiency gap.}
-
-\subsection{Measured Behaviour and Reported Experience}
-The robot data show how the distance input, speed command and joint motion
-change through the panel sequence. The difference between the two system
-versions strongly affects how these signals can be read. Likewise, the gap
-between scheduled rapid movements and the measured closing speeds shows that
-event labels cannot replace measured exposure. Both findings support the need
-to validate the whole chain from sensing to stopping when SSM is implemented
-\cite{marvel2017implementing}.
-
-The questionnaires generally show confidence that the robot would stop, low
-mental and physical demand, and little frustration. Experienced safety was
-higher than expected safety in the matched records, while the change in trust
-was smaller. This suggests a positive experience of the lab task. However,
-novelty, supervision, repeated exposure and expectations could all contribute,
-so the change cannot be credited to the predictive controller.
-
-The complete-response check makes the overall pattern less dependent on the
-two missing final-block forms, but it does not remove bias from missing data
-or solve the linkage problem. Very high ratings for stopping confidence and
-very low ratings for demand and frustration also leave little room to tell the
-controllers apart. The paired results for stopping and surprise show why
-medians should be read alongside changes within each code. Growing familiarity
-may explain why people relaxed over the blocks, but this was not tested.
-
-The preference for block C does not rank the controllers, because block labels
-rotate across controllers and full exposure linkage is not available.
-Likewise, agreeing that the robot stopped more than needed tells us about
-perceived interruption, not an objective false-stop rate. Reported and measured
-results describe different sides of collaboration and should be read together.
+\subsection{The Task Limits the Gain}
+Under all three controllers the robot was stopped for about a third of each
+trial, and almost all of that stopping was followed by the worker entering the
+red boundary within a second. The panel task places the worker inside the
+protective distance while loading, working under the panel and unloading, and
+several participants pushed the held panel. The productivity limit therefore
+comes from using SSM during close-contact phases, not from the choice of SSM
+controller. Switching to a contact-capable mode (hand guiding or power and force
+limiting) by task phase, which the system design already supports, is the
+larger opportunity.
 
 \subsection{Safety and Efficiency}
 \label{sec:safety-eff}
 Research on adaptive SSM motivates measuring robot availability and cycle
-performance \cite{byner2019dynamic,karagiannis2022adaptive}. This study builds
-what is needed to measure those outcomes but does not show a safety or
-efficiency advantage. Stop time combines intentional holds and responses to
-people nearby, and capture time includes operator actions, so it is not the
-same as task time. These measures therefore do not establish false stops, task
-efficiency or collaboration fluency \cite{hoffman2019fluency}. Formally
-showing that the predictive controller is as safe as fixed-zone control would
-also need a justified equivalence margin, validated protective geometry and
-measured end-to-end stopping response, none of which this analysis provides.
-The safety indicators are therefore consistent with H1 but do not prove equal
-safety.
-
-\subsection{Coverage of the Planned Measures}
-The study design planned four system measures (human--robot distance, number
-of slowdowns and stops, number of yellow and red zone entries, and task
-completion time) and four experience measures (safety, comfort, predictability
-and trust) to compare fixed and adaptive safety. Distance and stops are
-reported per controller (Table~\ref{tab:controllers},
-Figs.~\ref{fig:geometry} and \ref{fig:trace}); red-boundary stops and part of
-the stop time come from the loading and unloading approaches the task
-requires, so they are not counts of unnecessary interruption. Trial duration
-includes operator actions, so it stands in for task completion time. Safety and trust are reported as intake and end ratings, comfort through
-the relaxed and calm items, and predictability through the speed-change item.
+performance \cite{byner2019dynamic,karagiannis2022adaptive}. The measurable part
+of the reaction chain fits the assumed $T=0.4$~s: Xsens data were at most
+\PubXsensAgePninefive{}~s old in 95\% of control steps, a step took at most
+\PubTickPninefive{}~s, and the robot stopped within \PubLatMax{}~s, giving
+about 0.31~s at the 95th percentile. The rarest cases reach about 0.44~s, and
+the processing delay inside the motion-capture devices is not visible in the
+logs, so a larger $T$ (for example 0.5~s) is advisable. Stop time combines
+intentional holds and responses to people nearby, and capture time includes
+operator actions, so neither is a direct measure of task efficiency or
+collaboration fluency \cite{hoffman2019fluency}. The command used the ordinary
+robot speed override rather than a safety-rated stop, so none of these results
+support a certified safety claim.
 
 \subsection{Limitations}
 \label{sec:limitations}
-The sample is small and was recruited for convenience. Because sessions were
-restarted, not every study ID can be linked to one person, so the 11 study
-codes cannot be treated as 11 independent people. Two trial slots lack a
-completed capture and two questionnaire sets lack block C, and missing data may
-relate to technical problems or task execution. The system version changed
-during collection, and the Xsens data rate fell on later days. Head points and
-body-segment positions do not cover the full body, tool and panel, and
-agreement with a calculation does not prove physical calibration. The
-controller is a research prototype: the separation limit is simplified, the
-command uses the ordinary robot speed override rather than a safety-rated stop,
-and the end-to-end response was not measured, so the results do not support a
-certified safety claim. Cued movements, operator pacing, visible robot motion,
-learning and fatigue may affect both behaviour and ratings. The phase model was
-built from three operators and may not generalise to construction workers.
+The sample is small (12 people) and was recruited for convenience; one
+participant lacks the fixed-zone block and the questionnaires after the intake.
+The system version changed during collection: the earlier six participants
+were measured with a head-only distance, the later six with a whole-body
+distance, and the first participant used an earlier version of the predictive
+yellow-zone rule. The Xsens body profile was reused between some people, which
+introduces up to about 5~cm of distance error; Section~\ref{sec:same-input}
+reports how much this matters. The same-input comparison is open loop, so it
+does not show how people would have moved under a different controller. The
+unnecessary-stop measure uses hindsight over a 1-s window and the red boundary
+as the reference, and the phase labels mark cues rather than observed movement.
+Cued movements, operator pacing, learning and fatigue may affect behaviour and
+ratings; the rotated block order controls for order but not for these.
 
 \subsection{Future Work}
-Future controlled tests should keep one system version, check its sensor
-error against the full moving volume, and add a release delay or hysteresis to
-the intrusion predictor. Synchronised measurement of body movement, controller
-output and robot braking would give response times that do not depend on
-operator cues, and a study ID that follows each person across restarted
-sessions would allow verified within-person comparison of the controllers.
+A confirmatory session should run the predictive controller with a release
+delay on the intrusion predictor, a reaction time of at least 0.5~s, freshly
+measured body profiles for each person, one frozen system version and an ID that
+follows each person. It should also switch to a contact-capable mode while the
+worker is under the panel, since that is where most of the stopping occurs.
 
 \section{Conclusion}
-This paper presented a speed and separation monitoring controller that uses
-the task phase in human--robot ceiling-panel installation, and tested it on a
-physical prototype with human participants. The controller combines measured
-closing speed, recognition of three task phases and prediction of fast
-approaches, all below a fixed speed limit, so the learned parts can only make
-the robot more cautious. In real time, the phase model was correct 79.4\% of
-the time on operators it had not been trained on. Across 97 robot-data trials
-and 31 block questionnaires, participants were confident that the robot would
-stop, reported low workload, and felt safer by the end of the session. Using only complete response sets left 29 of the 30 block
-medians unchanged, but the paired results showed that lower median ratings of
-unnecessary stopping did not hold for every participant. H1, that the
-predictive controller is as safe as fixed-zone control while keeping comparable
-efficiency, was partly supported: every controller requested a stop whenever a
-person was inside the red boundary, closest approaches were similar and trials
-took about the same time, but the robot spent more time stopped under
-predictive control, mostly because of brief switching in the intrusion
-predictor, which makes hysteresis the next design change. Formally showing equal safety and comparable availability
-will need a consistent distance measurement, synchronised measurement of the
-robot's response, and an ID that follows each participant across restarted
-sessions.
-
-
+This paper presented a speed and separation monitoring controller that uses the
+task phase and motion prediction in human--robot ceiling-panel installation,
+and tested it on a physical prototype with \PubPeople{} participants. Replaying
+all three controllers exactly on the identical recorded movement showed that
+every controller had requested a stop at all \PubEntries{} entries into the red
+boundary. The predictive controller requested stops \PubLeadPF{}~s earlier than
+fixed-zone control for every participant, which under a 5-cm distance error
+raised the share of entries already covered from \PubCovFixedFive\% to
+\PubCovPredFive\%. Its cost was \PubUnnecPF{}~s per minute of extra unnecessary
+stopping, caused by brief switching of the intrusion predictor, which
+participants did not notice and which a release delay should remove. The robot
+stopped within \PubLatMax{}~s of a request. The largest remaining gain lies not in
+the choice of SSM controller but in switching to a contact-capable mode while
+the worker is under the panel.
 
 \section*{Data Availability}
 Analysis scripts, derived tables and figure-generation code accompany the
