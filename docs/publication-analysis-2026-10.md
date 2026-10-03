@@ -7,7 +7,7 @@ Status: working analysis for the conference-paper extension proposed by A/Prof Y
 | FYP paper (v3.1) | This analysis |
 |---|---|
 | 11 study codes "cannot be treated as 11 people" | Each code is one continuous 25 to 35 minute sitting with a full counterbalanced three-controller sequence. Helmet height from OptiTrack separates the codes the Xsens profile could not. |
-| One pooled analysis | Two system versions, analysed separately (section 2) |
+| One pooled analysis | Pooled analysis of all 11 people, with the system version (section 2) reported as a factor |
 | Stop counts and durations from the applied controller only | Exact replay of all three controllers, plus fixes, on identical recorded motion for all 97 trials |
 | "Unnecessary stop" not measured | Hindsight definition: a stop is unnecessary if the person is outside the protective radius S0 and does not enter it within H seconds (H = 0.5, 1, 2 s) |
 | End-to-end response "not measured" | Stop request to measured TCP standstill: median 0.156 s, 95th percentile 0.188 s, maximum 0.204 s (n = 215) |
@@ -31,12 +31,32 @@ P13, before 12:00 on 9 Sep, ran an earlier predictive yellow-zone cap (commit c8
 - The Xsens MVN body profile was reused between people. Codes P14 and P15, and P32 and P34, have identical segment lengths to 0.1 mm. A 0.4162 m thigh profile appears for several people.
 - OptiTrack helmet height (98th percentile) does not depend on that profile. It separates P14 (1.750 m) from P15 (1.810 m), and P32 (1.854 m) from P34 (1.874 m). Within-code spread is about ±0.01 m.
 - The closest pairs are P13/P17 (1.900/1.905 m, different MVN profiles) and P32/P35 (1.854/1.853 m, different MVN profiles). The booking record should confirm these are different people.
-- The twelfth participant is P39 and P42 on 17 Sep: same helmet height (1.80 m) and profile, 3 reactive and 5 predictive completed trials. They were excluded for phase order and a capture rate of about 26 Hz.
+- Twelve people completed the full study (King, 3 Oct). The 27 Sep backup holds complete nine-trial recordings for 11 of them. The twelfth is most likely P39 and P42 on 17 Sep: same helmet height (1.80 m) and profile. Only 3 reactive and 5 predictive trials are in the backup, and there are no fixed-zone trials. Codes P40 and P41 are absent, so the missing trials should be looked for on the lab PC.
+- P23 and P24 on 10 Sep: 5 short predictive-only recordings of a person about 1.93 m tall, not one of the 11. Identity to be confirmed.
 - **Consequence for v2.** For people measured with a reused profile, the whole-body distance came from a body model scaled for someone else. This is a distance-uncertainty term to report.
 
-## 4. Results (v2, whole body: 5 people, 45 trials, 464 protective-radius entries)
+## 4. Primary results (all 11 people, 97 trials, 181 min, 782 protective-radius entries)
 
-The unit of inference is the person. Rates are per minute of observed time. Paired differences use a percentile bootstrap over people. With 5 people, the smallest two-sided Wilcoxon p is 0.0625, so sign consistency is reported alongside.
+The unit of inference is the person. Rates are per minute of observed time. Paired differences use a percentile bootstrap over people and the Wilcoxon signed-rank test.
+
+| Controller, identical inputs | Stop s/min | Brief stops/min | Unnecessary s/min (H = 1 s) | Entries with stop already requested | Mean lead before entry |
+|---|---|---|---|---|---|
+| Fixed zone | 18.65 | 1.73 | 0.32 | 100% | 0.704 s |
+| Reactive SSM | 18.91 | 6.06 | 0.43 | 100% | 0.716 s |
+| Predictive SSM (as run) | 20.33 | 14.88 | 1.14 | 100% | 0.828 s |
+| Predictive, onset dwell 6 | 19.50 | 6.36 | 0.66 | 100% | 0.794 s |
+| Predictive, trunk intent | 19.35 | 10.31 | 0.50 | 100% | 0.767 s |
+
+- **Predictive vs fixed.**
+  - It stops earlier before each entry: +0.112 s (95% CI 0.079 to 0.145; 11 of 11 people; p = 0.001).
+  - It adds unnecessary stopping: +0.82 s/min (95% CI 0.26 to 1.50; 11 of 11 people; p = 0.001).
+- **Predictive vs reactive.** Same pattern: +0.102 s of lead and +0.71 unnecessary s/min, in 11 of 11 people.
+- **Onset dwell of 6 ticks.** Unnecessary stopping falls by 0.48 s/min (11 of 11 people, p = 0.001).
+- **Trunk-intent fix.** It only changes the v2 sessions, because v1 control already used the head column. See section 4b.
+
+## 4b. Whole-body version (v2: 5 people, 45 trials, 464 protective-radius entries)
+
+With 5 people, the smallest two-sided Wilcoxon p is 0.0625, so sign consistency is reported alongside the bootstrap interval.
 
 | Controller, identical inputs | Stop s/min | Brief stops/min | Unnecessary s/min (H = 1 s) | Entries with stop already requested | Mean lead before entry |
 |---|---|---|---|---|---|
@@ -71,7 +91,7 @@ The same safety result holds: 100% of 318 entries were covered. The predictive e
 
 ## 6. Still to do
 
-1. Confirm the identity of P13/P17 and P32/P35 from the booking list, and decide whether to add P39/P42 as a partial twelfth person.
+1. Recover the twelfth person's missing trials from the lab PC (codes P40 and P41, or other 17 Sep files). Confirm P13/P17, P32/P35 and P23/P24 against the booking list.
 2. Quantify distance error from profile reuse: helmet height against the MVN model head height per person.
 3. Measure sensing-to-command latency: the Xsens and OptiTrack age fields, plus the tick.
 4. A confirmatory physical session with:
