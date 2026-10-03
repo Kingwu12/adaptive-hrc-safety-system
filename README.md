@@ -2,6 +2,8 @@
 
 Research software for a Monash University final-year project investigating human–robot ceiling-panel installation with a UR10 CB3 and a lightweight panel surrogate. The system combines an OptiTrack helmet pose with an articulated Xsens skeleton, extracts movement features, and compares fixed-zone, reactive and predictive control.
 
+**Status:** active. The project paper and assessment materials are still being revised (2026).
+
 **Start with the [Xsens + OptiTrack integration tutorial](docs/helmet-xsens-integration.md).** It explains coordinate transforms, quaternion conventions, timing checks and implementation, with an executable example that requires no lab equipment.
 
 | I want to… | Start here |
@@ -78,7 +80,7 @@ The combination is a geometric anchoring transform. It removes a common Xsens tr
 
 ## Research and manuscript
 
-**Evaluating Safety and Coordination in Context-Aware Speed and Separation Monitoring for Human–Robot Ceiling-Panel Installation** — Zenan Wu, Luke Siniakov and Michael Magila, Monash University, 2026. Primary supervisor: Associate Professor Yihai Fang. Technical and laboratory support: Yizhe (Will) Wang.
+**Context-Aware Speed and Separation Monitoring for Human–Robot Ceiling-Panel Installation: An Exploratory Evaluation** — Zenan Wu, Luke Siniakov and Michael Magila, Monash University, 2026. Primary supervisor: Associate Professor Yihai Fang. Technical and laboratory support: Yizhe (Will) Wang.
 
 The manuscript reports prototype integration, model-development validation, and exploratory telemetry and questionnaire findings. It does not establish a statistically supported controller ranking. See the methods and limitations in the [paper](paper/main.pdf) for the analysed samples and scope.
 
