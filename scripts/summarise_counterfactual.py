@@ -101,6 +101,22 @@ def main():
         table[n] = row
     report['open_loop'] = table
 
+    # Distance-uncertainty sensitivity: hindsight truth radius S0 + delta.
+    sens = {}
+    for n in ['fixed zone', 'reactive SSM', 'predictive SSM', 'predictive trunk-intent dwell2']:
+        for delta in ['-0.10', '-0.05', '+0.00', '+0.05', '+0.10']:
+            ent = cov = 0; unnec = run = 0.0; obs = 0.0
+            for t in main_trials:
+                srow = t['controllers'][n].get('truth_radius_sensitivity', {}).get(delta)
+                if not srow:
+                    continue
+                ent += srow['entries']; cov += srow['covered']; unnec += srow['unnecessary_s_H1.0']
+                run += srow['run_inside_s']; obs += t['observed_s']
+            if obs:
+                sens[f'{n} | {delta}'] = {'entries': ent, 'covered_pct': 100 * cov / ent if ent else None,
+                                          'unnecessary_s_per_min': 60 * unnec / obs, 'run_inside_radius_s': run}
+    report['distance_sensitivity'] = sens
+
     contrasts = {}
     for metric, key in [('unnecessary_s_per_min', 'unnec'), ('stop_s_per_min', 'stop'), ('brief_per_min', 'brief')]:
         for x, y in [('predictive SSM', 'fixed zone'), ('reactive SSM', 'fixed zone'), ('predictive SSM', 'reactive SSM'),

@@ -102,15 +102,86 @@ Under every controller the robot is stopped about 31 to 34% of the time, and 94 
 
 The same safety result holds: 100% of 318 entries were covered. The predictive excess is small: 0.08 unnecessary s/min (95% CI 0.04 to 0.12). Predictive brief stops are 6.7/min, against 0.06/min for fixed and 0.13/min for reactive. The predictive lead is 0.067 s (6 of 6 people). The trunk-intent variant is identical to the original here, because head-column geometry already is the trunk.
 
-## 6. Still to do
+## 6. Distance uncertainty: what anticipation buys
 
-1. Confirm P13/P17 and P32/P35 as different people against the booking list, and confirm who P23/P24 was.
-2. Quantify distance error from profile reuse: helmet height against the MVN model head height per person.
-3. Measure sensing-to-command latency: the Xsens and OptiTrack age fields, plus the tick.
+**The 100% coverage result comes from the design.** It holds at the measured distance because every controller shares the fixed red boundary at S0. The open question is what happens when the measured distance is wrong.
+
+**Size of the error.** Helmet height (OptiTrack) minus the model head height (MVN) should be constant if the body model is scaled correctly. In v2 it varies by −2.1 to +4.8 cm around the median offset of 0.306 m. That is the body-profile reuse from section 3. The test below therefore moves the hindsight protective radius by ±5 and ±10 cm, with the controllers unchanged.
+
+**With a radius 5 cm larger than measured** (the person is really 5 cm closer), the share of boundary entries with a stop already requested, across 12 people:
+
+| Controller | Covered |
+|---|---|
+| Fixed zone | 31% |
+| Reactive | 43% |
+| Predictive as run | 67% |
+| Trunk intent | 59% |
+
+Per person:
+- Predictive covers 38.8 points more than fixed (95% CI 30.7 to 46.4) and 29.8 points more than reactive. Both hold for 12 of 12 people (p = 0.0005).
+- Trunk intent keeps 32.1 points over fixed and 23.0 points over reactive (12 of 12 people).
+- The +10 cm results are the same.
+
+The time the robot runs inside the enlarged radius follows the same order:
+
+| Controller | Seconds over 206 min |
+|---|---|
+| Fixed zone | 96 |
+| Reactive | 89 |
+| Trunk intent | 80 |
+| Predictive | 70 |
+
+**This is the main safety argument for prediction.** Stopping earlier makes the system tolerant of distance error that a fixed boundary does not absorb. It turns the extra 0.1 s of lead time into a large, consistent margin.
+
+## 7. Reaction chain
+
+The measurable part of the chain, from 12 people:
+
+| Stage | Median | p95 | p99 | Max |
+|---|---|---|---|---|
+| Xsens data age at the control tick | 0.016 s | 0.078 s | 0.157 s | 8.1 s (dropouts, handled by the body-evidence hold) |
+| OptiTrack data age | 0.000 s | 0.016 s | — | — |
+| Control tick interval, v2 | 0.031 s | 0.047 s | — | — |
+| Stop request to TCP standstill | 0.156 s | 0.188 s | — | 0.234 s |
+
+- **Typical chain:** about 0.20 s. **95th-percentile chain:** about 0.31 s. Both are inside the assumed T = 0.4 s.
+- **The tail exceeds T:** the 99th-percentile sensing age plus the maximum tick plus maximum braking reaches about 0.44 s.
+- **Not observable in these logs:** the latency inside the devices before streaming (MVN and Motive processing). It must be added from vendor figures.
+- **Recommendation:** T = 0.5 s for the follow-up study, or report the residual risk of T = 0.4 s explicitly.
+
+## 8. Phase recognition across the 12 participants
+
+The deployed HMM was trained on three operators and never saw a participant, so every participant is a held-out test. Against the planned-cue phase labels it reaches:
+- Accuracy: median 69% (range 44 to 80%).
+- Balanced accuracy: median 65% (range 41 to 76%).
+- By version: v1 median 69%, v2 median 69%. The lowest is P39/P42 (44%), the person recorded at about 26 Hz.
+
+This is below the 79.4% reported for held-out operators. The labels mark planned cue windows rather than observed phase onsets, so these figures are a lower bound. The most common error is working → approaching (12,406 samples).
+
+**Effect on the controller.** Phase affects only the yellow-zone speed cap. Stops come from the red boundary, the envelope and the trunk or limb predictor, so phase errors cost efficiency, not safety.
+
+## 9. Questionnaires
+
+Ratings came from 11 people over 31 blocks. The twelfth person completed only the intake, under both codes and with identical answers, which confirms P39 and P42 are one person. P15 and P22 lack block C. Every rating is linked to the controller that ran in that block.
+
+- **No rating differs between controllers** (Friedman p 0.11 to 0.94 for all ten items). This covers confidence that the robot would stop, needing to watch it, "slowed more than it needed to", workload, and affect.
+- **End of session:** "felt safest", "felt least safe" and "would pick for a shift" are spread at chance (binomial p ≥ 0.52). Only 4 of 11 noticed anything change between blocks.
+- **Perception does not track measurement.** Within a person, "slowed more than it needed to" does not follow the measured unnecessary stopping in the same block (repeated-measures r = 0.17, p = 0.47). The measured differences of about 1 s/min are below what workers notice.
+- **Order effect.** Feeling relaxed rises from the first to the third block, whatever the controller: means 3.78, 4.56, 4.67 (Friedman p = 0.011). This is habituation, which the counterbalanced order controls.
+- **Overall:** felt safe and trust, median 4 of 5. The suit restricted movement little, median 2 of 5.
+
+**Implication.** Within this range, choosing a controller costs nothing in perceived safety or workload. The case for the trunk-intent predictor is therefore objective: more margin against distance error and fewer unnecessary stops. It does not rest on preference.
+
+## 10. Still to do
+
+1. Confirm P13/P17 and P32/P35 as different people against the booking list.
+2. Optional: retrain the HMM leaving one participant out, to see whether participant data improves phase recognition.
+3. Write the vendor device latency into the reaction-chain budget.
 4. A confirmatory physical session with:
    - the trunk-intent predictor
-   - a frozen version
+   - T = 0.5 s
    - re-measured MVN profiles per person
+   - a frozen version
    - a persistent participant ID
    - phase-dependent collaborative mode
 
@@ -125,4 +196,7 @@ python scripts/summarise_counterfactual.py    --inp <private>/counterfactual/cou
        --merge P39=P39/P42 P42=P39/P42 --name summary-all
 (add --codes P31 P32 P34 P35 P38 P39/P42 --name summary-v2-whole-body for the v2 subset)
 python scripts/diagnose_geometry_and_motion.py --captures <raw>/data/xsens --out <private>/diagnostics
+python scripts/analyse_latency_and_phase.py   --captures <raw>/data/xsens
+python scripts/analyse_questionnaire_links.py --qdir <private>/questionnaires \
+       --trials <private>/counterfactual/counterfactual-per-trial.json
 ```

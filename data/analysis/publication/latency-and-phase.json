@@ -1,0 +1,163 @@
+{
+ "latency_s": {
+  "optitrack_age": {
+   "n": 535008,
+   "median": 0.0,
+   "p95": 0.016,
+   "p99": 0.016,
+   "max": 2.219
+  },
+  "tick_interval_v1": {
+   "n": 291224,
+   "median": 0.01600000000325963,
+   "p95": 0.03200000000651926,
+   "p99": 0.03200000000651926,
+   "max": 0.1409999999887077
+  },
+  "xsens_age": {
+   "n": 243524,
+   "median": 0.016,
+   "p95": 0.078,
+   "p99": 0.157,
+   "max": 8.078
+  },
+  "xsens_optitrack_skew": {
+   "n": 235276,
+   "median": 0.0,
+   "p95": 0.03200000000651926,
+   "p99": 0.0470000000204891,
+   "max": 0.0470000000204891
+  },
+  "tick_interval_v2": {
+   "n": 242892,
+   "median": 0.030999999959021807,
+   "p95": 0.0470000000204891,
+   "p99": 0.0470000000204891,
+   "max": 0.23499999998603016
+  }
+ },
+ "phase_per_person": {
+  "P13": {
+   "labelled_samples": 9515,
+   "accuracy": 0.7174986862848135,
+   "balanced_accuracy": 0.6164801088318692,
+   "version": "v1"
+  },
+  "P14": {
+   "labelled_samples": 5799,
+   "accuracy": 0.6656320055181928,
+   "balanced_accuracy": 0.7267906588294222,
+   "version": "v1"
+  },
+  "P15": {
+   "labelled_samples": 6428,
+   "accuracy": 0.6647479775980087,
+   "balanced_accuracy": 0.4939647414383111,
+   "version": "v1"
+  },
+  "P16": {
+   "labelled_samples": 5227,
+   "accuracy": 0.6686435814042472,
+   "balanced_accuracy": 0.6831371683139889,
+   "version": "v1"
+  },
+  "P17": {
+   "labelled_samples": 5629,
+   "accuracy": 0.7438266121868893,
+   "balanced_accuracy": 0.7521985848416316,
+   "version": "v1"
+  },
+  "P22": {
+   "labelled_samples": 5339,
+   "accuracy": 0.7694324779921333,
+   "balanced_accuracy": 0.6761053837223739,
+   "version": "v1"
+  },
+  "P31": {
+   "labelled_samples": 19171,
+   "accuracy": 0.7155077982369203,
+   "balanced_accuracy": 0.6305818261431413,
+   "version": "v2"
+  },
+  "P32": {
+   "labelled_samples": 21053,
+   "accuracy": 0.6727307272122738,
+   "balanced_accuracy": 0.5760497843879582,
+   "version": "v2"
+  },
+  "P34": {
+   "labelled_samples": 13677,
+   "accuracy": 0.7961541273671127,
+   "balanced_accuracy": 0.7575975631896524,
+   "version": "v2"
+  },
+  "P35": {
+   "labelled_samples": 9541,
+   "accuracy": 0.7225657687873388,
+   "balanced_accuracy": 0.6703757370352874,
+   "version": "v2"
+  },
+  "P38": {
+   "labelled_samples": 17674,
+   "accuracy": 0.5973746746633473,
+   "balanced_accuracy": 0.564046519182372,
+   "version": "v2"
+  },
+  "P39/P42": {
+   "labelled_samples": 20811,
+   "accuracy": 0.4399596367305752,
+   "balanced_accuracy": 0.4061479485277954,
+   "version": "v2"
+  }
+ },
+ "phase_summary_v1": {
+  "people": 6,
+  "accuracy_median": 0.6930711338445303,
+  "accuracy_range": [
+   0.6647479775980087,
+   0.7694324779921333
+  ],
+  "balanced_median": 0.6796212760181815,
+  "balanced_range": [
+   0.4939647414383111,
+   0.7521985848416316
+  ]
+ },
+ "phase_summary_v2": {
+  "people": 6,
+  "accuracy_median": 0.6941192627245971,
+  "accuracy_range": [
+   0.4399596367305752,
+   0.7961541273671127
+  ],
+  "balanced_median": 0.6033158052655497,
+  "balanced_range": [
+   0.4061479485277954,
+   0.7575975631896524
+  ]
+ },
+ "phase_summary_all": {
+  "people": 12,
+  "accuracy_median": 0.6941192627245971,
+  "accuracy_range": [
+   0.4399596367305752,
+   0.7961541273671127
+  ],
+  "balanced_median": 0.6504787815892143,
+  "balanced_range": [
+   0.4061479485277954,
+   0.7575975631896524
+  ]
+ },
+ "phase_confusion_all": {
+  "approaching->approaching": 19882,
+  "approaching->working": 9171,
+  "approaching->retreating": 3603,
+  "working->approaching": 12406,
+  "working->working": 63273,
+  "working->retreating": 6812,
+  "retreating->approaching": 8770,
+  "retreating->working": 6975,
+  "retreating->retreating": 8972
+ }
+}

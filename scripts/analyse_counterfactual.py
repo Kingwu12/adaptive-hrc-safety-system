@@ -49,6 +49,7 @@ VARIANTS = {
     'predictive dwell4+hold0.3': {'hazard_dwell_ticks': 4, 'release_hold_s': 0.3},
 }
 HORIZONS = [0.5, 1.0, 2.0]
+TRUTH_OFFSETS = [-0.10, -0.05, 0.0, 0.05, 0.10]
 MAX_DT = 0.25
 MOVING = 0.02      # m/s, TCP linear speed treated as moving
 STILL = 0.005      # m/s, TCP linear speed treated as stopped
@@ -266,6 +267,22 @@ def analyse(path_str):
                 j -= 1; lead += dt[j]
             leads.append(lead if stop[e] else -1.0)
         res['entry_leads_s'] = leads
+        # Sensitivity to distance uncertainty: the hindsight truth radius moved by
+        # +-delta while the controllers are unchanged.
+        sens = {}
+        for delta in TRUTH_OFFSETS:
+            R = S0 + delta
+            ins = [x is not None and x <= R for x in d]
+            nxt, nin = math.inf, [math.inf] * n
+            for i in range(n - 1, -1, -1):
+                if ins[i]:
+                    nxt = t[i]
+                nin[i] = nxt - t[i] if nxt != math.inf else math.inf
+            ent = [i for i in range(1, n) if ins[i] and not ins[i - 1] and dt[i - 1] > 0]
+            sens[f'{delta:+.2f}'] = {'entries': len(ent), 'covered': sum(stop[e] for e in ent),
+                                     'unnecessary_s_H1.0': sum(dt[i] for i in range(n) if stop[i] and not shared[i] and nin[i] > 1.0),
+                                     'run_inside_s': sum(dt[i] for i in range(n) if ins[i] and not stop[i])}
+        res['truth_radius_sensitivity'] = sens
         by_cause = {}
         for i in range(n):
             if stop[i] and not shared[i]:

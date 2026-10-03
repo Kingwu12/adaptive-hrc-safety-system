@@ -1,0 +1,597 @@
+{
+ "people_with_block_ratings": 11,
+ "block_ratings": 31,
+ "people_with_all_three_blocks": 9,
+ "items": {
+  "anxious_relaxed": {
+   "median_by_controller": {
+    "fixed zone": 4.0,
+    "reactive SSM": 4.0,
+    "predictive SSM": 5.0
+   },
+   "mean_by_controller": {
+    "fixed zone": 4.0,
+    "reactive SSM": 4.454545454545454,
+    "predictive SSM": 4.6
+   },
+   "friedman_p": 0.3499377491111585,
+   "friedman_n": 9,
+   "paired": {
+    "predictive SSM - fixed zone": {
+     "n": 9,
+     "mean_diff": 0.5555555555555556,
+     "higher": 4,
+     "lower": 1,
+     "wilcoxon_p": 0.3125
+    },
+    "predictive SSM - reactive SSM": {
+     "n": 10,
+     "mean_diff": 0.1,
+     "higher": 3,
+     "lower": 2,
+     "wilcoxon_p": 1.0
+    },
+    "reactive SSM - fixed zone": {
+     "n": 10,
+     "mean_diff": 0.4,
+     "higher": 3,
+     "lower": 1,
+     "wilcoxon_p": 0.375
+    }
+   }
+  },
+  "agitated_calm": {
+   "median_by_controller": {
+    "fixed zone": 4.0,
+    "reactive SSM": 4.0,
+    "predictive SSM": 5.0
+   },
+   "mean_by_controller": {
+    "fixed zone": 4.4,
+    "reactive SSM": 4.363636363636363,
+    "predictive SSM": 4.8
+   },
+   "friedman_p": 0.1652988882215865,
+   "friedman_n": 9,
+   "paired": {
+    "predictive SSM - fixed zone": {
+     "n": 9,
+     "mean_diff": 0.3333333333333333,
+     "higher": 3,
+     "lower": 0,
+     "wilcoxon_p": 0.25
+    },
+    "predictive SSM - reactive SSM": {
+     "n": 10,
+     "mean_diff": 0.4,
+     "higher": 3,
+     "lower": 0,
+     "wilcoxon_p": 0.25
+    },
+    "reactive SSM - fixed zone": {
+     "n": 10,
+     "mean_diff": -0.1,
+     "higher": 2,
+     "lower": 2,
+     "wilcoxon_p": 1.0
+    }
+   }
+  },
+  "quiescent_surprised": {
+   "median_by_controller": {
+    "fixed zone": 2.5,
+    "reactive SSM": 1.0,
+    "predictive SSM": 2.5
+   },
+   "mean_by_controller": {
+    "fixed zone": 2.5,
+    "reactive SSM": 2.272727272727273,
+    "predictive SSM": 2.5
+   },
+   "friedman_p": 0.42162610548700774,
+   "friedman_n": 9,
+   "paired": {
+    "predictive SSM - fixed zone": {
+     "n": 9,
+     "mean_diff": -0.2222222222222222,
+     "higher": 1,
+     "lower": 4,
+     "wilcoxon_p": 0.75
+    },
+    "predictive SSM - reactive SSM": {
+     "n": 10,
+     "mean_diff": 0.1,
+     "higher": 3,
+     "lower": 2,
+     "wilcoxon_p": 1.0
+    },
+    "reactive SSM - fixed zone": {
+     "n": 10,
+     "mean_diff": -0.3,
+     "higher": 2,
+     "lower": 4,
+     "wilcoxon_p": 0.625
+    }
+   }
+  },
+  "confident_stop": {
+   "median_by_controller": {
+    "fixed zone": 4.5,
+    "reactive SSM": 5.0,
+    "predictive SSM": 5.0
+   },
+   "mean_by_controller": {
+    "fixed zone": 4.4,
+    "reactive SSM": 4.636363636363637,
+    "predictive SSM": 4.6
+   },
+   "friedman_p": 0.8187307530779911,
+   "friedman_n": 9,
+   "paired": {
+    "predictive SSM - fixed zone": {
+     "n": 9,
+     "mean_diff": 0.1111111111111111,
+     "higher": 2,
+     "lower": 2,
+     "wilcoxon_p": 1.0
+    },
+    "predictive SSM - reactive SSM": {
+     "n": 10,
+     "mean_diff": -0.1,
+     "higher": 1,
+     "lower": 2,
+     "wilcoxon_p": 1.0
+    },
+    "reactive SSM - fixed zone": {
+     "n": 10,
+     "mean_diff": 0.2,
+     "higher": 2,
+     "lower": 1,
+     "wilcoxon_p": 0.75
+    }
+   }
+  },
+  "watch_constantly": {
+   "median_by_controller": {
+    "fixed zone": 1.5,
+    "reactive SSM": 2.0,
+    "predictive SSM": 1.5
+   },
+   "mean_by_controller": {
+    "fixed zone": 2.1,
+    "reactive SSM": 2.272727272727273,
+    "predictive SSM": 2.3
+   },
+   "friedman_p": 0.9394130628134891,
+   "friedman_n": 9,
+   "paired": {
+    "predictive SSM - fixed zone": {
+     "n": 9,
+     "mean_diff": 0.1111111111111111,
+     "higher": 2,
+     "lower": 1,
+     "wilcoxon_p": 1.0
+    },
+    "predictive SSM - reactive SSM": {
+     "n": 10,
+     "mean_diff": 0.0,
+     "higher": 2,
+     "lower": 2,
+     "wilcoxon_p": 1.0
+    },
+    "reactive SSM - fixed zone": {
+     "n": 10,
+     "mean_diff": 0.1,
+     "higher": 2,
+     "lower": 2,
+     "wilcoxon_p": 1.0
+    }
+   }
+  },
+  "slowed_more_than_needed": {
+   "median_by_controller": {
+    "fixed zone": 3.0,
+    "reactive SSM": 2.0,
+    "predictive SSM": 2.0
+   },
+   "mean_by_controller": {
+    "fixed zone": 2.9,
+    "reactive SSM": 2.6363636363636362,
+    "predictive SSM": 2.6
+   },
+   "friedman_p": 0.9310627797040378,
+   "friedman_n": 9,
+   "paired": {
+    "predictive SSM - fixed zone": {
+     "n": 9,
+     "mean_diff": -0.1111111111111111,
+     "higher": 2,
+     "lower": 1,
+     "wilcoxon_p": 1.0
+    },
+    "predictive SSM - reactive SSM": {
+     "n": 10,
+     "mean_diff": 0.0,
+     "higher": 2,
+     "lower": 3,
+     "wilcoxon_p": 1.0
+    },
+    "reactive SSM - fixed zone": {
+     "n": 10,
+     "mean_diff": -0.2,
+     "higher": 1,
+     "lower": 2,
+     "wilcoxon_p": 0.75
+    }
+   }
+  },
+  "speed_changes_made_sense": {
+   "median_by_controller": {
+    "fixed zone": 4.5,
+    "reactive SSM": 5.0,
+    "predictive SSM": 4.5
+   },
+   "mean_by_controller": {
+    "fixed zone": 4.0,
+    "reactive SSM": 4.363636363636363,
+    "predictive SSM": 4.4
+   },
+   "friedman_p": 0.7788007830714119,
+   "friedman_n": 9,
+   "paired": {
+    "predictive SSM - fixed zone": {
+     "n": 9,
+     "mean_diff": 0.1111111111111111,
+     "higher": 2,
+     "lower": 1,
+     "wilcoxon_p": 1.0
+    },
+    "predictive SSM - reactive SSM": {
+     "n": 10,
+     "mean_diff": -0.1,
+     "higher": 2,
+     "lower": 3,
+     "wilcoxon_p": 1.0
+    },
+    "reactive SSM - fixed zone": {
+     "n": 10,
+     "mean_diff": 0.3,
+     "higher": 3,
+     "lower": 1,
+     "wilcoxon_p": 0.5
+    }
+   }
+  },
+  "mental": {
+   "median_by_controller": {
+    "fixed zone": 1.0,
+    "reactive SSM": 1.0,
+    "predictive SSM": 1.0
+   },
+   "mean_by_controller": {
+    "fixed zone": 2.0,
+    "reactive SSM": 1.8181818181818181,
+    "predictive SSM": 1.8
+   },
+   "friedman_p": 0.2725317930340164,
+   "friedman_n": 9,
+   "paired": {
+    "predictive SSM - fixed zone": {
+     "n": 9,
+     "mean_diff": -0.2222222222222222,
+     "higher": 0,
+     "lower": 2,
+     "wilcoxon_p": 0.5
+    },
+    "predictive SSM - reactive SSM": {
+     "n": 10,
+     "mean_diff": -0.1,
+     "higher": 2,
+     "lower": 2,
+     "wilcoxon_p": 1.0
+    },
+    "reactive SSM - fixed zone": {
+     "n": 10,
+     "mean_diff": -0.3,
+     "higher": 0,
+     "lower": 2,
+     "wilcoxon_p": 0.5
+    }
+   }
+  },
+  "physical": {
+   "median_by_controller": {
+    "fixed zone": 1.0,
+    "reactive SSM": 1.0,
+    "predictive SSM": 1.0
+   },
+   "mean_by_controller": {
+    "fixed zone": 2.0,
+    "reactive SSM": 1.8181818181818181,
+    "predictive SSM": 2.0
+   },
+   "friedman_p": 0.10539922456186437,
+   "friedman_n": 9,
+   "paired": {
+    "predictive SSM - fixed zone": {
+     "n": 9,
+     "mean_diff": 0.0,
+     "higher": 1,
+     "lower": 1,
+     "wilcoxon_p": 1.0
+    },
+    "predictive SSM - reactive SSM": {
+     "n": 10,
+     "mean_diff": 0.1,
+     "higher": 3,
+     "lower": 1,
+     "wilcoxon_p": 1.0
+    },
+    "reactive SSM - fixed zone": {
+     "n": 10,
+     "mean_diff": -0.3,
+     "higher": 0,
+     "lower": 3,
+     "wilcoxon_p": 0.25
+    }
+   }
+  },
+  "frustration": {
+   "median_by_controller": {
+    "fixed zone": 1.5,
+    "reactive SSM": 1.0,
+    "predictive SSM": 1.0
+   },
+   "mean_by_controller": {
+    "fixed zone": 2.0,
+    "reactive SSM": 1.5454545454545454,
+    "predictive SSM": 1.8
+   },
+   "friedman_p": 0.22313016014843248,
+   "friedman_n": 9,
+   "paired": {
+    "predictive SSM - fixed zone": {
+     "n": 9,
+     "mean_diff": -0.1111111111111111,
+     "higher": 1,
+     "lower": 2,
+     "wilcoxon_p": 1.0
+    },
+    "predictive SSM - reactive SSM": {
+     "n": 10,
+     "mean_diff": 0.3,
+     "higher": 3,
+     "lower": 1,
+     "wilcoxon_p": 0.5
+    },
+    "reactive SSM - fixed zone": {
+     "n": 10,
+     "mean_diff": -0.4,
+     "higher": 0,
+     "lower": 3,
+     "wilcoxon_p": 0.25
+    }
+   }
+  }
+ },
+ "perception_vs_measurement": {
+  "slowed_more_than_needed ~ m_unnec": {
+   "r_rm": 0.1671487647443139,
+   "dof": 19,
+   "p": 0.4689502907119468,
+   "people": 11,
+   "blocks": 31
+  },
+  "slowed_more_than_needed ~ m_brief": {
+   "r_rm": 0.11075311566680467,
+   "dof": 19,
+   "p": 0.6326989599410879,
+   "people": 11,
+   "blocks": 31
+  },
+  "slowed_more_than_needed ~ m_stop": {
+   "r_rm": 0.14182519570507465,
+   "dof": 19,
+   "p": 0.5397173937380905,
+   "people": 11,
+   "blocks": 31
+  },
+  "watch_constantly ~ m_unnec": {
+   "r_rm": -0.05252551824040732,
+   "dof": 19,
+   "p": 0.8211090456844233,
+   "people": 11,
+   "blocks": 31
+  },
+  "watch_constantly ~ m_brief": {
+   "r_rm": 0.08806548530335434,
+   "dof": 19,
+   "p": 0.7042468130073425,
+   "people": 11,
+   "blocks": 31
+  },
+  "watch_constantly ~ m_stop": {
+   "r_rm": 0.09665930981379892,
+   "dof": 19,
+   "p": 0.6768219162915073,
+   "people": 11,
+   "blocks": 31
+  },
+  "frustration ~ m_unnec": {
+   "r_rm": 0.011350115113275161,
+   "dof": 19,
+   "p": 0.9610554352756553,
+   "people": 11,
+   "blocks": 31
+  },
+  "frustration ~ m_brief": {
+   "r_rm": 0.048656665208458995,
+   "dof": 19,
+   "p": 0.8341024371457448,
+   "people": 11,
+   "blocks": 31
+  },
+  "frustration ~ m_stop": {
+   "r_rm": 0.24239756434286563,
+   "dof": 19,
+   "p": 0.2897461315407193,
+   "people": 11,
+   "blocks": 31
+  },
+  "confident_stop ~ m_unnec": {
+   "r_rm": 0.12510618769411258,
+   "dof": 19,
+   "p": 0.5889669214173531,
+   "people": 11,
+   "blocks": 31
+  },
+  "confident_stop ~ m_brief": {
+   "r_rm": 0.1455341583802448,
+   "dof": 19,
+   "p": 0.529055111694146,
+   "people": 11,
+   "blocks": 31
+  },
+  "confident_stop ~ m_stop": {
+   "r_rm": 0.3777376869024008,
+   "dof": 19,
+   "p": 0.09136751138140392,
+   "people": 11,
+   "blocks": 31
+  }
+ },
+ "block_position": {
+  "anxious_relaxed": {
+   "means_first_second_third": [
+    3.7777777777777777,
+    4.555555555555555,
+    4.666666666666667
+   ],
+   "friedman_p": 0.010567204383852781
+  },
+  "agitated_calm": {
+   "means_first_second_third": [
+    4.333333333333333,
+    4.555555555555555,
+    4.666666666666667
+   ],
+   "friedman_p": 0.1652988882215865
+  },
+  "quiescent_surprised": {
+   "means_first_second_third": [
+    2.4444444444444446,
+    2.888888888888889,
+    2.111111111111111
+   ],
+   "friedman_p": 0.3849870989234867
+  },
+  "confident_stop": {
+   "means_first_second_third": [
+    4.444444444444445,
+    4.555555555555555,
+    4.666666666666667
+   ],
+   "friedman_p": 0.8187307530779911
+  },
+  "watch_constantly": {
+   "means_first_second_third": [
+    2.4444444444444446,
+    2.111111111111111,
+    2.0
+   ],
+   "friedman_p": 0.4437473100810838
+  },
+  "slowed_more_than_needed": {
+   "means_first_second_third": [
+    3.0,
+    2.6666666666666665,
+    2.6666666666666665
+   ],
+   "friedman_p": 0.7514772930752935
+  },
+  "speed_changes_made_sense": {
+   "means_first_second_third": [
+    4.333333333333333,
+    4.444444444444445,
+    4.222222222222222
+   ],
+   "friedman_p": 0.4437473100810838
+  },
+  "mental": {
+   "means_first_second_third": [
+    1.8888888888888888,
+    2.0,
+    1.8888888888888888
+   ],
+   "friedman_p": 0.6703200460356489
+  },
+  "physical": {
+   "means_first_second_third": [
+    2.0,
+    2.111111111111111,
+    1.8888888888888888
+   ],
+   "friedman_p": 0.4723665527410149
+  },
+  "frustration": {
+   "means_first_second_third": [
+    2.111111111111111,
+    1.7777777777777777,
+    1.5555555555555556
+   ],
+   "friedman_p": 0.3189065573239716
+  }
+ },
+ "end_of_session_choices": {
+  "felt_safest": {
+   "fixed zone": {
+    "count": 3,
+    "binom_p_vs_third": 1.0
+   },
+   "reactive SSM": {
+    "count": 5,
+    "binom_p_vs_third": 0.5231079273146033
+   },
+   "predictive SSM": {
+    "count": 3,
+    "binom_p_vs_third": 1.0
+   },
+   "n": 11
+  },
+  "felt_least_safe": {
+   "fixed zone": {
+    "count": 3,
+    "binom_p_vs_third": 1.0
+   },
+   "reactive SSM": {
+    "count": 3,
+    "binom_p_vs_third": 1.0
+   },
+   "predictive SSM": {
+    "count": 5,
+    "binom_p_vs_third": 0.5231079273146033
+   },
+   "n": 11
+  },
+  "pick_for_shift": {
+   "fixed zone": {
+    "count": 4,
+    "binom_p_vs_third": 1.0
+   },
+   "reactive SSM": {
+    "count": 4,
+    "binom_p_vs_third": 1.0
+   },
+   "predictive SSM": {
+    "count": 3,
+    "binom_p_vs_third": 1.0
+   },
+   "n": 11
+  }
+ },
+ "end_overall": {
+  "felt_safe_overall": 4.0,
+  "trust_overall": 4.0,
+  "suit_restricted": 2.0
+ }
+}
