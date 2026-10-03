@@ -1,6 +1,6 @@
 # Publication analysis, October 2026
 
-Status: working analysis for the conference-paper extension proposed by A/Prof Yihai Fang on 3 Oct 2026. All numbers below come from the raw participant captures (9.5 GB, 416 files). Participant-level outputs stay outside this public repository. Only aggregate results are committed, in `data/analysis/publication/`.
+Status: working analysis for the conference-paper extension proposed by A/Prof Yihai Fang on 3 Oct 2026. All numbers below come from the raw participant captures (9.5 GB, 416 files). Participant-level outputs stay outside this public repository. The extracted raw captures were removed from the Mac on 3 Oct (moved to the Trash). The originals are in the Drive backup `Central-Windows-full-experiment-backup-20260927-111519/archives`, with checksums in `archive-parts.json`. Only aggregate results are committed, in `data/analysis/publication/`.
 
 ## 1. What changed from the FYP paper
 
@@ -30,7 +30,7 @@ P13, before 12:00 on 9 Sep, ran an earlier predictive yellow-zone cap (commit c8
 
 - The Xsens MVN body profile was reused between people. Codes P14 and P15, and P32 and P34, have identical segment lengths to 0.1 mm. A 0.4162 m thigh profile appears for several people.
 - OptiTrack helmet height (98th percentile) does not depend on that profile. It separates P14 (1.750 m) from P15 (1.810 m), and P32 (1.854 m) from P34 (1.874 m). Within-code spread is about ±0.01 m.
-- The closest pairs are P13/P17 (1.900/1.905 m, different MVN profiles) and P32/P35 (1.854/1.853 m, different MVN profiles). The booking record should confirm these are different people.
+- The closest pairs are P13/P17 (1.900/1.905 m, different MVN profiles) and P32/P35 (1.854/1.853 m, different MVN profiles). King confirmed on 3 Oct that both pairs were different people.
 - **Twelve people took part, and all 12 are counted.** Eleven have complete or near-complete sittings: 8 or 9 of 9 trials. The twelfth person, recorded under codes P39 and P42 on 17 Sep (same helmet height of 1.80 m and same profile), has 8 recorded trials: 3 reactive and 5 predictive. There are no fixed-zone trials, and no further data exists (King, 3 Oct).
 - **How the twelfth person is used.** Their sessions ran v2 with shadow logging, so every sample carries all three controllers' requests. The open-loop comparison is therefore complete for that person, on the motion that was recorded. Only the closed-loop fixed-zone condition is missing.
 - **Caveats for the twelfth person.**
@@ -174,10 +174,9 @@ Ratings came from 11 people over 31 blocks. The twelfth person completed only th
 
 ## 10. Still to do
 
-1. Confirm P13/P17 and P32/P35 as different people against the booking list.
-2. Optional: retrain the HMM leaving one participant out, to see whether participant data improves phase recognition.
-3. Write the vendor device latency into the reaction-chain budget.
-4. A confirmatory physical session with:
+1. Optional: retrain the HMM leaving one participant out, to see whether participant data improves phase recognition.
+2. Write the vendor device latency into the reaction-chain budget.
+3. A confirmatory physical session with:
    - the trunk-intent predictor
    - T = 0.5 s
    - re-measured MVN profiles per person
