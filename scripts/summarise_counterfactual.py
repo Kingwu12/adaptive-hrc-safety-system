@@ -55,17 +55,29 @@ def main():
     ap.add_argument('--out', type=Path, default=ROOT / 'data/analysis/publication')
     ap.add_argument('--codes', nargs='*', default=None, help='restrict to these study codes')
     ap.add_argument('--name', default='counterfactual-summary')
+    ap.add_argument('--merge', nargs='*', default=[], metavar='CODE=PERSON',
+                    help='count these study codes as one person, e.g. P39=P39/P42 P42=P39/P42; '
+                         'merged codes are included even if absent from the 97-trial selection')
     a = ap.parse_args()
     trials = json.loads(a.inp.read_text())
     a.out.mkdir(parents=True, exist_ok=True)
     selected = {t['session_id'] for t in json.load(open(ROOT / 'data/analysis/stop-episodes/trials.json'))['trials']}
-    main_trials = [t for t in trials if t['session_id'] in selected and (not a.codes or t['code'] in a.codes)]
+    merge = dict(m.split('=', 1) for m in a.merge)
+    main_trials = []
+    for t in trials:
+        if t['session_id'] not in selected and t['code'] not in merge:
+            continue
+        t = dict(t, code=merge.get(t['code'], t['code']))
+        if not a.codes or t['code'] in a.codes:
+            main_trials.append(t)
     codes = sorted({t['code'] for t in main_trials})
     agg = per_code(main_trials, set(codes))
     names = list(main_trials[0]['controllers'])
 
     fid = [v[0] for t in main_trials for v in t['fidelity'].values() if v[0] is not None]
-    report = {'trials': len(main_trials), 'codes': codes, 'fidelity_min': min(fid),
+    report = {'trials': len(main_trials), 'codes': codes, 'merged_codes': merge,
+              'applied_trials_by_person': {c: dict(sorted({x['applied']: sum(1 for y in main_trials if y['code'] == c and y['applied'] == x['applied'])
+                                                           for x in main_trials if x['code'] == c}.items())) for c in codes}, 'fidelity_min': min(fid),
               'fidelity_mean': statistics.mean(fid),
               'fidelity_exact_trials': sum(all(v[0] in (None, 1.0) for v in t['fidelity'].values()) for t in main_trials),
               'observed_min': sum(t['observed_s'] for t in main_trials) / 60, 'entries': sum(t['entries'] for t in main_trials)}
@@ -129,6 +141,9 @@ def main():
         'min_separation_while_moving_m': min(moving_min) if moving_min else None,
         'inside_S0_while_moving_s': inside_moving,
         'moving_min': sum(t['closed_loop']['moving_s'] for t in main_trials) / 60,
+        'held_arm_pushed_s': sum(t['closed_loop'].get('held_arm_pushed_s', 0) for t in main_trials),
+        'held_arm_pushed_inside_S0_s': sum(t['closed_loop'].get('held_arm_pushed_inside_S0_s', 0) for t in main_trials),
+        'people_who_pushed_held_arm': sorted({t['code'] for t in main_trials if t['closed_loop'].get('held_arm_pushed_inside_S0_s', 0) > 0}),
     }
     (a.out / f'{a.name}.json').write_text(json.dumps(report, indent=1, default=str))
     print(json.dumps(report, indent=1, default=str)[:6000])

@@ -8,6 +8,39 @@
   "P17",
   "P22"
  ],
+ "merged_codes": {},
+ "applied_trials_by_person": {
+  "P13": {
+   "fixed zone": 2,
+   "predictive SSM": 3,
+   "reactive SSM": 3
+  },
+  "P14": {
+   "fixed zone": 3,
+   "predictive SSM": 3,
+   "reactive SSM": 3
+  },
+  "P15": {
+   "fixed zone": 3,
+   "predictive SSM": 3,
+   "reactive SSM": 3
+  },
+  "P16": {
+   "fixed zone": 3,
+   "predictive SSM": 3,
+   "reactive SSM": 3
+  },
+  "P17": {
+   "fixed zone": 3,
+   "predictive SSM": 3,
+   "reactive SSM": 3
+  },
+  "P22": {
+   "fixed zone": 3,
+   "predictive SSM": 3,
+   "reactive SSM": 2
+  }
+ },
  "fidelity_min": 1.0,
  "fidelity_mean": 1.0,
  "fidelity_exact_trials": 52,
@@ -646,6 +679,13 @@
   },
   "min_separation_while_moving_m": 0.8184103785066168,
   "inside_S0_while_moving_s": 4.169000000169035,
-  "moving_min": 37.35578333333275
+  "moving_min": 37.35578333333275,
+  "held_arm_pushed_s": 1.033000000010361,
+  "held_arm_pushed_inside_S0_s": 1.033000000010361,
+  "people_who_pushed_held_arm": [
+   "P15",
+   "P17",
+   "P22"
+  ]
  }
 }

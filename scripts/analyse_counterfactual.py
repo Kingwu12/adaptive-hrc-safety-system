@@ -283,20 +283,25 @@ def analyse(path_str):
             if j < n and logged[j] == 0.0 and tcp_speed[j] is not None and tcp_speed[j] <= STILL:
                 lat.append({'latency_s': t[j] - t[i], 'speed_at_request': tcp_speed[i], 'd_at_request': d[i],
                             'cause': applied_logged_cause[i]})
-    # Program motion: TCP speed above MOVING with nonzero speed scaling, or within
-    # 0.5 s of a stop request (braking). TCP speed with zero scaling outside that
-    # window is external disturbance of a held arm (checked: <= 3 mm displacement).
-    since = None
+    # Program motion: TCP speed above MOVING with nonzero speed scaling, or braking
+    # (the TCP was moving when the stop was requested, until it first reaches
+    # standstill). TCP speed with zero scaling otherwise is the held arm being
+    # pushed (checked: a few mm out and back, starting from rest), counted apart.
+    braking, pushed = False, []
     for i in range(n):
-        since = (t[i] if since is None else since) if logged[i] == 0.0 else None
-        braking = since is not None and t[i] - since < 0.5
+        if logged[i] == 0.0 and (i == 0 or logged[i - 1] != 0.0):
+            braking = tcp_speed[i] is not None and tcp_speed[i] > MOVING
+        if braking and (logged[i] != 0.0 or (tcp_speed[i] is not None and tcp_speed[i] <= STILL)):
+            braking = False
         prog = (scaling[i] or 0) > 0 or braking
-        if tcp_speed[i] is not None and tcp_speed[i] > MOVING and prog and d[i] is not None:
-            moving_d.append((d[i], dt[i]))
+        if tcp_speed[i] is not None and tcp_speed[i] > MOVING and d[i] is not None:
+            (moving_d if prog else pushed).append((d[i], dt[i]))
     closed = {'response': lat,
               'moving_s': sum(w for _, w in moving_d),
               'min_d_while_moving': min((x for x, _ in moving_d), default=None),
               'inside_S0_while_moving_s': sum(w for x, w in moving_d if x <= S0),
+              'held_arm_pushed_s': sum(w for _, w in pushed),
+              'held_arm_pushed_inside_S0_s': sum(w for x, w in pushed if x <= S0),
               'tcp_speed_available_fraction': sum(x is not None for x in tcp_speed) / n if n else 0}
 
     return {'legacy_predictive_version': legacy, 'session_id': path.stem, 'code': path.stem.split('-')[0], 'trial': path.stem.split('-')[1],
