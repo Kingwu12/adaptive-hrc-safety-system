@@ -3,7 +3,7 @@
 %% civil-engineering readership + supervisor feedback of 30 Sep 2026.
 %% v3.2 (3 Oct 2026, internal): all 12 participants, person identity check,
 %% exact same-input replay, measured robot stopping, distance-error sensitivity,
-%% questionnaires linked to controllers. Supervisor feedback on v3 still pending.
+%% questionnaires linked to controllers. Yizhe Wang's comments of 5 Oct applied.
 \documentclass{IEEEtran}
 \usepackage{cite}
 \usepackage{amsmath,amssymb,amsfonts}
@@ -29,15 +29,16 @@ supervised by Yihai Fang.}%
 \maketitle
 
 \begin{abstract}
-In ceiling-panel installation, a worker and a robot share a workspace while
-handling the same panel. Fixed safety zones cannot tell whether the worker is
+Ceiling-panel installation is demanding overhead work that a collaborative
+robot could assist. In the human--robot version studied here, a worker and a
+robot share a workspace while handling the same panel. Fixed safety zones cannot tell whether the worker is
 approaching, working or moving away, so they can stop the robot more often than
 needed. This paper presents a speed and separation monitoring (SSM) controller
 that uses the task phase, and tests it on a physical prototype with
 \PubPeople{} participants. A hidden Markov model (HMM) estimates the task phase
 from motion-capture data, a separate predictor detects fast movement toward the
 robot, and a fixed rule ensures that neither learned part can make the robot
-faster than the basic distance-based limit allows. Because the system logged
+faster than the speed limit set by the distance-based reactive controller. Because the system logged
 every input, we replayed all three controllers (fixed zone, reactive and
 predictive) on the identical recorded movement of all \PubTrials{} trials, and
 the replay matched every logged robot command. On the same movement, every
@@ -62,17 +63,76 @@ construction robotics, motion capture, human factors.
 
 \section{Introduction and Background}
 \IEEEPARstart{I}{nstalling} ceiling panels involves lifting, aligning and fixing
-a panel overhead (Fig.~\ref{fig:task}). A robot can hold the panel while the
-worker provides judgement and fine hand skills. However, the worker moves around
-during the task, the panel enlarges the space the robot occupies, and
+panels overhead, work that is physically demanding and usually done by people
+alone or with lifting aids. Collaborative robots could take over the lifting
+and holding \cite{zhang2023construction}; the arrangement adopted in this study
+is for a robot to hold the panel while the worker provides judgement and fine hand
+skills (Fig.~\ref{fig:scenario}a). The worker then moves around a robot that is
+carrying a panel, the panel enlarges the space the robot occupies, and
 unnecessary robot stops can break the flow of work.
 
-\begin{figure}[!t]
+\begin{figure*}[!t]
 \centering
-\includegraphics[width=.5\columnwidth]{figures/task-frame.jpg}
-\caption{The ceiling-panel installation task in our lab: the robot holds the panel at ceiling height while the worker fixes it from below (frame from session video; face blurred).}
-\label{fig:task}
-\end{figure}
+\begin{tabular}{@{}c@{\hspace{3mm}}c@{\hspace{3mm}}c@{}}
+\raisebox{-.5\height}{\includegraphics[height=34mm]{figures/task-frame.jpg}} &
+\raisebox{-.5\height}{\begin{tikzpicture}[x=7.8mm,y=7.8mm,font=\scriptsize]
+  % floor, base plane and ceiling
+  \fill[gray!25] (-0.4,-0.45) rectangle (5.6,-0.55);
+  \draw[gray] (-0.4,0) -- (5.6,0) node[right=-1mm, align=left, font=\tiny] {$z{=}0$\\(base)};
+  \draw[gray, dashed] (-0.4,3.2) -- (5.6,3.2) node[pos=0.06, above] {ceiling};
+  % robot: base, arm links, gripper, panel
+  \fill[gray!60] (0,-0.45) rectangle (0.5,0.25);
+  \draw[line width=2.2pt, gray!70!black, line cap=round] (0.25,0.25) -- (0.6,1.7) -- (1.6,2.6) -- (2.2,2.75);
+  \fill[black] (2.1,2.75) rectangle (2.3,2.9);
+  \fill[blue!35] (1.2,2.9) rectangle (3.2,3.0);
+  \node[above, font=\tiny] at (2.2,3.0) {panel};
+  \node[right, font=\tiny] at (2.32,2.55) {TCP};
+  % column stand-in under the TCP
+  \draw[red!70!black, very thick, dashed] (2.2,0) -- (2.2,2.75);
+  \node[red!70!black, rotate=90, font=\tiny] at (2.05,0.75) {column};
+  % worker
+  \fill (4.2,1.7) circle (0.15);
+  \draw[thick] (4.2,1.55) -- (4.2,0.75) (4.2,0.75) -- (3.95,-0.45) (4.2,0.75) -- (4.45,-0.45)
+               (4.2,1.4) -- (3.85,1.05) (4.2,1.4) -- (4.55,1.0);
+  \node[right] at (4.3,1.85) {head $\mathbf p$};
+  % nearest point and distance
+  \fill[red!70!black] (2.2,1.7) circle (0.06);
+  \node[left] at (2.15,1.7) {$\mathbf q$};
+  \draw[<->, >={Latex[length=1.3mm]}] (2.27,1.7) -- (4.03,1.7) node[midway, above] {$d$};
+  % phases
+  \draw[->, >={Latex[length=1.5mm]}] (5.4,-0.85) -- (3.4,-0.85) node[midway, below] {approaching};
+  \draw[->, >={Latex[length=1.5mm]}] (2.6,-1.35) -- (4.6,-1.35) node[midway, below] {retreating};
+  \node[align=center] at (1.0,-1.1) {working\\under panel};
+\end{tikzpicture}} &
+\raisebox{-.5\height}{\begin{tikzpicture}[x=10mm,y=10mm,font=\scriptsize]
+  \fill[yellow!35] (0,0) circle (1.504);
+  \fill[red!30] (0,0) circle (0.94);
+  \draw[yellow!60!black] (0,0) circle (1.504);
+  \draw[red!70!black] (0,0) circle (0.94);
+  \fill[red!70!black] (0,0) circle (0.05);
+  \node[above, font=\tiny] at (0,0.04) {column};
+  \draw[|-|] (0,0) ++(-120:0.05) -- ++(-120:0.89) node[pos=0.55, left=1pt, font=\tiny] {0.94\,m};
+  \draw[|-|] (0,0) ++(-60:0.94) -- ++(-60:0.564);
+  \node[font=\tiny] at (1.02,-1.0) {1.50\,m};
+  \node[align=center] at (0.3,-0.45) {stop};
+  \node[align=center] at (0,1.22) {35\% speed};
+  \node[align=center] at (1.72,1.2) {full\\speed};
+  \fill (-1.85,0.55) circle (0.06);
+  \draw[->, >={Latex[length=1.5mm]}] (-1.8,0.53) -- (-1.15,0.33);
+  \node[above, font=\tiny] at (-1.85,0.6) {worker};
+\end{tikzpicture}} \\[1mm]
+\footnotesize (a) & \footnotesize (b) & \footnotesize (c)
+\end{tabular}
+\caption{The application scenario. (a) Ceiling-panel installation in our lab:
+the robot holds the panel at ceiling height while the worker fixes it from
+below (frame from session video; face blurred). (b) Side view (schematic): the
+worker approaches, works under the panel and retreats; the robot is represented
+by a vertical column under the tool centre point (TCP), and $d$ is measured from
+the head $\mathbf p$ to the nearest column point $\mathbf q$ (later system
+version). (c) Plan view, radii to scale: the fixed controller's zones around
+the column and the speed allowed in each.}
+\label{fig:scenario}
+\end{figure*}
 
 Speed and separation monitoring (SSM) keeps enough distance between a person
 and a robot, and slows or stops the robot in time
@@ -106,13 +166,26 @@ measured robot stopping and sensitivity to distance error; and (3) participant
 ratings linked to the controller that ran in each block. The
 contribution is combining and testing these parts in a construction task, not
 a new SSM formula.
-\aidraft{The rest of this paper is organised as follows. Section~II reviews related
-work, and Section~III describes the prototype and its controllers. Section~IV
-reports how the phase model was developed and validated, and Section~V
-describes the experiment. Section~VI presents the results, Section~VII
-discusses them and their limitations, and Section~VIII concludes.}
 
 \section{Related Work}
+%% Yihai, 30 Sep: Table I should follow Related Work directly (bottom of p.2).
+\begin{table*}[!b]
+\centering
+\caption{Related methods and how they relate to this study.}
+\label{tab:prior-work}
+\footnotesize
+\begin{tabular}{@{}p{.19\textwidth}p{.38\textwidth}p{.38\textwidth}@{}}
+\toprule
+Study & Method and test setting & What it means for this study \\
+\midrule
+Byner et al.\ \cite{byner2019dynamic} & Speed limit set continuously from distance and direction of motion; tested in a physical machine-tending cycle. & Reactive speed adjustment is the baseline; phase recognition must add value on top of it. \\
+Karagiannis et al.\ \cite{karagiannis2022adaptive} & Safety zones switch with robot position; overhead safety camera and safety PLC in a car-industry cell. & A software speed limit is not the same as a system built from safety-rated parts. \\
+X. Lin et al.\ \cite{lin2025digitaltwin} & Protective distance updated from worker, robot and material shapes; construction conflict scenarios. & Panel and body shapes need checking beyond whether a point-based distance is calculated consistently. \\
+X. Lin et al.\ \cite{lin2026semantic} & Learned work-step model and local safety control; VR wall-panel task with simulated sensors. & Task-aware safety control already exists; our focus is real robot data and participant experience. \\
+This study & Real-time HMM task phase and motion prediction below a fixed speed limit; physical ceiling-panel prototype. & Robot data and questionnaires from a construction-style task with a person in the loop. \\
+\bottomrule
+\end{tabular}
+\end{table*}
 \subsection{Human--Robot Collaboration in Construction}
 Construction robotics is moving from fully automated machines toward systems
 that combine human skill with robot strength
@@ -134,9 +207,9 @@ a physical machine-tending task. Karagiannis et al.\
 \cite{karagiannis2022adaptive} switch between safety-zone layouts depending on
 where the robot is, using an overhead safety camera, a safety-rated
 programmable logic controller (PLC) and the robot controller in a cell modelled
-on the car industry. These studies show that adaptive SSM and its effect on
-productivity have already been studied. They also define the reactive
-controller that task context must improve on.
+on the car industry. Adaptive SSM and its effect on productivity have therefore already been
+studied, and they define the reactive baseline that task context must improve
+on.
 
 Construction studies narrow the gap further. Xiao Lin et al.\
 \cite{lin2025digitaltwin} combine worker, robot and material shapes in a digital
@@ -153,15 +226,8 @@ state tends to produce \cite{rabiner1989}. HMMs have been used to recognise
 activities from wearable sensors and to model human--robot tasks
 \cite{manouchehri2023hmm,berg2018assembly}.
 
-Task phase and hazard are different things. Labels such as ``working'' or
-``retreating'' describe what the person is doing, while a hazard is about
-being exposed to harm. A person can trip, or move quickly toward the robot,
-during any phase. Treating ``hazard'' as just another phase would mix up
-activity and danger. We therefore use the HMM only to estimate the task phase.
-Fast movement toward the robot is detected separately by the intrusion
-predictor (Section~\ref{sec:context}), which uses only the measured distance
-and closing speed. Keeping the two apart also means the distance limit can be
-tested on its own, whatever the HMM decides.
+In these studies the recognised states describe activities; whether hazards
+belong among them is discussed in Section~\ref{sec:context}.
 
 The closest construction study, by Xiao Lin et al.\ \cite{lin2026semantic},
 combines a model of the work steps, robot behaviour learned from demonstration
@@ -178,24 +244,6 @@ therefore links task recognition, measured control inputs and participant
 experience in one physical panel task. Table~\ref{tab:prior-work} compares
 these approaches with our prototype.
 
-%% Yihai, 30 Sep: Table I should follow Related Work directly (bottom of p.2).
-\begin{table*}[!b]
-\centering
-\caption{Related methods and how they relate to this study.}
-\label{tab:prior-work}
-\footnotesize
-\begin{tabular}{@{}p{.19\textwidth}p{.38\textwidth}p{.38\textwidth}@{}}
-\toprule
-Study & Method and test setting & What it means for this study \\
-\midrule
-Byner et al.\ \cite{byner2019dynamic} & Speed limit set continuously from distance and direction of motion; tested in a physical machine-tending cycle. & Reactive speed adjustment is the baseline; phase recognition must add value on top of it. \\
-Karagiannis et al.\ \cite{karagiannis2022adaptive} & Safety zones switch with robot position; overhead safety camera and safety PLC in a car-industry cell. & A software speed limit is not the same as a system built from safety-rated parts. \\
-X. Lin et al.\ \cite{lin2025digitaltwin} & Protective distance updated from worker, robot and material shapes; construction conflict scenarios. & Panel and body shapes need checking beyond whether a point-based distance is calculated consistently. \\
-X. Lin et al.\ \cite{lin2026semantic} & Learned work-step model and local safety control; VR wall-panel task with simulated sensors. & Task-aware safety control already exists; our focus is real robot data and participant experience. \\
-This study & Real-time HMM task phase and motion prediction below a fixed speed limit; physical ceiling-panel prototype. & Robot data and questionnaires from a construction-style task with a person in the loop. \\
-\bottomrule
-\end{tabular}
-\end{table*}
 
 \section{System Design}
 \label{sec:system}
@@ -233,9 +281,10 @@ Fig.~\ref{fig:procedure}.}
 \end{figure*}
 
 \subsection{Overview}
-The controller (Fig.~\ref{fig:architecture}) has two inputs: the worker's
-position and speed relative to the robot, from motion capture, and the position
-of the robot's tool, from the robot controller. Its output is a single number
+The controller (Fig.~\ref{fig:architecture}) has two inputs: from motion
+capture, the position of the worker's head relative to the robot and the
+head's velocity in the room frame; and from the robot controller, the position
+of the robot's tool. Its output is a single number
 between 0 and 1: the fraction of full speed the robot may use. This number is
 sent to the robot's speed override, and a value of zero requests a pause.
 
@@ -249,36 +298,33 @@ and the arm then lowers it. Two separate systems track the participant.
 \emph{Xsens MVN} is a motion-capture suit. Seventeen small motion sensors, each
 with an accelerometer, gyroscope and magnetometer, are strapped to the body.
 Software combines their signals with a body model to give the position and
-orientation of 23 body segments, such as the pelvis, head, arms and legs, at up
-to 240~Hz \cite{roetenberg2009xsens,schepers2018xsens}. Because position is
-calculated by adding up small movements over time, it slowly drifts, and its
-starting point is set by a calibration pose rather than by the room. Here,
-Xsens provides the body-segment positions used for the body-distance input in
-the later version of the system.
+orientation of 23 body segments at up to 240~Hz
+\cite{roetenberg2009xsens,schepers2018xsens}. Position is integrated, so it
+drifts, and its origin is set by a calibration pose rather than the room. Xsens
+provides the body segments for the later version's body-distance input.
 
 \emph{OptiTrack} is a camera-based motion-capture system. Infrared cameras
 around the cell (on the overhead frame in Fig.~\ref{fig:apparatus}a) detect
 small reflective markers, and the Motive software locates each marker to about
 a millimetre in a fixed room frame \cite{optitrack2024motive}. A group of
-markers on the participant's cap is tracked as one object. OptiTrack therefore
-gives the head's position relative to the robot without drift, but says
-nothing about the rest of the body. Here, the OptiTrack head position is used
-to calculate the distance and closing speed that drive the phase model and the
-reactive limit.
+markers on the participant's cap is tracked as one object, giving the head
+position without drift but nothing about the rest of the body. It drives the
+phase model's distance and closing speed.
 
-The two systems have different jobs, and their estimates are not merged:
-OptiTrack gives the head's position relative to the robot, and Xsens gives body
-posture. Both feed the same processing step in the same format, so the
-controller does not depend on which system produced a sample. The robot
+The two systems' estimates are not merged; both feed the same processing step
+in the same format. The robot
 controller reports the tool centre point (TCP), which is the position of the
 gripper face, and the speed of each of the six joints. The control loop runs
 at about 60~Hz, and the actual time between samples is logged.
 
 \begin{figure*}[!t]
 \centering
-\includegraphics[width=.325\textwidth]{figures/apparatus-a.jpg}\hfill
-\includegraphics[width=.325\textwidth]{figures/apparatus-b.jpg}\hfill
-\includegraphics[width=.325\textwidth]{figures/apparatus-c.jpg}
+\begin{tabular}{@{}c@{\hspace{.0125\textwidth}}c@{\hspace{.0125\textwidth}}c@{}}
+\includegraphics[width=.325\textwidth]{figures/apparatus-a.jpg} &
+\includegraphics[width=.325\textwidth]{figures/apparatus-b.jpg} &
+\includegraphics[width=.325\textwidth]{figures/apparatus-c.jpg} \\
+\footnotesize (a) & \footnotesize (b) & \footnotesize (c)
+\end{tabular}
 \caption{Lab equipment. (a) The cell: the UR10 arm holding the panel stand-in at
 ceiling height, OptiTrack cameras on the overhead frame, and the operator desk.
 (b) A participant wearing the Xsens suit and OptiTrack cap, seen from behind
@@ -288,15 +334,20 @@ under the raised panel. Faces are blurred.}
 \end{figure*}
 
 \subsection{Distance Measures and System Versions}
-The robot is represented by a vertical column, a simple stand-in for its shape.
-For the tracked head position $\mathbf p$ and the nearest point $\mathbf q$ on
-this column, the controller calculates
+The robot is represented by a vertical column, a simple stand-in for its shape
+(Fig.~\ref{fig:scenario}b). The column is a vertical line segment, with no
+radius, through the horizontal position of a robot reference point; it runs
+from the robot-base plane ($z=0$) up to the height of that point. All positions
+are in the robot-base frame. For the tracked head position $\mathbf p$, the
+nearest point $\mathbf q$ on the column lies on the column at the head's
+height, limited to the column's height range. The controller calculates
 \begin{equation}
 d=\|\mathbf q-\mathbf p\|_2,\qquad
 v_{\rm proj}=\mathbf v^{\mathsf T}\mathbf u,
 \end{equation}
 where $d$ is the head-to-robot distance in metres, $\mathbf v$ is the head
-velocity estimated from recent samples, $\mathbf u$ is the unit vector pointing
+velocity in the room frame (the least-squares slope of the last five samples;
+the robot's own motion is not subtracted), $\mathbf u$ is the unit vector pointing
 from the head toward the robot, and $v_{\rm proj}$ is the closing speed in m/s.
 A positive $v_{\rm proj}$ means the person is moving toward the robot. The
 heading alignment $h_t$, used below, measures how directly the person's
@@ -328,19 +379,26 @@ $u_{\rm env},u_{\rm context},u_{\rm cmd}$ & Speed fractions (0--1) from the dist
 \end{tabular}
 \end{table}
 
-Data were recorded with two versions of the system. (In this paper a code such
-as P17 is a study ID, and T05 is a trial within it; see
-Section~\ref{sec:participants}.) The 52 earlier records (P13--P22) used capture
-confirmed manually by the operator and the column stand-in for the robot. The
-45 later records (P31--P38) streamed data automatically, used the robot's live
-position, and used anchored body-segment positions for the body-distance input.
-The phase model used head-based measures in both versions. The two versions are
-reported separately in the measurement checks and are not treated as an
-experimental condition.
+Data were recorded with two system versions that place the column
+differently. In the earlier version the reference point was fixed on the
+robot base's vertical axis, 2.2~m high, so the column did not follow the arm.
+In the later version it is the live TCP, read at every step and used only if
+less than 0.25~s old, so the column moves with the gripper and panel. The later
+version also streamed data automatically rather than on operator
+confirmation, and for control it used the 23 Xsens body segments, placed at the
+OptiTrack cap and taking the smallest distance and largest closing speed. The
+phase model used head measures in both. The versions are reported separately
+(Section~\ref{sec:participants}), not as an experimental condition.
 
 \subsection{Task Phase and Intrusion Prediction}
 \label{sec:context}
-The model recognises three task phases: approaching, working and retreating. At
+The model recognises three task phases: approaching, working and retreating.
+These labels describe what the person is doing, whereas a hazard is about being
+exposed to harm, and a person can trip or move quickly toward the robot during
+any phase. Treating ``hazard'' as a fourth phase would therefore mix up activity
+and danger. The HMM estimates only the task phase, and fast movement toward the
+robot is detected separately by the intrusion predictor below, so the distance
+limit can be tested on its own whatever the HMM decides. At
 each time step it uses four measures,
 $\mathbf x_t=[d_t,v_{{\rm proj},t},\|\mathbf v_t\|,h_t]^{\mathsf T}$: distance,
 closing speed, overall speed and heading alignment. For each phase, the
@@ -366,15 +424,25 @@ d-r_{\rm red}-v_{\rm proj}\tau-\tfrac12 a_{\rm proj}\tau^2=0
 \end{equation}
 for $\tau$, the time the person would take to reach the inner (red) boundary of
 radius $r_{\rm red}$ from the current distance $d$ if they kept their current
-closing speed $v_{\rm proj}$ and acceleration $a_{\rm proj}$. If $\tau$ is
-between zero and 0.5~s, the controller flags an intrusion. The closing-speed
-threshold is 0.6~m/s, and the acceleration used is capped at
-$\pm4$~m/s$^2$. The predictor only detects movement toward the boundary; it
-does not guess the person's intention.
+closing speed $v_{\rm proj}$ and acceleration $a_{\rm proj}$. An intrusion is
+flagged when a risk score that rises as $\tau$ falls below 0.5~s passes its
+threshold (equivalent to $\tau\lesssim0.58$~s) while the closing speed is at
+least 0.6~m/s. $a_{\rm proj}$ is the slope of the last three closing speeds, a
+derivative of a noisy derivative that reached about $\pm30$~m/s$^2$ unclamped
+during development, far beyond a walking person. It is therefore capped at
+$\pm4$~m/s$^2$ (about 0.4\,$g$), and the 0.6-m/s gate stops sway near the
+boundary counting as an approach. Both are engineering settings chosen in
+simulation to suppress noise, not measured or standard values. In the later
+version the body-segment control input sets $a_{\rm proj}=0$, so the cap had
+no effect there. The predictor detects movement toward the boundary, not
+intention.
 
 \subsection{Controllers and Speed Command}
-Three controllers were compared. The \emph{fixed} controller uses set distance
-bands: full speed, reduced speed and stop. The \emph{reactive} controller also
+Three controllers were compared. The \emph{fixed} controller uses two zones
+around the column (Fig.~\ref{fig:scenario}c): inside the red radius it requests
+a stop, inside the yellow radius it limits the robot to 35\% of full speed,
+and outside both it allows full speed. Leaving a zone requires clearing its
+boundary by 0.05~m, so the command does not flicker at the edge. The \emph{reactive} controller also
 takes closing speed into account, using a simplified separation limit. The
 \emph{predictive} controller adds phase-based caution and the intrusion
 predictor on top of the reactive limit. Its protective separation distance is
@@ -387,8 +455,9 @@ closer the person gets in that time; $C$ is a margin for body parts that the
 tracked point does not cover; and $S_a$ is a margin for sensor error. This is
 the ISO/TS 15066 separation formula without the term for the robot's own
 movement \cite{iso15066}. We used $T=0.4$~s, $C=0.2$~m and $S_a=0.1$~m. Beyond
-$S$, the allowed speed rises gradually over 0.3~m. The inner (red) radius is
-0.94~m, and the yellow radius is 1.6 times that. These values were chosen for
+$S$, the allowed speed rises gradually over 0.3~m. The red radius, 0.94~m,
+is the same formula evaluated at an assumed approach speed of 1.6~m/s
+($1.6T+C+S_a$), and the yellow radius is 1.6 times that (1.50~m). These values were chosen for
 the lab cell; they are not measured stopping times or sensor errors of an
 installed system.
 
@@ -401,25 +470,34 @@ where $u_{\rm env}$ is the speed fraction allowed by the reactive limit,
 $u_{\rm context}$ is the fraction suggested by the phase model and intrusion
 predictor, and $u_{\rm cmd}$ is the fraction sent to the robot. Taking the
 smaller of the two means the learned parts can only lower the speed, never
-raise it. Inside the red radius the robot is always asked to stop, and if
-tracking is lost the controller falls back to its most cautious setting. The
+raise it. Inside the red radius the robot is always asked to stop. If the head
+position, body data or robot position are missing or too old (more than
+150~ms for OptiTrack or 0.25~s for the robot position), every controller
+requests a stop ($u_{\rm cmd}=0$) before its own rules are applied. The
 command is sent through the robot's speed override and pause function. This
 is a research controller: its stop is not a safety-rated protective stop, and
 (\ref{eq:bound}) limits the software request rather than certifying the
 installed system (Section~\ref{sec:limitations}).
 
-\aidraft{Two details of the controller matter for the results. First, the HMM's
-phase caution can only cap the speed at the reduced level, so it never stops
-the robot on its own. Second, the intrusion predictor issues a stop once the
-risk has stayed above its threshold for two consecutive samples (about 33~ms
-at 60~Hz) and releases it as soon as the risk falls back below the same
-threshold; there is no separate, lower release threshold.}
+\aidraft{The HMM's phase caution can only cap the speed at the reduced level, so
+it never stops the robot on its own. The intrusion predictor stops once the
+risk has exceeded its threshold for two consecutive samples and releases as
+soon as it falls back below the same threshold, with no hysteresis.}
 
 \section{Model Development and Validation}
 We trained the phase model before the participant study, using 32 labelled
 trials in which the three team members acted as operators (study IDs P03,
 eight trials; P04, 12; P05, 12). These contain 90,487 frames: 17,267
-approaching, 53,609 working and 19,611 retreating. We validated it by leaving
+approaching, 53,609 working and 19,611 retreating. Labels were recorded live:
+the experimenter pressed a key at each real phase change to advance the
+dashboard's fixed task sequence, and each frame carries the current phase.
+\emph{Approaching} runs from the start cue until the participant reaches the
+gripper with the panel or stands under the raised panel; \emph{working} runs
+until the panel is gripped or, in the second cycle, a brief hazard movement is
+cued; \emph{retreating} runs until the robot's lift or lowering is confirmed.
+Frames during robot motion and the hazard movement are excluded. All 32 trials
+follow the scripted order, but the labels were not reviewed afterwards or
+checked by a second labeller. We validated it by leaving
 one operator out at a time: the model was trained on two operators and tested
 on the third.
 \input{tables/model_validation}
@@ -429,7 +507,10 @@ favours that phase scores well on accuracy. Balanced accuracy averages the
 recall of the three phases, so each phase counts equally. Offline accuracy is
 0.821 and real-time (causal) accuracy is 0.794 (Table~\ref{tab:model-validation}).
 Balanced accuracy is lower, especially for the causal filter (0.725), and recall
-is highest for the working phase. The small number of operators, the
+is highest for the working phase. Because the controller runs online, the
+causal recalls are the relevant ones: 0.684 for approaching, 0.905 for working
+and 0.586 for retreating, against 0.693, 0.923 and 0.654 offline. Retreating
+loses most, as the filter is slow to leave the working phase. The small number of operators, the
 correlation between frames in the same trial, and the reuse of the same folds
 during development limit how far these values generalise.
 The \PubPeople{} participants were never used in training, so they form a further
@@ -479,9 +560,14 @@ controllers were assigned to the blocks in one of six rotated orders. Each
 block contains one clean trial, one distractor trial and one rapid-movement
 trial (Fig.~\ref{fig:procedure}). Each trial follows the panel sequence: walk
 in and load the panel, step back before the lift, work under the raised panel,
-and step back before it is lowered and unloaded. The operator gave the scripted
-cue during the lift, so a cue window marks when the instruction was given, not
-when the movement started.
+and step back before it is lowered and unloaded. The trial types differ only
+during the lift, while the participant waits at the start marker. In a
+\emph{clean} trial there is no cue. In a \emph{distractor} trial, on the
+operator's ``now'', the participant makes one brisk sideways movement that does
+not close on the robot and returns. In a \emph{rapid-movement} trial they make
+one brief move toward the robot along a marked direction and return at once
+(not a fall, trip or lunge). Both movements were demonstrated and practised
+first. A cue window marks the instruction, not the start of the movement.
 
 \subsection{Participants and Analysed Records}
 \label{sec:participants}
@@ -495,7 +581,10 @@ have identical segment lengths), so it cannot identify a person; the height of
 the tracked helmet, measured independently by OptiTrack, separates those codes
 (for example 1.75 against 1.81~m, with a spread of about $\pm$0.01~m within a
 code). One person was recorded under two codes on 17 September, confirmed by
-identical intake answers; these are merged.
+identical intake answers; these are merged. Session video was not used for
+this check. In this paper a code such as P17 is a study ID, and T05 is a trial
+within it. Trials from P13--P22 used the earlier system version and those from
+P31 onward the later one (Section~\ref{sec:system}).
 
 Eleven people have eight or nine analysed trials each (97 trials; two planned
 slots had no completed trial). The twelfth person has eight trials (three
@@ -592,13 +681,11 @@ mix person, order and system version, and Section~\ref{sec:same-input} gives
 the paired comparison. The 97
 trials contain 494,075 samples and 186.17 minutes of capture. 398 gaps are
 longer than 250~ms, totalling 281.65~s (2.52\%); 10,888.35~s remain for time
-totals. 3244 samples are flagged as stale tracking, and 395 put the controller
-into its most cautious state. Controller decisions exist in 494,023 samples,
-and every one is recorded as sent to the robot. This confirms that commands
-were recorded, not how the robot physically stopped.
+totals. 3244 samples are flagged as stale tracking, and 395 triggered the
+tracking-loss stop request. Controller decisions exist in 494,023 samples,
+and every one is recorded as sent to the robot.
 
-The trials are close to the planned 11 per trial type per controller; the two
-missing slots leave 10 clean fixed and 10 clean reactive trials. Median stop
+Median stop
 time is 29.7\%, 33.6\% and 36.7\% for fixed, reactive and predictive records,
 and the raw numbers of stop requests are 659, 888 and 1417. Stop time also
 includes intentional task holds.
@@ -668,7 +755,12 @@ depend on the chosen threshold.
 In the early records, the median difference between the recorded head distance
 and the same-sample recalculation (95th percentile per trial) is 0.481~m
 (Fig.~\ref{fig:geometry}a). In the later records it is 0.000~m at the reported
-precision. This shows that the later logging is arithmetically consistent, not
+precision. The early difference arises because the recorded distance was
+measured to the column on the robot-base axis, whereas the recalculation uses
+the column under the live TCP, so it grows as the arm carries the panel away
+from the base axis. The early distance inputs therefore describe the
+controller's view, not the true head-to-panel clearance. The zero difference
+shows that the later logging is arithmetically consistent, not
 that it is physically calibrated or safety-rated.
 
 The wide spread and overlap of rapid and distractor cue windows
@@ -788,8 +880,10 @@ support a certified safety claim.
 The sample is small (12 people) and was recruited for convenience; one
 participant lacks the fixed-zone block and the questionnaires after the intake.
 The system version changed during collection: the earlier six participants
-were measured with a head-only distance, the later six with a whole-body
-distance, and the first participant used an earlier version of the predictive
+were measured with a head-only distance to a column fixed on the robot-base
+axis, so their boundary entries and lead times refer to the controller's
+distance rather than the true clearance to the moving panel; the later six
+used a whole-body distance to the live TCP, and the first participant used an earlier version of the predictive
 yellow-zone rule. The Xsens body profile was reused between some people, which
 introduces up to about 5~cm of distance error; Section~\ref{sec:same-input}
 reports how much this matters. The same-input comparison is open loop, so it

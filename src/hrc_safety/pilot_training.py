@@ -346,6 +346,7 @@ def leave_one_participant_out(
             "balanced_accuracy": report.balanced_accuracy,
             "online_filter_accuracy": online_report.accuracy,
             "per_phase_recall": report.per_state_recall,
+            "online_filter_per_phase_recall": online_report.per_state_recall,
             "confusion": report.confusion.tolist(),
         })
     report = recognition_report(predictions, ground_truth)
@@ -358,6 +359,8 @@ def leave_one_participant_out(
         "online_filter_accuracy": online_report.accuracy,
         "online_filter_balanced_accuracy": online_report.balanced_accuracy,
         "per_phase_recall": report.per_state_recall,
+        "online_filter_per_phase_recall": online_report.per_state_recall,
+        "online_filter_confusion": online_report.confusion.tolist(),
         "confusion": report.confusion.tolist(),
         "folds": folds,
     }

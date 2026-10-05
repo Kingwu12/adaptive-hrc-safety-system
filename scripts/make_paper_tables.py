@@ -25,6 +25,8 @@ import sys
 HERE = os.path.dirname(__file__)
 METRICS_JSON = os.path.join(HERE, "..", "data", "analysis", "metrics.json")
 MODEL_JSON = os.path.join(HERE, "..", "data", "models", "pilot_hmm.json")
+# Viterbi and causal per-phase recall, reproduced by scripts/phase_recall_by_decoder.py.
+PHASE_RECALL_JSON = os.path.join(HERE, "..", "data", "models", "pilot_hmm_phase_recall.json")
 TABLES_DIR = os.path.join(HERE, "..", "paper", "tables")
 
 BANNER = (
@@ -92,6 +94,10 @@ def _model_validation_table(model: dict) -> str:
     """
     validation = model["validation"]
     recalls = validation["per_phase_recall"]
+    causal = None
+    if os.path.exists(PHASE_RECALL_JSON):
+        with open(PHASE_RECALL_JSON, encoding="utf8") as fh:
+            causal = json.load(fh)["causal_per_phase_recall"]
     summary = model["data_summary"]
     participants = summary["participants"]
     folds = validation.get("folds", [])
@@ -116,11 +122,14 @@ def _model_validation_table(model: dict) -> str:
             f"Offline balanced accuracy & {validation['balanced_accuracy']:.3f} \\\\",
             f"Causal-filter accuracy & {validation['online_filter_accuracy']:.3f} \\\\",
             f"Causal-filter balanced accuracy & {validation['online_filter_balanced_accuracy']:.3f} \\\\",
-            f"Approaching recall & {recalls['approaching']:.3f} \\\\",
-            f"Working recall & {recalls['working']:.3f} \\\\",
-            f"Retreating recall & {recalls['retreating']:.3f} \\\\",
         ]
     )
+    for phase in ("approaching", "working", "retreating"):
+        if causal is None:
+            lines.append(f"Offline {phase} recall & {recalls[phase]:.3f} \\\\")
+        else:
+            lines.append(f"{phase.capitalize()} recall, offline / causal & "
+                         f"{recalls[phase]:.3f} / {causal[phase]:.3f} \\\\")
     for fold in folds:
         lines.append(f"Offline fold {_escape(str(fold['participant_id']))} accuracy & {fold['accuracy']:.3f} " + r" \\")
     lines.extend(["\\bottomrule", "\\end{tabular}", "\\end{table}"])
