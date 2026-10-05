@@ -1,0 +1,86 @@
+{
+  "source_model": "data/models/pilot_hmm.json",
+  "method": "leave-one-participant-out",
+  "participants": [
+    "P03",
+    "P04",
+    "P05"
+  ],
+  "reproduced_stored_values": [
+    "accuracy",
+    "balanced_accuracy",
+    "online_filter_accuracy",
+    "online_filter_balanced_accuracy",
+    "viterbi_recall_approaching",
+    "viterbi_recall_retreating",
+    "viterbi_recall_working"
+  ],
+  "viterbi_per_phase_recall": {
+    "approaching": 0.6933456883071756,
+    "working": 0.9229047361450503,
+    "retreating": 0.6539187190862271
+  },
+  "causal_per_phase_recall": {
+    "approaching": 0.6840215439856373,
+    "working": 0.9051465239045683,
+    "retreating": 0.5857426954260364
+  },
+  "causal_confusion": [
+    [
+      11811,
+      2940,
+      2516
+    ],
+    [
+      3723,
+      48524,
+      1362
+    ],
+    [
+      1239,
+      6885,
+      11487
+    ]
+  ],
+  "folds": [
+    {
+      "participant_id": "P03",
+      "viterbi_per_phase_recall": {
+        "approaching": 0.738353299106294,
+        "working": 0.8886659979939819,
+        "retreating": 0.6651384909264565
+      },
+      "causal_per_phase_recall": {
+        "approaching": 0.6358623312416809,
+        "working": 0.8986960882647944,
+        "retreating": 0.575549188156638
+      }
+    },
+    {
+      "participant_id": "P04",
+      "viterbi_per_phase_recall": {
+        "approaching": 0.6724008975317876,
+        "working": 0.9285612434051048,
+        "retreating": 0.6242289661978782
+      },
+      "causal_per_phase_recall": {
+        "approaching": 0.675205684367988,
+        "working": 0.9147773183136081,
+        "retreating": 0.5609425117197138
+      }
+    },
+    {
+      "participant_id": "P05",
+      "viterbi_per_phase_recall": {
+        "approaching": 0.6746246246246246,
+        "working": 0.9452171444791371,
+        "retreating": 0.6829346092503987
+      },
+      "causal_per_phase_recall": {
+        "approaching": 0.7291291291291291,
+        "working": 0.8991200681237581,
+        "retreating": 0.6263157894736842
+      }
+    }
+  ]
+}
