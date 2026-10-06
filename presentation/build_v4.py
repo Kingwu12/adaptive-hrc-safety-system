@@ -333,7 +333,7 @@ Michael will now show you the rig we tested on and what we found.
     notes(s, """
 MICHAEL | 0:40
 
-My main contribution was the physical setup and assembly of this cell. [Michael: name one or two concrete things you set up.]
+My main contribution was the physical setup of this cell: I positioned the robot and built the PVC pipe structure around it that you can see in the photos.
 
 The UR10 arm lifts a light panel stand-in to ceiling height and holds it while the participant works underneath. The cameras on the overhead frame track a marker cap on the head to about a millimetre. The suit uses small motion sensors to give 23 body segments. The controller reads all of this about sixty times a second and decides how fast the robot may move.
 """)
