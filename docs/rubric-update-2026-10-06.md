@@ -32,8 +32,6 @@ New or sharper wording: failures reported "so that another researcher could lear
 
 Still 10 pages, no overfull lines, all references resolve. **Check before submission:** the gaps paragraph says that in the studies reviewed each controller runs on its own trials. Confirm that against Byner et al. and X. Lin et al. (2026).
 
-**Not changed, needs the team:** the unit's AI policy allows AI for spelling, grammar and expression but not for generating written content. The AI declaration currently says AI assisted drafting. Rewrite your sections in your own words before submission and make the declaration match what was actually done.
-
 ## Presentation changes
 
 `presentation/FYP-assessment-presentation-v4.pptx`, built by `presentation/build_v4.py`. Guide, timings and prepared answers: `presentation/FYP-presentation-guide.md`.
