@@ -17,7 +17,7 @@ Target **9:30**. The scripts are about 1,130 words; the slide timings below assu
 | 2 Why this problem matters | Zenan | 0:50 | 1:20 | Why care, who benefits |
 | 3 Our solution | Zenan | 1:15 | 2:35 | Three controllers, slow-only rule, why we chose them |
 | 4 How we tested it | Zenan | 0:45 | 3:20 | 12 people, rotated blocks, same-input replay |
-| 5 The test rig | Michael | 0:40 | 4:00 | Physical setup (Michael's contribution) |
+| 5 The test rig | Michael | 0:40 | 4:00 | Robot position and PVC pipe structure (Michael's contribution) |
 | 6 Result 1: safety | Michael | 0:50 | 4:50 | 970/970, earlier stop, margin under distance error |
 | 7 Result 2: the cost | Michael | 0:45 | 5:35 | Brief extra stops, unnoticed, robot stopping time |
 | 8 The task is the limit | Michael | 0:45 | 6:20 | A third of each trial stopped; contact-safe mode next |
@@ -36,10 +36,9 @@ Speaking time: Zenan 3:20, Michael 3:00, Luke 2:20. Each person opens their sect
 
 Pass the clicker with the last sentence, not after it.
 
-## Before Thursday: things only the team can fill in
+## Before Thursday
 
-- **Michael, slide 5 notes:** replace the bracketed line with one or two concrete things you set up or assembled.
-- **Luke, slide 9:** check the month-by-month plan (Jul design and simulation, Aug rig integration and pilot tests, Sep sessions, Oct analysis and paper) against what actually happened, and correct it in `build_v4.py` if needed.
+- Michael's setup work (robot position and the PVC pipe structure) is now in the slide 5 notes, and Luke has confirmed the slide 9 timeline.
 - **Everyone:** open the deck on the presentation machine, check fonts and charts, and do two timed full runs.
 
 ## Rubric coverage (rolled-back rubric, 6 Oct 2026)
@@ -95,7 +94,7 @@ Yes, they rated all three controllers as safe and could not tell them apart: the
 We did not measure either, so we make no claim. The extra costs are tracking equipment, calibration, maintenance and training; any carbon effect would need energy measurements compared with the manual process.
 
 **Who does what in the team?**
-Zenan: software and technical integration. Luke: coordination with the lab staff and supervisors. Michael: physical setup and assembly. All three designed the experiment and wrote the paper. Each person should answer questions about their own part.
+Zenan: software and technical integration. Luke: coordination with the lab staff and supervisors. Michael: physical setup, including the robot position and the PVC pipe structure around it. All three designed the experiment and wrote the paper. Each person should answer questions about their own part.
 
 **How did you use AI?**
 AI tools helped with analysis code, figures and editing, and this is declared in the paper.

@@ -42,4 +42,4 @@ Still 10 pages, no overfull lines, all references resolve. **Check before submis
 - **Less text.** 11 slides, native charts and photos, scripts in the speaker notes at about 8:40 of speech (target 9:30 delivered).
 - **Prepared answers** rewritten for the new results, including the setback questions the rubric asks to be answered honestly.
 
-Team to fill in: Michael's concrete setup example (slide 5 notes) and Luke's check of the project timeline (slide 9).
+Team input, 6 Oct: Michael's setup work (robot position and the PVC pipe structure) is in the slide 5 notes; Luke confirmed the slide 9 timeline.
