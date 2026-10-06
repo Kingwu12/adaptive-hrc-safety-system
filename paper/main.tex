@@ -19,8 +19,8 @@
 \input{tables/publication_numbers}
 \newcommand{\aidraft}[1]{#1}
 \begin{document}
-\title{Context-Aware Speed and Separation Monitoring for Human--Robot
-Ceiling-Panel Installation: An Exploratory Evaluation}
+\title{Safety and Efficiency of Context-Aware Speed and Separation
+Monitoring in Human--Robot Ceiling-Panel Installation}
 \author{Zenan Wu, Luke Siniakov, and Michael Magila%
 \thanks{The authors are with the Department of Civil Engineering, Monash
 University, Melbourne, Australia. This work is a 2026 Final Year Project
@@ -30,29 +30,27 @@ supervised by Yihai Fang.}%
 
 \begin{abstract}
 Ceiling-panel installation is demanding overhead work that a collaborative
-robot could assist. In the human--robot version studied here, a worker and a
-robot share a workspace while handling the same panel. Fixed safety zones cannot tell whether the worker is
-approaching, working or moving away, so they can stop the robot more often than
-needed. This paper presents a speed and separation monitoring (SSM) controller
-that uses the task phase, and tests it on a physical prototype with
-\PubPeople{} participants. A hidden Markov model (HMM) estimates the task phase
-from motion-capture data, a separate predictor detects fast movement toward the
-robot, and a fixed rule ensures that neither learned part can make the robot
-faster than the speed limit set by the distance-based reactive controller. Because the system logged
-every input, we replayed all three controllers (fixed zone, reactive and
-predictive) on the identical recorded movement of all \PubTrials{} trials, and
-the replay matched every logged robot command. On the same movement, every
-controller had requested a stop at all \PubEntries{} entries into the red
-boundary. The predictive controller started stopping \PubLeadPF{}~s earlier
-than fixed-zone control and added \PubUnnecPF{}~s per minute of unnecessary
-stopping, consistently for all \PubPeople{} people. Its early stopping matters
-when the distance measurement is wrong: with a 5-cm distance error, a stop had
-already been requested at \PubCovPredFive\% of entries under predictive
-control, against \PubCovFixedFive\% under fixed-zone control. The robot
-reached standstill a median of \PubLatMed{}~s after a stop request (maximum
-\PubLatMax{}~s). Participants rated all three controllers as safe and could
-not tell them apart. The prediction therefore buys safety margin against
-measurement error at a small, unnoticed cost in robot availability.
+robot could assist, with the robot holding the panel while a worker shares its
+workspace. Fixed safety zones cannot tell whether the worker is approaching,
+working or moving away, so they can stop the robot more often than needed.
+This paper presents a speed and separation monitoring controller that uses the
+task phase, tested on a physical prototype with \PubPeople{} participants. A
+hidden Markov model estimates the task phase from motion capture, a separate
+predictor detects fast movement toward the robot, and a fixed rule ensures that
+neither learned part can raise the speed above the distance-based limit.
+Because every input was logged, we replayed the fixed-zone, reactive and
+predictive controllers on the identical recorded movement of all \PubTrials{}
+trials; the replay matched every logged robot command. Every controller had
+requested a stop at all \PubEntries{} entries into the inner stop zone. The
+predictive controller started stopping \PubLeadPF{}~s earlier than fixed-zone
+control and added \PubUnnecPF{}~s per minute of unnecessary stopping, for all
+\PubPeople{} people. With a 5-cm distance error, a stop had already been
+requested at \PubCovPredFive\% of entries under predictive control, against
+\PubCovFixedFive\% under fixed-zone control. The robot reached standstill a
+median of \PubLatMed{}~s after a stop request. Participants rated all three
+controllers as safe and could not tell them apart. Prediction therefore buys
+safety margin against measurement error at a small, unnoticed cost in robot
+availability.
 \end{abstract}
 
 
@@ -146,13 +144,11 @@ motion prediction and the distance limit.
 
 The research question is whether a controller that knows the task phase can
 keep people as safe as the fixed-zone control used in practice today, while
-keeping the task efficient. The planned comparison covers response
-to intrusion, unnecessary stops, task efficiency and participant experience.
-This exploratory analysis answers three supporting questions: (1) how
-accurately the model recognises the task phase in real time; (2) how the
-distance measurement and the scripted movements affect how the recorded robot
-behaviour should be read; and (3) what the questionnaires show about
-participants' experience across the task blocks. Our main hypothesis (H1) is
+keeping the task efficient. Three supporting questions follow: (1) on
+identical human movement, does task context change when and how often the
+robot is asked to stop; (2) how robust is each controller to error in the
+measured distance, and how quickly does the robot actually stop; and (3) can
+participants tell the controllers apart. Our main hypothesis (H1) is
 that the context-aware predictive controller is as safe as fixed-zone control,
 the current industry approach, while maintaining comparable task efficiency.
 Its safety rests on the same distance limit: the learned parts are not allowed
@@ -163,9 +159,9 @@ which task-phase recognition and intrusion prediction are kept separate, and
 both sit below a fixed speed limit; (2) an exact same-input comparison of the
 three controllers on the recorded movement of all 12 participants, including
 measured robot stopping and sensitivity to distance error; and (3) participant
-ratings linked to the controller that ran in each block. The
-contribution is combining and testing these parts in a construction task, not
-a new SSM formula.
+ratings linked to the controller that ran in each block. The novelty is the
+approach, not a new SSM formula: the controllers are compared on exactly the
+same human movement.
 
 \section{Related Work}
 %% Yihai, 30 Sep: Table I should follow Related Work directly (bottom of p.2).
@@ -201,13 +197,10 @@ SSM needs more than a fixed safety radius around the robot. The required
 distance depends on how far the person and the robot move while the system
 senses, decides and brakes. It also includes margins for body parts that are
 not tracked and for sensor error \cite{marvel2017implementing,iso15066}.
-Byner et al.\ \cite{byner2019dynamic} set the robot's speed limit from the
-separation distance and direction of motion, and measured cycle performance in
-a physical machine-tending task. Karagiannis et al.\
-\cite{karagiannis2022adaptive} switch between safety-zone layouts depending on
-where the robot is, using an overhead safety camera, a safety-rated
-programmable logic controller (PLC) and the robot controller in a cell modelled
-on the car industry. Adaptive SSM and its effect on productivity have therefore already been
+Byner et al.\ \cite{byner2019dynamic} set the speed limit from separation
+and direction of motion in a physical machine-tending cycle, and Karagiannis
+et al.\ \cite{karagiannis2022adaptive} switch zone layouts with robot position
+using safety-rated hardware in a car-industry cell. Adaptive SSM and its effect on productivity have therefore already been
 studied, and they define the reactive baseline that task context must improve
 on.
 
@@ -226,9 +219,6 @@ state tends to produce \cite{rabiner1989}. HMMs have been used to recognise
 activities from wearable sensors and to model human--robot tasks
 \cite{manouchehri2023hmm,berg2018assembly}.
 
-In these studies the recognised states describe activities; whether hazards
-belong among them is discussed in Section~\ref{sec:context}.
-
 The closest construction study, by Xiao Lin et al.\ \cite{lin2026semantic},
 combines a model of the work steps, robot behaviour learned from demonstration
 and local safety control in a virtual-reality wall-panel task with simulated
@@ -239,10 +229,17 @@ How smoothly people and robots work together is usually measured with timing,
 such as human idle time, robot idle time, time spent working in parallel and
 delay between actions \cite{hoffman2019fluency}. Workload and trust
 questionnaires help explain results, but they cannot prove physical safety or
-replace measured robot response \cite{hart1988tlx,jian2000trust}. This paper
-therefore links task recognition, measured control inputs and participant
-experience in one physical panel task. Table~\ref{tab:prior-work} compares
-these approaches with our prototype.
+replace measured robot response \cite{hart1988tlx,jian2000trust}.
+
+\emph{Gaps addressed by this study.} Three gaps follow from this review (Table~\ref{tab:prior-work}). First,
+adaptive SSM has been tested on physical robots mainly in manufacturing cells
+\cite{byner2019dynamic,karagiannis2022adaptive}, while the construction studies
+that model carried material or work steps used test scenarios or VR with
+simulated sensors \cite{lin2025digitaltwin,lin2026semantic}. Second, in the studies reviewed each controller runs on its own
+trials, so differences in how people moved are mixed with differences between
+controllers. Third, recognition studies report accuracy, but not what a
+recognition or distance error does to the safety margin. Our research question,
+H1 and the same-input comparison (Section~\ref{sec:telemetry}) target these gaps.
 
 
 \section{System Design}
@@ -509,7 +506,7 @@ recall of the three phases, so each phase counts equally. Offline accuracy is
 Balanced accuracy is lower, especially for the causal filter (0.725), and recall
 is highest for the working phase. Because the controller runs online, the
 causal recalls are the relevant ones: 0.684 for approaching, 0.905 for working
-and 0.586 for retreating, against 0.693, 0.923 and 0.654 offline. Retreating
+and 0.586 for retreating. Retreating
 loses most, as the filter is slow to leave the working phase. The small number of operators, the
 correlation between frames in the same trial, and the reuse of the same folds
 during development limit how far these values generalise.
@@ -679,16 +676,10 @@ The 97 trials of the eleven people with full sessions are summarised by the
 controller that actually ran (Table~\ref{tab:controllers}); these logged totals
 mix person, order and system version, and Section~\ref{sec:same-input} gives
 the paired comparison. The 97
-trials contain 494,075 samples and 186.17 minutes of capture. 398 gaps are
-longer than 250~ms, totalling 281.65~s (2.52\%); 10,888.35~s remain for time
-totals. 3244 samples are flagged as stale tracking, and 395 triggered the
-tracking-loss stop request. Controller decisions exist in 494,023 samples,
-and every one is recorded as sent to the robot.
-
-Median stop
-time is 29.7\%, 33.6\% and 36.7\% for fixed, reactive and predictive records,
-and the raw numbers of stop requests are 659, 888 and 1417. Stop time also
-includes intentional task holds.
+trials contain 494,075 samples (186.17 minutes); gaps over 250~ms total
+281.65~s (2.52\%) and are excluded. Every controller decision is recorded as
+sent to the robot. Median stop time, which includes intentional task holds,
+is 29.7\%, 33.6\% and 36.7\% for fixed, reactive and predictive records.
 
 The safety indicators were similar across controllers
 (Table~\ref{tab:controllers}). Whenever the measured distance was inside the
@@ -701,11 +692,9 @@ not slower overall, although the robot spent more of that time stopped.
 
 \input{tables/controller_summary}
 
-Most logged stop requests were brief (under 0.5~s): 493 of 659, 707 of 888 and
-1200 of 1417 for the fixed, reactive and predictive records. The shared
-sensing-dropout hold produced 450, 414 and 326 of them, and the predictive
-controller's intrusion predictor 805 brief and 104 sustained requests
-(Table~\ref{tab:controllers}).
+Most logged stop requests were brief (under 0.5~s; 493 of 659, 707 of 888 and
+1200 of 1417), mainly from the shared sensing-dropout hold and, under
+predictive control, the intrusion predictor (Table~\ref{tab:controllers}).
 
 \subsection{Same-Input Comparison}
 \label{sec:same-input}
@@ -743,13 +732,9 @@ maximum \PubLatMax{}~s; \PubLatN{} requests made while the tool was moving). The
 tool moved inside the red boundary only while braking from a stop already
 requested, and never closer than \PubMinSepMoving{}~m under program motion. In
 \PubPushedPeople{} of the \PubPeople{} people the held arm was briefly pushed a
-few millimetres while the person worked under the panel.
-
-Across the scheduled cue windows, fresh robot data show joint motion for
-1712.80~s of observed time, confirming that the robot moved during the labelled
-event windows. Of 94,031 fresh samples in these windows, 79,356, 77,862 and
-77,492 show motion at 0.001, 0.005 and 0.01~rad/s, so the result does not
-depend on the chosen threshold.
+few millimetres while the person worked under the panel. Fresh robot data
+confirm that the arm was moving in the cue windows (82 to 84\% of 94,031 samples
+at every motion threshold from 0.001 to 0.01~rad/s).
 
 \subsection{Distance Inputs and Cued Movements}
 In the early records, the median difference between the recorded head distance
@@ -758,16 +743,14 @@ and the same-sample recalculation (95th percentile per trial) is 0.481~m
 precision. The early difference arises because the recorded distance was
 measured to the column on the robot-base axis, whereas the recalculation uses
 the column under the live TCP, so it grows as the arm carries the panel away
-from the base axis. The early distance inputs therefore describe the
-controller's view, not the true head-to-panel clearance. The zero difference
-shows that the later logging is arithmetically consistent, not
-that it is physically calibrated or safety-rated.
+from the base axis. The early inputs therefore describe the controller's view, not the true
+head-to-panel clearance; the later zero shows arithmetic consistency, not
+physical calibration.
 
 The wide spread and overlap of rapid and distractor cue windows
 (Fig.~\ref{fig:geometry}b) show that the scripted cue name does not decide the
-movement that was actually measured. These values are controller inputs, not
-checked physical clearances, so the measured distance and closing speed, not
-the cue name, must guide interpretation. Figure~\ref{fig:trace} shows a
+movement that was actually measured, so the measured inputs, not the cue name,
+guide interpretation. Figure~\ref{fig:trace} shows a
 typical later record. Because the cue marks the instruction rather than the
 start of the movement, the delay between cue and robot response is not
 reported as a protective response time.
@@ -830,13 +813,21 @@ exactly this. Prediction moved the stop request earlier for every participant,
 and under a few centimetres of distance error that earlier request covered
 roughly twice as many boundary entries as fixed-zone control. The value of
 prediction in this task is therefore robustness to measurement error, which
-matters because body distance is the least certain input in the system.
+matters because body distance is the least certain input in the system. Where
+Byner et al.\ \cite{byner2019dynamic} used direction-aware limits to gain
+productivity, task context here bought margin rather than speed, and the
+result supports X.~Lin et al.'s \cite{lin2025digitaltwin} view that body and
+material shape decide whether the protective distance is adequate.
 
 The cost is brief switching. The intrusion predictor stops the robot after two
 samples above its threshold and releases as soon as the risk drops, so a noisy
 closing-speed estimate near the threshold makes the command flip between stop
 and run. This added under one second of unnecessary stopping per minute, and
-participants did not notice it: no rating differed between controllers. A
+participants did not notice it: no rating differed between controllers, which
+shows why ratings cannot replace measured robot response
+\cite{jian2000trust}. Because the switching is driven by real tracking noise,
+a test with simulated sensors such as \cite{lin2026semantic} would not reveal
+it. A
 release delay or hysteresis on the predictor should remove most of the
 switching without touching the fixed distance limit, but a simple minimum stop
 time is not a free fix, because it lengthens every stop.
@@ -856,8 +847,9 @@ protective distance while loading, working under the panel and unloading, and
 several participants pushed the held panel. The productivity limit therefore
 comes from using SSM during close-contact phases, not from the choice of SSM
 controller. Switching to a contact-capable mode (hand guiding or power and force
-limiting) by task phase, which the system design already supports, is the
-larger opportunity.
+limiting \cite{iso15066}) by task phase, much as Karagiannis et al.\
+\cite{karagiannis2022adaptive} switch zone layouts by robot position, is the
+larger opportunity, and the system design already supports it.
 
 \subsection{Safety and Efficiency}
 \label{sec:safety-eff}
@@ -868,10 +860,9 @@ of the reaction chain fits the assumed $T=0.4$~s: Xsens data were at most
 \PubTickPninefive{}~s, and the robot stopped within \PubLatMax{}~s, giving
 about 0.31~s at the 95th percentile. The rarest cases reach about 0.44~s, and
 the processing delay inside the motion-capture devices is not visible in the
-logs, so a larger $T$ (for example 0.5~s) is advisable. Stop time combines
-intentional holds and responses to people nearby, and capture time includes
-operator actions, so neither is a direct measure of task efficiency or
-collaboration fluency \cite{hoffman2019fluency}. The command used the ordinary
+logs, so a larger $T$ (for example 0.5~s) is advisable. Stop time includes
+intentional holds and capture time includes operator actions, so neither
+directly measures efficiency or fluency \cite{hoffman2019fluency}. The command used the ordinary
 robot speed override rather than a safety-rated stop, so none of these results
 support a certified safety claim.
 
@@ -893,11 +884,15 @@ as the reference, and the phase labels mark cues rather than observed movement.
 Cued movements, operator pacing, learning and fatigue may affect behaviour and
 ratings; the rotated block order controls for order but not for these.
 
+Lessons for similar studies: freeze the system version before the first
+participant; log the geometric reference beside each distance, which would have
+exposed the base-axis column at once; and log every input and every
+controller's request, which made the exact replay possible and verifiable.
+
 \subsection{Future Work}
-A confirmatory session should run the predictive controller with a release
-delay on the intrusion predictor, a reaction time of at least 0.5~s, freshly
-measured body profiles for each person, one frozen system version and an ID that
-follows each person. It should also switch to a contact-capable mode while the
+A confirmatory session should apply these lessons and run the predictive
+controller with a release delay on the intrusion predictor, a reaction time of
+at least 0.5~s and freshly measured body profiles for each person. It should also switch to a contact-capable mode while the
 worker is under the panel, since that is where most of the stopping occurs.
 
 \section{Conclusion}
@@ -917,10 +912,8 @@ the choice of SSM controller but in switching to a contact-capable mode while
 the worker is under the panel.
 
 \section*{Data Availability}
-Analysis scripts, derived tables and figure-generation code accompany the
-manuscript. Participant-level data require controlled access. All reported
-summaries are calculated from recorded observations without imputation or
-simulated values.
+Analysis code and derived tables accompany the manuscript; participant-level
+data require controlled access. Nothing was imputed or simulated.
 
 \section*{Acknowledgment}
 The authors thank Associate Professor Yihai Fang for his primary supervision
