@@ -1,85 +1,105 @@
 # Final presentation: rehearsal and rubric guide
 
-Use **FYP-assessment-presentation-v2.pptx** for the assessment narrative. Earlier working drafts are superseded. The deck's speaker notes contain the talk track and sources. Rehearse from them rather than reading slides aloud.
+**Thursday 29 October 2026, 2:00 pm.** Use **FYP-assessment-presentation-v4.pptx**. It is rebuilt by `python3 presentation/build_v4.py` from v3, which stays in the folder as the previous version. The speaker notes hold the full script for each slide. Rehearse from them until you can say each slide in your own words; reading from the slides is a fail item in the rubric.
 
-The official ENG4702 presentation rubric supplied through the course specifies a general engineering audience, a strict **10-minute maximum**, and participation by every team member. It distinguishes this presentation from a paper summary. No fixed slide template is required; the revised deck retains the existing layout and typography.
+v4 replaces v3 for two reasons:
+
+1. **The rubric changed.** On 6 Oct 2026 the Chief Examiner (Tian Goh) rolled the presentation rubric back to a simpler version: four categories instead of twelve (below).
+2. **v3 showed the old results.** It reported the 14-trial analysis ("does not yet establish a safety advantage"). The paper (v3.2) now has all 12 participants and the same-input replay, so the slides now say what the paper says.
 
 ## Running order
 
-The planned talk is **9 minutes 15 seconds**, leaving 45 seconds for pauses and handovers. This is an allocation, not a completed timed rehearsal. Use a visible timer and follow the chair's instructions.
+Target **9:30**. The scripts are about 1,130 words; the slide timings below assume 130 words a minute and add up to 8:40. Pauses and two handovers usually add 30 to 45 seconds. That leaves about 30 seconds before the hard 10-minute stop. The rubric's top band asks for "exactly to time", so set a timer you can see and practise until a full run lands between 9:15 and 9:45.
 
-| Slide | Speaker | Seconds | Cumulative | Focus |
-|---|---|---:|---|---|
-| 1 | Zenan | 20 | 0:20 | Introduction |
-| 2 | Zenan | 45 | 1:05 | Problem and beneficiaries |
-| 3 | Zenan | 45 | 1:50 | Task and prototype |
-| 4 | Zenan | 65 | 2:55 | Controller choices |
-| 5 | Zenan | 55 | 3:50 | Design and measurements |
-| 6 | Zenan | 40 | 4:30 | Recognition results |
-| 7 | Zenan | 60 | 5:30 | Questionnaire findings |
-| 8 | Michael | 55 | 6:25 | Distance measurement |
-| 9 | Michael | 55 | 7:20 | Project management |
-| 10 | Luke | 45 | 8:05 | Deployment constraints |
-| 11 | Luke | 40 | 8:45 | Team contributions |
-| 12 | Luke | 30 | 9:15 | Contribution and conclusion |
+| Slide | Speaker | Time | Ends at | Focus |
+|---|---|---:|---:|---|
+| 1 Title | Zenan | 0:30 | 0:30 | Who we are, roadmap |
+| 2 Why this problem matters | Zenan | 0:50 | 1:20 | Why care, who benefits |
+| 3 Our solution | Zenan | 1:15 | 2:35 | Three controllers, slow-only rule, why we chose them |
+| 4 How we tested it | Zenan | 0:45 | 3:20 | 12 people, rotated blocks, same-input replay |
+| 5 The test rig | Michael | 0:40 | 4:00 | Physical setup (Michael's contribution) |
+| 6 Result 1: safety | Michael | 0:50 | 4:50 | 970/970, earlier stop, margin under distance error |
+| 7 Result 2: the cost | Michael | 0:45 | 5:35 | Brief extra stops, unnoticed, robot stopping time |
+| 8 The task is the limit | Michael | 0:45 | 6:20 | A third of each trial stopped; contact-safe mode next |
+| 9 Project management | Luke | 0:55 | 7:15 | Plan, setbacks, responses (Luke's contribution) |
+| 10 Using it on site | Luke | 0:50 | 8:05 | Safety, cost, health, carbon, people, standards |
+| 11 Answer and next steps | Luke | 0:35 | 8:40 | Answer to the question, next steps, why pick this topic |
 
-Prepared handovers:
+These are allocations, not a timed rehearsal. Time a real run before trusting them.
 
-- After slide 7, Zenan: “Michael will now explain what the measurements taught us and how we managed the experimental challenges.”
-- After slide 9, Michael: “Luke will now relate those findings to deployment constraints and the team's contribution.”
+Speaking time: Zenan 3:20, Michael 3:00, Luke 2:20. Each person opens their section with what they personally did. If the team wants Luke's share closer to the others, Luke can take slide 8, which leads naturally into his section.
 
-All three members contributed to experiment design and final-report preparation. Their main areas were software development and technical integration (Zenan), communication and coordination with laboratory staff and supervisors (Luke), and physical setup and assembly support (Michael). AI assistance is disclosed consistently with the paper.
+**Prepared handovers** (also at the end of the notes on slides 4 and 8):
 
-## Rubric coverage
+- End of slide 4, Zenan: "Michael will now show you the rig we tested on and what we found."
+- End of slide 8, Michael: "Luke will now explain how we managed the project and what it would take to use this on a real site."
 
-| Criterion | Weight | Where addressed | Rehearsal requirement |
-|---|---:|---|---|
-| Individual contribution | 10% | Slide 11; three speaking sections | Each person explains their own work and speaks professionally |
-| Terminology for non-experts | 10% | Slides 3–8 explain tracking, recognition and speed control | Explain terms rather than reciting acronyms |
-| Relevance and significance | 10% | Slide 2: worker access, coordination and beneficiaries | Make the installation problem concrete |
-| Design and conduct | 10% | Slides 3–5: apparatus, controller choices, rotated order and measures | Distinguish intended comparison from analysed evidence |
-| Constraints and context | 10% | Slide 10: safety, cost, worker experience and environment | Explain why these factors affect deployment |
-| Solution in context of the question | 10% | Slides 4, 6–8 and 12 connect choices and findings to coordination | State the supported answer without implying superiority |
-| Project management | 10% | Slide 9: integration, changing geometry, variable cues and incomplete sessions | Explain a setback and the engineering response |
-| Work volume and complexity | 4% | Slides 3–6, 9 and 11 show the integrated work streams | Explain how the components depended on one another |
-| Logical sequence and timing | 4% | Problem → choices → evaluation → findings → context → conclusion | Complete a timed run below 10 minutes |
-| Speaker transitions | 3% | Handovers after slides 7 and 9 | Rehearse names, clicker transfer and the next speaker's opening |
-| Appropriate visuals | 4% | Schematic, editable charts and concise tables | Check readability on the assessment display |
-| Clear, complete answers | 15% | Prepared questions below | Practise concise answers and expand when asked |
-| **Total** | **100%** | | |
+Pass the clicker with the last sentence, not after it.
 
-Content coverage is not a predicted mark. Delivery, individual understanding, timing and live answers must be demonstrated by the team.
+## Before Thursday: things only the team can fill in
+
+- **Michael, slide 5 notes:** replace the bracketed line with one or two concrete things you set up or assembled.
+- **Luke, slide 9:** check the month-by-month plan (Jul design and simulation, Aug rig integration and pilot tests, Sep sessions, Oct analysis and paper) against what actually happened, and correct it in `build_v4.py` if needed.
+- **Everyone:** open the deck on the presentation machine, check fonts and charts, and do two timed full runs.
+
+## Rubric coverage (rolled-back rubric, 6 Oct 2026)
+
+| Category | Weight | Where it is covered |
+|---|---:|---|
+| Individual contribution (per student) | 10% | Each speaker opens with their own role (slides 3, 5, 9); roles repeated on slide 11. Speak, don't read; dress for a business setting; no filler words. |
+| Technical elements, constraints and contextual factors, adaptability | 60% | Why care and who benefits (2); solution chosen and justified (3); design and conduct for a general audience (4, 5); honest results including the flaw we found (6, 7, 8); project management with setbacks (9); safety, whole-life cost, health, net zero carbon and social factors (10); answer to the research question and why another student should pick this topic (11). |
+| Structural and visual elements | 15% | Problem, solution, test, results, management, context, answer. Photos, native charts, diagrams; text kept short. Two prepared handovers. Target 9:30. |
+| Responsive elements (answers to questions) | 15% | Prepared answers below. Keep each to two or three sentences, then stop. |
+
+Points the old guide covered that the new rubric now stresses:
+
+- "The presentation should not be a summary of your paper." v4 leads with why it matters, the choices we made and what it would take to use on site, not the paper's section order.
+- "Could have convinced other students to choose this topic." Luke's closing line on slide 11 does this.
+- "Questions about problems or adversity were answered honestly and constructively." See the setback questions below.
 
 ## Prepared questions
 
-**Did predictive control perform better?** The current analysis does not establish a safety or efficiency advantage. It demonstrates a physical prototype, development-stage recognition performance and descriptive experience findings. A stronger comparison needs validated clearance and stopping measurements and reliable controller exposure.
+Answer in two or three sentences, then stop. Offer more detail only if asked.
 
-**Why three controllers?** They separate the information added at each stage: distance, closing speed, then task context and boundary prediction. Reactive control is the relevant comparator for the incremental value of prediction.
+**Is your controller safer than fixed zones?**
+On the measured distance, all three controllers had already asked the robot to stop at every one of 970 entries, so they were equally safe there. Ours asked about a tenth of a second earlier for all 12 people, and that earlier request gives more margin when the distance is measured wrongly: 67% of entries still covered with a 5 cm error, against 31% for fixed zones.
 
-**How could prediction help if it only reduces speed?** At identical inputs it cannot request more speed than reactive control. Any benefit would need to come from intervention timing or subsequent coordination. We have not demonstrated that benefit here.
+**Then why does the robot stop more with your controller?**
+The intrusion predictor releases the stop as soon as the risk dips, so a noisy speed estimate makes it flicker between stop and go. That added under a second of unnecessary stopping per minute, and participants did not notice it. A short release delay should remove most of it.
 
-**What does 79.4% recognition accuracy mean?** It is the stored development-validation accuracy for assigning observations to approaching, working or retreating using present and past observations. Each of three operators was held out in turn. Equal weighting across phases gives 72.5%. Neither figure measures stopping safety or hazard detection.
+**What is same-input replay, and why trust it?**
+We logged every sensor input, so we could run all three controllers on exactly the same recorded movement. The replay reproduced every command the live robot received, sample for sample. It shows what each controller would have asked for, not how the person would have moved differently, which we state as a limitation.
 
-**How many people were analysed?** The team reported 12 physical participants. The analysed records include 14 telemetry trials under three study IDs and 31 block forms under eleven IDs, with eleven matched intake/end response sets. Restarts prevent treating every ID as a verified distinct person. Record counts are not an independent participant sample size.
+**Why a hidden Markov model and not deep learning?**
+We had only 32 labelled training trials. A hidden Markov model trains on little data, its three phases are explainable, and it runs in real time. Because of the slow-only rule, a wrong phase can never make the robot faster.
 
-**What do the questionnaires establish?** Eight of eleven matched safety ratings were higher at the end than at intake; trust changes were more mixed. This compares expected with experienced ratings. It describes reported experience and cannot identify a controller effect.
+**How accurate is the phase recognition?**
+About 79% on held-out team trials and a median of 69% per participant on people it never saw. A phase error only changes the reduced-speed limit in the outer zone; it never removes a stop.
 
-**Were questionnaire findings sensitive to incomplete responses?** Restricting the block analysis to nine complete response sets preserved 29 of 30 block-item medians. The block-B monitoring median changed from two to one. Paired ratings still varied: unnecessary-stopping ratings rose in two sets, fell in two and stayed the same in five.
+**Is this a certified safety system?**
+No. It is a research prototype using the robot's ordinary speed controls, not a safety-rated stop. A site system would need safety-rated hardware and validation against ISO 10218 and ISO/TS 15066.
 
-**Does the discrepancy mean someone was half a metre closer than believed?** No. It is a difference between the recorded head-distance calculation and a recalculation using recorded robot position. It is not a calibrated physical clearance error. Real protective clearance must cover the body, robot, tool and panel surfaces.
+**How fast does the robot actually stop?**
+A median of 0.16 seconds after the request and never more than 0.23 seconds. Adding the sensing and processing delays gives about 0.31 seconds in 95% of cases, so we recommend allowing 0.5 seconds rather than the 0.4 we assumed.
 
-**Was this a certified safety function?** No. It was a laboratory research prototype using ordinary robot command interfaces. A bounded software request does not validate sensing uncertainty, the stopping chain or installed-system safety.
+**What went wrong, and what would you do differently?** (adversity question: answer honestly)
+Midway through, the distance reference in the software changed, so the first six participants were measured to a fixed point rather than the moving panel. We analysed the two versions separately and say so in the paper. Next time we would freeze the software version before the first participant and log the reference point beside every distance.
 
-**What is new?** Adaptive speed control and task-aware safety already exist. The contribution is their integration and exploratory evaluation in a physical ceiling-panel task, using robot telemetry and questionnaire responses. Xiao Lin and colleagues' related 2026 study used a semantic workflow in a VR wall-panel task with simulated sensors; superiority over that approach is not claimed.
+**Why only 12 participants?**
+Each session took about 30 minutes of robot time with lab staff present, within one semester. Twelve is small, so we use the person as the unit of analysis and report effects that held for all 12, rather than claiming population-level results.
 
-**How were setbacks managed?** Geometry versions were analysed separately, cued events were checked against recorded movement inputs, and incomplete or ambiguously linked observations were not used to support a statistical controller ranking. These decisions limit the conclusion while preserving its meaning.
+**Did participants feel safe?**
+Yes, they rated all three controllers as safe and could not tell them apart: their "safest" picks were spread 3, 5 and 3, which is chance. Feeling relaxed rose with each block whatever the controller, which is a familiarity effect.
 
-**What would justify deployment?** Validated geometry for the complete moving volume, measured stopping response, a suitable safety chain, verified controller exposure, and evaluation with relevant workers and site conditions. Cost, energy and material effects need their own measurements.
+**What about cost and carbon?**
+We did not measure either, so we make no claim. The extra costs are tracking equipment, calibration, maintenance and training; any carbon effect would need energy measurements compared with the manual process.
+
+**Who does what in the team?**
+Zenan: software and technical integration. Luke: coordination with the lab staff and supervisors. Michael: physical setup and assembly. All three designed the experiment and wrote the paper. Each person should answer questions about their own part.
+
+**How did you use AI?**
+AI tools helped with analysis code, figures and editing, and this is declared in the paper. (Check that this matches the final declaration before Thursday.)
 
 ## Media and setup
 
-The timed deck is self-contained and uses a still schematic. It does not require video playback, internet access or participant recordings. No new 3D graphics were built. Any later video addition requires another timed rehearsal.
-
-If participant footage is added later, select a short clip that explains the task, check the applicable consent and remove identifying material where appropriate. A schematic or unlinked illustrative clip must not be presented as a measured experimental result.
-
-Before assessment, open the PPTX on the actual presentation machine and check charts, fonts and speaker notes. The deck was rendered and inspected with presentation tooling here; that is not a claim of a completed PowerPoint rehearsal.
+The deck is self-contained: photos and native charts, no video or internet needed. Faces are blurred in all photos. If you add a video clip, check consent, blur faces and re-time the run.
