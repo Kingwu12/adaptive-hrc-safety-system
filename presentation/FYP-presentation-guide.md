@@ -98,7 +98,7 @@ We did not measure either, so we make no claim. The extra costs are tracking equ
 Zenan: software and technical integration. Luke: coordination with the lab staff and supervisors. Michael: physical setup and assembly. All three designed the experiment and wrote the paper. Each person should answer questions about their own part.
 
 **How did you use AI?**
-AI tools helped with analysis code, figures and editing, and this is declared in the paper. (Check that this matches the final declaration before Thursday.)
+AI tools helped with analysis code, figures and editing, and this is declared in the paper.
 
 ## Media and setup
 
