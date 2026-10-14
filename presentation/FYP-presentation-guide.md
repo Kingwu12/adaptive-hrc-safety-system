@@ -6,29 +6,29 @@ The official ENG4702 presentation rubric supplied through the course specifies a
 
 ## Running order
 
-The planned talk is **9 minutes 20 seconds** over 14 slides, leaving 40 seconds for pauses and handovers. Picture slides (3, 4, 7) are shown, not explained: point at the rig, the console and the model in one or two sentences each and move on.
+Three speakers, **3 minutes each**: 9 minutes in total, leaving 1 minute for pauses and handovers. Picture slides (3, 4, 7) are shown, not explained: one or two sentences each.
 
 | Slide | Speaker | Seconds | Cumulative | Focus |
 |---|---|---:|---|---|
-| 1 | Zenan | 20 | 0:20 | Introduction |
-| 2 | Zenan | 40 | 1:00 | Problem and research question |
-| 3 | Zenan | 45 | 1:45 | Task and rig (photo + video) |
-| 4 | Zenan | 35 | 2:20 | Operator console we built |
-| 5 | Zenan | 50 | 3:10 | Controller choices |
-| 6 | Zenan | 45 | 3:55 | Design and measurements |
-| 7 | Zenan | 50 | 4:45 | Our trained task-phase model |
-| 8 | Zenan | 45 | 5:30 | Questionnaire findings |
-| 9 | Michael | 45 | 6:15 | Distance measurement |
-| 10 | Michael | 45 | 7:00 | Project management |
-| 11 | Luke | 40 | 7:40 | Deployment constraints |
-| 12 | Luke | 30 | 8:10 | Team contributions |
-| 13 | Luke | 45 | 8:55 | Results answer the research question |
-| 14 | Luke | 25 | 9:20 | Contribution and conclusion |
+| 1 | Zenan | 15 | 0:15 | Introduction |
+| 2 | Zenan | 35 | 0:50 | Problem and research question |
+| 3 | Zenan | 40 | 1:30 | Task and rig (photo + video) |
+| 4 | Zenan | 30 | 2:00 | Operator console we built |
+| 5 | Zenan | 35 | 2:35 | Controller choices |
+| 6 | Zenan | 25 | 3:00 | Design and measurements |
+| 7 | Michael | 45 | 3:45 | Our trained task-phase model |
+| 8 | Michael | 45 | 4:30 | Questionnaire findings |
+| 9 | Michael | 45 | 5:15 | Distance measurement |
+| 10 | Michael | 45 | 6:00 | Project management |
+| 11 | Luke | 45 | 6:45 | Deployment constraints |
+| 12 | Luke | 30 | 7:15 | Team contributions |
+| 13 | Luke | 60 | 8:15 | Results answer the research question |
+| 14 | Luke | 45 | 9:00 | Contribution and conclusion |
 
 Prepared handovers:
 
-- After slide 8, Zenan: “Michael will now explain what the measurements taught us and how we managed the experimental challenges.”
-- After slide 10, Michael: “Luke will now relate those findings to deployment constraints and the team's contribution.”
+- After slide 6, Zenan: “Michael will now show what the model learned and what the measurements told us.”
+- After slide 10, Michael: “Luke will now relate those findings to deployment and answer our research question.”
 
 All three members contributed to experiment design and final-report preparation. Their main areas were software development and technical integration (Zenan), communication and coordination with laboratory staff and supervisors (Luke), and physical setup and assembly support (Michael). AI assistance is disclosed consistently with the paper.
 
