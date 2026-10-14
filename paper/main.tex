@@ -30,27 +30,26 @@ supervised by Yihai Fang.}%
 
 \begin{abstract}
 Ceiling-panel installation is demanding overhead work that a collaborative
-robot could assist, with the robot holding the panel while a worker shares its
-workspace. Fixed safety zones cannot tell whether the worker is approaching,
-working or moving away, so they can stop the robot more often than needed.
-This paper presents a speed and separation monitoring controller that uses the
-task phase, tested on a physical prototype with \PubPeople{} participants. A
-hidden Markov model estimates the task phase from motion capture, a separate
-predictor detects fast movement toward the robot, and a fixed rule ensures that
-neither learned part can raise the speed above the distance-based limit.
-Because every input was logged, we replayed the fixed-zone, reactive and
-predictive controllers on the identical recorded movement of all \PubTrials{}
-trials; the replay matched every logged robot command. Every controller had
-requested a stop at all \PubEntries{} entries into the inner stop zone. The
-predictive controller started stopping \PubLeadPF{}~s earlier than fixed-zone
-control and added \PubUnnecPF{}~s per minute of unnecessary stopping, for all
-\PubPeople{} people. With a 5-cm distance error, a stop had already been
-requested at \PubCovPredFive\% of entries under predictive control, against
-\PubCovFixedFive\% under fixed-zone control. The robot reached standstill a
-median of \PubLatMed{}~s after a stop request. Participants rated all three
-controllers as safe and could not tell them apart. Prediction therefore buys
-safety margin against measurement error at a small, unnoticed cost in robot
-availability.
+robot could share by holding the panel while a worker fixes it. Fixed
+distance zones, today's safeguard, cannot tell whether the worker is
+approaching, working or moving away. This study asks
+whether a robot that recognises the task phase can keep the worker as safe as
+fixed-zone control while keeping the work efficient. We built a physical
+prototype in which a hidden Markov model recognises the task phase from motion
+capture and a separate predictor flags fast movement toward the robot, with a
+fixed rule that neither learned part can ever make the robot faster than the
+distance limit allows. Because every input was logged, the fixed-zone, reactive
+and predictive controllers could be compared on exactly the same recorded
+movement of every participant. All three stopped the robot every time a person
+entered the inner zone, but the predictive controller asked for the stop
+earlier for every participant, which gave far more protection when the
+measured distance was slightly wrong. The price was a little brief extra
+stopping that participants, who rated all three controllers as safe, did not
+notice. The hypothesis is therefore supported on
+safety and partly supported on efficiency. For industry, task awareness can be
+layered over an unchanged safety limit to buy margin against sensing error at
+little cost, while the larger productivity gain lies in a contact-capable mode
+while the worker is under the panel.
 \end{abstract}
 
 
@@ -142,13 +141,16 @@ long as a wrongly recognised phase can never loosen the safety limit. Our
 controller therefore keeps three parts separate: task-phase recognition,
 motion prediction and the distance limit.
 
-The research question is whether a controller that knows the task phase can
-keep people as safe as the fixed-zone control used in practice today, while
-keeping the task efficient. Three supporting questions follow: (1) on
-identical human movement, does task context change when and how often the
-robot is asked to stop; (2) how robust is each controller to error in the
-measured distance, and how quickly does the robot actually stop; and (3) can
-participants tell the controllers apart. Our main hypothesis (H1) is
+The aim is to make human--robot panel installation practical by protecting
+the worker without needless stops. This leads to the research question (RQ):
+can a controller that knows the task phase keep people as safe as the
+fixed-zone control used in practice today, while keeping the task efficient?
+Three supporting questions follow, answered in Section~\ref{sec:answer}:
+(SQ1, safety and efficiency) on identical human movement, does task context
+change when and how often the robot is asked to stop; (SQ2, trust in the
+safety result) how robust is each controller to distance error, and how
+quickly does the robot stop; and (SQ3, acceptance) can participants tell the
+controllers apart. Our main hypothesis (H1) is
 that the context-aware predictive controller is as safe as fixed-zone control,
 the current industry approach, while maintaining comparable task efficiency.
 Its safety rests on the same distance limit: the learned parts are not allowed
@@ -675,10 +677,7 @@ from 1 (not at all) to 5 (completely).
 The 97 trials of the eleven people with full sessions are summarised by the
 controller that actually ran (Table~\ref{tab:controllers}); these logged totals
 mix person, order and system version, and Section~\ref{sec:same-input} gives
-the paired comparison. The 97
-trials contain 494,075 samples (186.17 minutes); gaps over 250~ms total
-281.65~s (2.52\%) and are excluded. Every controller decision is recorded as
-sent to the robot. Median stop time, which includes intentional task holds,
+the paired comparison. Median stop time, which includes intentional task holds,
 is 29.7\%, 33.6\% and 36.7\% for fixed, reactive and predictive records.
 
 The safety indicators were similar across controllers
@@ -692,9 +691,6 @@ not slower overall, although the robot spent more of that time stopped.
 
 \input{tables/controller_summary}
 
-Most logged stop requests were brief (under 0.5~s; 493 of 659, 707 of 888 and
-1200 of 1417), mainly from the shared sensing-dropout hold and, under
-predictive control, the intrusion predictor (Table~\ref{tab:controllers}).
 
 \subsection{Same-Input Comparison}
 \label{sec:same-input}
@@ -711,7 +707,8 @@ reactive control, again for all \PubPeople{} people ($p=\PubPminSign$). Most of
 the extra stop requests are brief switching. Unnecessary stopping is small for every
 controller: 94 to 98\% of stopped time is followed by an entry into the red
 boundary within 1~s, because the task keeps the worker inside the protective
-distance for long periods.
+distance for long periods. \emph{For SQ1:} task context made the robot stop
+sooner without missing any entry, at a small cost in brief extra stops.
 
 \input{tables/same_input}
 
@@ -724,7 +721,8 @@ smaller than measured, a stop would already have been requested at
 control (Table~\ref{tab:same-input}). The predictive advantage held for all
 \PubPeople{} people, and the result is the same at 10~cm. Early stopping
 therefore turns a small lead time into a large margin against measurement
-error.
+error. \emph{For SQ2:} the safety result does not depend on the distance being
+exact, and the predictive controller is the most tolerant of error.
 
 \textbf{Robot stopping.} The tool reached standstill a median of
 \PubLatMed{}~s after a stop request (95th percentile \PubLatPninefive{}~s,
@@ -732,9 +730,7 @@ maximum \PubLatMax{}~s; \PubLatN{} requests made while the tool was moving). The
 tool moved inside the red boundary only while braking from a stop already
 requested, and never closer than \PubMinSepMoving{}~m under program motion. In
 \PubPushedPeople{} of the \PubPeople{} people the held arm was briefly pushed a
-few millimetres while the person worked under the panel. Fresh robot data
-confirm that the arm was moving in the cue windows (82 to 84\% of 94,031 samples
-at every motion threshold from 0.001 to 0.01~rad/s).
+few millimetres while the person worked under the panel. 
 
 \subsection{Distance Inputs and Cued Movements}
 In the early records, the median difference between the recorded head distance
@@ -798,17 +794,31 @@ seven times), but mapped to controllers the choices were fixed zone
 \PubQSafestFixed{}, reactive \PubQSafestReactive{} and predictive
 \PubQSafestPred{}, which is what chance would give. The preference for the last
 block is therefore an order effect, consistent with the rise in relaxation.
+\emph{For SQ3:} people felt safe with every controller, so the extra caution
+cost nothing in perceived comfort, but ratings cannot rank the controllers.
 Four participants noticed changes between blocks and seven did not. The median
 rating for how much the suit restricted movement was two of five, and no end
 form reported risk or discomfort.
 
 \section{Discussion}
+\subsection{Answering the Research Question}
+\label{sec:answer}
+The supporting questions combine into one answer. On identical movement the
+task-aware controller missed no entry and stopped earlier (SQ1); that lead
+holds when the distance is a few centimetres wrong, the realistic failure
+(SQ2); and workers accepted it as readily as fixed zones (SQ3). H1 is
+therefore supported on safety and only partly on efficiency: trials took about
+as long, but the robot paused slightly more. Against the aim, it protects
+the worker better without slowing the work, but does not remove the stops that
+interrupt it (Section~\ref{sec:safety-eff}). For construction firms and integrators the
+lesson is architectural: learned task recognition can sit on an unchanged,
+standard distance limit, so an assessor still validates only that limit while
+the learned parts add caution where sensing is weakest.
+
 \subsection{What Prediction Buys}
-The prototype combines the task phase and motion prediction while keeping a
-fixed software limit on the commanded speed, so a wrong phase can never allow a
-higher speed than the distance limit. For the same inputs the predictive
-controller can therefore never request a higher speed than the reactive one;
-any benefit must come from when it intervenes. The same-input replay measures
+Because the learned parts sit below the distance limit, the predictive
+controller can never request a higher speed than the reactive one on the same
+inputs; any benefit must come from when it intervenes. The same-input replay measures
 exactly this. Prediction moved the stop request earlier for every participant,
 and under a few centimetres of distance error that earlier request covered
 roughly twice as many boundary entries as fixed-zone control. The value of
@@ -832,12 +842,6 @@ release delay or hysteresis on the predictor should remove most of the
 switching without touching the fixed distance limit, but a simple minimum stop
 time is not a free fix, because it lengthens every stop.
 
-\aidraft{Against H1, the predictive controller was at least as safe as
-fixed-zone control on every measure we could compute: it had requested a stop
-at every boundary entry, earlier than the other controllers, and with more
-margin against distance error. Comparable efficiency was not fully shown: trials
-took about the same time, but the robot was stopped for slightly more of each
-trial. H1 is therefore supported on safety and partly supported on efficiency.}
 
 \subsection{The Task Limits the Gain}
 Under all three controllers the robot was stopped for about a third of each
@@ -896,20 +900,16 @@ at least 0.5~s and freshly measured body profiles for each person. It should als
 worker is under the panel, since that is where most of the stopping occurs.
 
 \section{Conclusion}
-This paper presented a speed and separation monitoring controller that uses the
-task phase and motion prediction in human--robot ceiling-panel installation,
-and tested it on a physical prototype with \PubPeople{} participants. Replaying
-all three controllers exactly on the identical recorded movement showed that
-every controller had requested a stop at all \PubEntries{} entries into the red
-boundary. The predictive controller requested stops \PubLeadPF{}~s earlier than
-fixed-zone control for every participant, which under a 5-cm distance error
-raised the share of entries already covered from \PubCovFixedFive\% to
-\PubCovPredFive\%. Its cost was \PubUnnecPF{}~s per minute of extra unnecessary
-stopping, caused by brief switching of the intrusion predictor, which
-participants did not notice and which a release delay should remove. The robot
-stopped within \PubLatMax{}~s of a request. The largest remaining gain lies not in
-the choice of SSM controller but in switching to a contact-capable mode while
-the worker is under the panel.
+This study asked whether a robot that knows the task phase can keep a
+ceiling-panel installer as safe as fixed-zone control while keeping the work
+efficient. An exact replay of all three controllers on the recorded movement of
+\PubPeople{} participants gave a clear answer on safety: every controller stopped for every close approach, and the
+task-aware controller stopped earlier for every participant, keeping
+protection high even when the measured distance was a few centimetres wrong.
+A little brief extra stopping, unnoticed by participants and removable
+with a release delay, left efficiency comparable but not improved. For industry, task awareness is a low-risk way to add margin on top
+of a standard safety limit; the larger productivity gain lies in switching to
+a contact-capable mode while the worker is under the panel.
 
 \section*{Data Availability}
 Analysis code and derived tables accompany the manuscript; participant-level
