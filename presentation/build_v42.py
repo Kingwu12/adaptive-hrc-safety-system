@@ -55,12 +55,17 @@ def build():
     answers_tag(s7, "Answers: is it still efficient?")
     answers_tag(s8, "Answers: where is the real gain?")
 
-    # Rig: bottom-right photo becomes the participant video
-    pic = shape(s5, "Picture 5")
-    x, y, w, h = pic.left, pic.top, pic.width, pic.height
-    pic._element.getparent().remove(pic._element)
+    # Rig: the participant video takes the large spot; the large photo moves to
+    # the bottom right, replacing the smaller photo there.
+    big, small = shape(s5, "Picture 3"), shape(s5, "Picture 5")
+    x, y, w, h = big.left, big.top, big.width, big.height
+    big.left, big.top, big.width, big.height = small.left, small.top, small.width, small.height
+    small._element.getparent().remove(small._element)
     s5.shapes.add_movie(str(MEDIA / "clip-approach-xsens.mp4"), x, y, w, h,
                         poster_frame_image=str(MEDIA / "clip-poster.jpg"), mime_type="video/mp4")
+    box(s5, x / 914400 + 0.12, y / 914400 + 0.12, 2.6, 0.42, fill=NAVY)
+    text(s5, "\u25B6  Video: click to play (16 s)", x / 914400 + 0.18, y / 914400 + 0.15, 2.5, 0.38,
+         size=13, bold=True, color=WHITE)
 
     # New slide: what we built (console + trained model)
     layout = s3.slide_layout
@@ -137,7 +142,7 @@ Our key method decision was logging every sensor input. That let us replay all t
 
 My main contribution was this physical setup: I positioned the robot and built the PVC pipe structure you can see.
 
-The UR10 arm lifts a panel stand-in to ceiling height and holds it while the participant works underneath. Cameras on the frame track the head to about a millimetre, and the suit gives 23 body segments; the video shows that in action. The controller reads all of this about sixty times a second and decides how fast the robot may move.""",
+The UR10 arm lifts a panel stand-in to ceiling height and holds it while the participant works underneath. Cameras on the frame track the head to about a millimetre, and the suit gives 23 body segments. [Click the video.] Here is a participant walking in while the suit streams every body segment to the controller. The controller reads all of this about sixty times a second and decides how fast the robot may move.""",
 
 """MICHAEL | 0:50
 
