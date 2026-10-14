@@ -1,32 +1,34 @@
 # Final presentation: rehearsal and rubric guide
 
-Use **FYP-assessment-presentation-v2.pptx** for the assessment narrative. Earlier working drafts are superseded. The deck's speaker notes contain the talk track and sources. Rehearse from them rather than reading slides aloud.
+Use **FYP-assessment-presentation-v4.pptx** for the assessment narrative. Earlier working drafts are superseded. The deck's speaker notes contain the talk track and sources. Rehearse from them rather than reading slides aloud.
 
 The official ENG4702 presentation rubric supplied through the course specifies a general engineering audience, a strict **10-minute maximum**, and participation by every team member. It distinguishes this presentation from a paper summary. No fixed slide template is required; the revised deck retains the existing layout and typography.
 
 ## Running order
 
-The planned talk is **9 minutes 15 seconds**, leaving 45 seconds for pauses and handovers. This is an allocation, not a completed timed rehearsal. Use a visible timer and follow the chair's instructions.
+The planned talk is **9 minutes 20 seconds** over 14 slides, leaving 40 seconds for pauses and handovers. Picture slides (3, 4, 7) are shown, not explained: point at the rig, the console and the model in one or two sentences each and move on.
 
 | Slide | Speaker | Seconds | Cumulative | Focus |
 |---|---|---:|---|---|
 | 1 | Zenan | 20 | 0:20 | Introduction |
-| 2 | Zenan | 45 | 1:05 | Problem and beneficiaries |
-| 3 | Zenan | 45 | 1:50 | Task and prototype |
-| 4 | Zenan | 65 | 2:55 | Controller choices |
-| 5 | Zenan | 55 | 3:50 | Design and measurements |
-| 6 | Zenan | 40 | 4:30 | Recognition results |
-| 7 | Zenan | 60 | 5:30 | Questionnaire findings |
-| 8 | Michael | 55 | 6:25 | Distance measurement |
-| 9 | Michael | 55 | 7:20 | Project management |
-| 10 | Luke | 45 | 8:05 | Deployment constraints |
-| 11 | Luke | 40 | 8:45 | Team contributions |
-| 12 | Luke | 30 | 9:15 | Contribution and conclusion |
+| 2 | Zenan | 40 | 1:00 | Problem and research question |
+| 3 | Zenan | 45 | 1:45 | Task and rig (photo + video) |
+| 4 | Zenan | 35 | 2:20 | Operator console we built |
+| 5 | Zenan | 50 | 3:10 | Controller choices |
+| 6 | Zenan | 45 | 3:55 | Design and measurements |
+| 7 | Zenan | 50 | 4:45 | Our trained task-phase model |
+| 8 | Zenan | 45 | 5:30 | Questionnaire findings |
+| 9 | Michael | 45 | 6:15 | Distance measurement |
+| 10 | Michael | 45 | 7:00 | Project management |
+| 11 | Luke | 40 | 7:40 | Deployment constraints |
+| 12 | Luke | 30 | 8:10 | Team contributions |
+| 13 | Luke | 45 | 8:55 | Results answer the research question |
+| 14 | Luke | 25 | 9:20 | Contribution and conclusion |
 
 Prepared handovers:
 
-- After slide 7, Zenan: “Michael will now explain what the measurements taught us and how we managed the experimental challenges.”
-- After slide 9, Michael: “Luke will now relate those findings to deployment constraints and the team's contribution.”
+- After slide 8, Zenan: “Michael will now explain what the measurements taught us and how we managed the experimental challenges.”
+- After slide 10, Michael: “Luke will now relate those findings to deployment constraints and the team's contribution.”
 
 All three members contributed to experiment design and final-report preparation. Their main areas were software development and technical integration (Zenan), communication and coordination with laboratory staff and supervisors (Luke), and physical setup and assembly support (Michael). AI assistance is disclosed consistently with the paper.
 
