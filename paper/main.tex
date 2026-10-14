@@ -26,28 +26,29 @@ supervised by Yihai Fang.}%
 
 \begin{abstract}
 Ceiling-panel installation is demanding overhead work that a collaborative
-robot could assist. In the human--robot version studied here, a worker and a
-robot share a workspace while handling the same panel. Fixed safety zones cannot tell whether the worker is
-approaching, working or moving away, so they can stop the robot more often than
-needed. This paper presents a speed and separation monitoring (SSM) controller
-that uses the task phase, and tests it on a physical prototype. A hidden Markov
-model (HMM) estimates the task phase from motion-capture data, and a separate
-predictor detects fast movement toward the robot. A fixed rule ensures that
-neither of these learned parts can make the robot faster than the speed limit
-set by the distance-based reactive controller. Tested on operators it had not been trained on,
-the real-time phase model was correct 79.4\% of the time (balanced accuracy
-72.5\%). The final analysed dataset contained 97 robot-data trials from 11 study codes
-under fixed, reactive and predictive control, plus 31 block questionnaires.
-Participants were confident that the robot would stop and reported low
-workload, and their average safety rating rose from 3.82/5 before the session
-to 4.45/5 after it. We hypothesised that the predictive controller is as
-safe as fixed-zone control, the current industry approach, while keeping
-comparable efficiency. The safety indicators matched: every controller
-requested a stop whenever a person was inside the red boundary, and closest
-approach and time inside it were similar. Trials took about as long, but the
-predictive controller kept the robot stopped for more of each trial, so the
-hypothesis is only partly supported. The study also sets out what must be measured to compare the controllers
-conclusively.
+robot could share by holding the panel while a worker fixes it. Today's
+safeguard, fixed distance zones, cannot tell whether the worker is approaching,
+working or moving away, so it either stops the robot more than needed or
+must be set very conservatively. This study asks whether a robot that
+recognises the task phase can keep the worker as safe as fixed-zone control
+while keeping the work moving. We built a physical prototype in which a hidden
+Markov model recognises the task phase from motion capture and a separate
+predictor flags fast movement toward the robot, with a fixed rule that neither
+learned part can ever make the robot faster than the distance-based limit
+allows. Participants completed the task under fixed, reactive and predictive
+control. The phase model recognised what unseen operators were doing well
+enough to run in real time, showing that task context can be read reliably on
+a construction-style task. On safety, the answer to the research question is
+encouraging: every controller stopped the robot whenever a person entered the
+inner boundary, close approaches were alike, and participants trusted the robot
+to stop and felt safer after working with it than they expected. On efficiency
+the answer is mixed: tasks took no longer, but the predictive robot paused more
+often, mainly because its fast-approach predictor switched on and off on noisy
+readings. The hypothesis is therefore partly supported. For industry, the
+result means task awareness can be added on top of an unchanged safety limit
+without weakening it, but it does not yet deliver fewer interruptions; that
+benefit depends on smoothing the predictor and validating the complete sensing
+and stopping chain, which this study defines.
 \end{abstract}
 
 
@@ -139,19 +140,25 @@ long as a wrongly recognised phase can never loosen the safety limit. Our
 controller therefore keeps three parts separate: task-phase recognition,
 motion prediction and the distance limit.
 
-The research question is whether a controller that knows the task phase can
-keep people as safe as the fixed-zone control used in practice today, while
-keeping the task efficient. The planned comparison covers response
-to intrusion, unnecessary stops, task efficiency and participant experience.
-This exploratory analysis answers three supporting questions: (1) how
-accurately the model recognises the task phase in real time; (2) how the
-distance measurement and the scripted movements affect how the recorded robot
-behaviour should be read; and (3) what the questionnaires show about
-participants' experience across the task blocks. Our main hypothesis (H1) is
-that the context-aware predictive controller is as safe as fixed-zone control,
-the current industry approach, while maintaining comparable task efficiency.
-Its safety rests on the same distance limit: the learned parts are not allowed
-to relax it.
+The aim of this project is to make human--robot ceiling-panel installation
+practical by reducing unnecessary robot stops without reducing protection.
+This aim leads to one research question (RQ): \emph{can a controller that knows
+the task phase keep people as safe as the fixed-zone control used in practice
+today, while keeping the task efficient?} Our main hypothesis (H1) is that the
+context-aware predictive controller is as safe as fixed-zone control while
+maintaining comparable task efficiency. Its safety rests on the same distance
+limit: the learned parts are not allowed to relax it.
+
+The RQ cannot be answered by a single number, so it is broken into three
+supporting questions, each feeding one half of H1. (SQ1) Can the task phase be
+recognised accurately enough in real time to be useful? This is a precondition
+for any context-aware benefit. (SQ2) How do the controllers compare on the
+recorded safety and efficiency indicators, and how far can those recordings be
+trusted given the distance measurement and scripted movements? This tests H1
+directly. (SQ3) How did participants experience working with the robot? This
+asks whether the system is acceptable to the people it is meant to help.
+Section~\ref{sec:answer} returns to each question and states what the results
+answer.
 
 This work makes three contributions: (1) a physical ceiling-panel prototype in
 which task-phase recognition and intrusion prediction are kept separate, and
@@ -483,6 +490,7 @@ risk has exceeded its threshold for two consecutive samples and releases as
 soon as it falls back below the same threshold, with no hysteresis.}
 
 \section{Model Development and Validation}
+\label{sec:model}
 We trained the phase model before the participant study, using 32 labelled
 trials in which the three team members acted as operators (study IDs P03,
 eight trials; P04, 12; P05, 12). These contain 90,487 frames: 17,267
@@ -511,6 +519,11 @@ and 0.586 for retreating, against 0.693, 0.923 and 0.654 offline. Retreating
 loses most, as the filter is slow to leave the working phase. The small number of operators, the
 correlation between frames in the same trial, and the reuse of the same folds
 during development limit how far these values generalise.
+
+\emph{What this means for SQ1:} the phase can be read from body motion in real
+time, most reliably while the worker is under the panel, which is the phase in
+which unnecessary stops are most disruptive. The precondition for context-aware
+control is met; the weaker transition phases are where future data should go.
 
 \FloatBarrier
 \section{Experimental Method}
@@ -645,6 +658,10 @@ confidence intervals or effect sizes, and we do not assume missing data are
 random.
 
 \section{Results}
+The results are presented in the order of the supporting questions: phase
+recognition (SQ1, Section~\ref{sec:model}), the recorded robot behaviour and
+how far it can be trusted (SQ2, below), and participants' experience (SQ3).
+Each subsection closes with what it means for H1.
 \subsection{Robot Data}
 Each of the 11 study codes has eight or nine selected trials.
 Table~\ref{tab:controllers} summarises them by controller; these totals
@@ -703,6 +720,13 @@ event windows. Of 94,031 fresh samples in these windows, 79,356, 77,862 and
 77,492 show motion at 0.001, 0.005 and 0.01~rad/s, so the result does not
 depend on the chosen threshold.
 
+\emph{What this means for H1:} on the recorded indicators, the safety half of
+H1 holds, since no controller let a person inside the red boundary without a
+stop request and close approaches were alike. The efficiency half holds only in
+part: the work took no longer, but the predictive robot paused more, and the
+same-input comparison shows the pauses come from the controller's own design
+rather than from who was in the task.
+
 \subsection{Distance Inputs and Cued Movements}
 In the early records, the median difference between the recorded head distance
 and the same-sample recalculation (95th percentile per trial) is 0.481~m
@@ -723,6 +747,13 @@ the cue name, must guide interpretation. Figure~\ref{fig:trace} shows a
 typical later record. Because the cue marks the instruction rather than the
 start of the movement, the delay between cue and robot response is not
 reported as a protective response time.
+
+\emph{What this means for H1:} these checks decide how firmly the safety half
+of H1 can be stated. In the later system version the recorded distances are
+internally consistent, so the controller comparisons rest on sound inputs; in
+the earlier version they describe what the controller saw rather than true
+clearance. The safety result is therefore a comparison of controller decisions,
+not yet a measured physical safety margin.
 
 \begin{figure*}[!t]
 \centering\includegraphics[width=.92\textwidth]{figures/geometry-and-events-full.pdf}
@@ -783,7 +814,68 @@ sensitivity and lift speed. The median rating for how much the suit restricted
 movement was two (interquartile range 1.5--3), and no end form reported risk or
 discomfort.
 
+\emph{What this means for SQ3:} people were comfortable working beside the
+robot under all three controllers and came away trusting it more than they
+expected, so the extra caution of the predictive controller did not make the
+experience worse. The questionnaires cannot, however, single out one controller
+as better.
+
 \section{Discussion}
+\subsection{Answering the Research Question}
+\label{sec:answer}
+Table~\ref{tab:answer} links each finding back to the question it answers and
+to the project aim.
+
+\begin{table*}[!t]
+\caption{From results to research question and aim}
+\label{tab:answer}
+\centering\footnotesize
+\begin{tabular}{@{}p{.15\textwidth}p{.27\textwidth}p{.25\textwidth}p{.25\textwidth}@{}}
+\toprule
+Question & What we found & Answer & Meaning for the aim \\
+\midrule
+SQ1 Phase recognition & The phase is recognised in real time on unseen
+operators, best while working under the panel. & Yes: task context can be
+read reliably enough to drive a controller. & The building block for fewer
+unnecessary stops exists. \\
+SQ2 Safety & Every controller requested a stop whenever a person was inside
+the inner boundary; close approaches and time near the robot were alike. &
+No sign that task awareness reduced safety (safety half of H1 supported). &
+Context can be added without weakening protection, because the learned parts
+can only slow the robot. \\
+SQ2 Efficiency & Tasks took as long, but the predictive robot paused more,
+mainly from brief on--off switching of its approach predictor. & Comparable
+duration, more interruption (efficiency half of H1 only partly supported). &
+The aim of fewer stops is not yet met; the cause is identified and fixable. \\
+SQ3 Experience & Participants trusted the robot to stop, reported low workload
+and felt safer afterwards. & The system is acceptable to users; no controller
+is singled out. & Workers are likely to accept a cautious, task-aware robot. \\
+\midrule
+RQ / H1 & & Partly supported: as safe on the measured indicators, not yet more
+efficient. & Feasible and safe in design; efficiency gain still to be shown. \\
+\bottomrule
+\end{tabular}
+\end{table*}
+
+Taken together, the findings answer the research question in two halves. A
+controller that knows the task phase can be built so that it is never less
+cautious than fixed-zone control, and in this study it was not less safe on
+any recorded indicator. It did not yet keep the task more efficient: it paused
+more, for a reason that lies in one component rather than in the idea of
+task-aware control.
+
+\emph{Significance for industry.} For construction firms and robot
+integrators, the main lesson is architectural. Task recognition and motion
+prediction can sit on top of an unchanged, standard distance limit, so a
+safety assessor still only has to validate that limit, while the learned parts
+add caution and context. This lowers the barrier to trying smarter
+collaboration on site. The study also warns that adding prediction is not
+automatically more productive: an over-sensitive predictor turns into frequent
+pauses, which on a real site would cost time and frustrate workers. Before
+such systems are deployed, firms will need measured end-to-end stopping
+response, geometry that covers the panel and tool, and productivity measured
+over full shifts, which are exactly the measurements this study identifies.
+
 \subsection{Context-Aware Control in the Panel Task}
 Keeping the task phase and motion prediction below a fixed software limit
 separates two questions: whether a movement belongs to a normal task phase, and
@@ -879,21 +971,29 @@ movement, controller output and robot braking to measure response times, and
 use a study ID that follows each person across restarted sessions.
 
 \section{Conclusion}
-This paper presented a speed and separation monitoring controller that uses
-the task phase in human--robot ceiling-panel installation, and tested it on a
-physical prototype. Phase recognition and fast-approach prediction sit below a
-fixed speed limit, so the learned parts can only make the robot more cautious.
-In real time, the phase model was correct 79.4\% of the time on unseen
-operators. Across 97 robot-data trials and 31 block questionnaires,
-participants were confident that the robot would stop, reported low workload,
-and felt safer by the end of the session. H1 was partly supported: every
-controller requested a stop whenever a person was inside the red boundary,
-closest approaches were similar and trials took about as long, but the robot
-spent more time stopped under predictive control, mostly because of brief
-switching in the intrusion predictor, which makes hysteresis the next design
-change. Formally showing equal safety and comparable availability will need a
-consistent distance measurement, synchronised measurement of the robot's
-response, and an ID that follows each participant across restarted sessions.
+This project aimed to make human--robot ceiling-panel installation more
+practical by cutting unnecessary robot stops without reducing protection, and
+asked whether a controller that knows the task phase can be as safe as
+fixed-zone control while keeping the task efficient. We built and tested a
+physical prototype in which phase recognition and fast-approach prediction sit
+below a fixed speed limit, so the learned parts can only make the robot more
+cautious.
+
+The answer is a qualified yes on safety and not yet on efficiency. The task
+phase can be recognised in real time on people the model has never seen; every
+controller stopped the robot whenever someone came too close; and participants
+trusted the robot and felt safer after working with it. Tasks took no longer,
+but the predictive robot paused more, because its approach predictor switched
+on and off on noisy readings. H1 is therefore partly supported.
+
+For industry, this shows that task awareness can be layered over an
+unchanged, standard safety limit without weakening it, which makes smarter
+collaboration easier to assess and adopt, but that its productivity benefit
+depends on careful tuning. The next steps follow directly: smooth the
+predictor with hysteresis, keep one validated distance measurement, measure
+the robot's real stopping response, and follow each participant across
+sessions, so that the efficiency half of the question can be answered
+conclusively.
 
 \section*{Data Availability}
 Analysis scripts, derived tables and figure-generation code accompany the
