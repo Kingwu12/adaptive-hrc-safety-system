@@ -1,38 +1,36 @@
 # Final presentation: rehearsal and rubric guide
 
-**Thursday 29 October 2026, 2:00 pm.** Use **FYP-assessment-presentation-v4.pptx**. It is rebuilt by `python3 presentation/build_v4.py` from v3, which stays in the folder as the previous version. The speaker notes hold the full script for each slide. Rehearse from them until you can say each slide in your own words; reading from the slides is a fail item in the rubric.
+**Thursday 29 October 2026, 2:00 pm.** Use **FYP-assessment-presentation-v4.2.pptx**. It is built by `python3 presentation/build_v42.py` from v4 (the 6 Oct deck, uploaded to Drive as v4.1), which is rebuilt by `build_v4.py`. The speaker notes hold the full script for each slide. Rehearse from them until you can say each slide in your own words; reading from the slides is a fail item in the rubric.
 
-v4 replaces v3 for two reasons:
+v4.2 (14 Oct 2026) adds, from supervisor feedback:
 
-1. **The rubric changed.** On 6 Oct 2026 the Chief Examiner (Tian Goh) rolled the presentation rubric back to a simpler version: four categories instead of twelve (below).
-2. **v3 showed the old results.** It reported the 14-trial analysis ("does not yet establish a safety advantage"). The paper (v3.2) now has all 12 participants and the same-input replay, so the slides now say what the paper says.
+1. **The research question on screen early** (slide 2), and a tag on each result slide saying which part of the question it answers; slide 12 answers it back.
+2. **More of the actual work:** the participant video on the rig slide, and a new slide 4 with our operator console and the trained phase model running on a person it never saw.
+3. **Three minutes per speaker.**
 
 ## Running order
 
-Target **9:30**. The scripts are about 1,130 words; the slide timings below assume 130 words a minute and add up to 8:40. Pauses and two handovers usually add 30 to 45 seconds. That leaves about 30 seconds before the hard 10-minute stop. The rubric's top band asks for "exactly to time", so set a timer you can see and practise until a full run lands between 9:15 and 9:45.
+**Three minutes each, 9:00 in total**, leaving a minute of buffer before the hard 10-minute stop. Each speaker's script is about 360 words, roughly 2:40 at 140 words a minute; slide changes and pauses fill the rest. These are allocations, not a timed rehearsal: time a real run and aim to land between 8:45 and 9:30.
 
 | Slide | Speaker | Time | Ends at | Focus |
 |---|---|---:|---:|---|
-| 1 Title | Zenan | 0:30 | 0:30 | Who we are, roadmap |
-| 2 Why this problem matters | Zenan | 0:50 | 1:20 | Why care, who benefits |
-| 3 Our solution | Zenan | 1:15 | 2:35 | Three controllers, slow-only rule, why we chose them |
-| 4 How we tested it | Zenan | 0:45 | 3:20 | 12 people, rotated blocks, same-input replay |
-| 5 The test rig | Michael | 0:40 | 4:00 | Robot position and PVC pipe structure (Michael's contribution) |
-| 6 Result 1: safety | Michael | 0:50 | 4:50 | 970/970, earlier stop, margin under distance error |
-| 7 Result 2: the cost | Michael | 0:45 | 5:35 | Brief extra stops, unnoticed, robot stopping time |
-| 8 The task is the limit | Michael | 0:45 | 6:20 | A third of each trial stopped; contact-safe mode next |
-| 9 Project management | Luke | 0:55 | 7:15 | Plan, setbacks, responses (Luke's contribution) |
-| 10 Using it on site | Luke | 0:50 | 8:05 | Safety, cost, health, carbon, people, standards |
-| 11 Answer and next steps | Luke | 0:35 | 8:40 | Answer to the question, next steps, why pick this topic |
-
-These are allocations, not a timed rehearsal. Time a real run before trusting them.
-
-Speaking time: Zenan 3:20, Michael 3:00, Luke 2:20. Each person opens their section with what they personally did. If the team wants Luke's share closer to the others, Luke can take slide 8, which leads naturally into his section.
+| 1 Title | Zenan | 0:25 | 0:25 | Who we are, roadmap |
+| 2 Why this problem matters | Zenan | 0:45 | 1:10 | Why care, who benefits, **the research question** |
+| 3 Our solution | Zenan | 0:55 | 2:05 | Three controllers, slow-only rule |
+| 4 What we built | Zenan | 0:55 | 3:00 | Operator console and trained model (Zenan's contribution) |
+| 5 How we tested it | Michael | 0:40 | 3:40 | 12 people, rotated blocks, same-input replay |
+| 6 The test rig | Michael | 0:40 | 4:20 | Robot position and PVC pipe structure (Michael's contribution), video |
+| 7 Result 1: as safe? | Michael | 0:50 | 5:10 | 970/970, earlier stop, margin under distance error |
+| 8 Result 2: still efficient? | Michael | 0:50 | 6:00 | Brief extra stops, unnoticed, robot stopping time |
+| 9 The task is the limit | Luke | 0:40 | 6:40 | A third of each trial stopped; contact-safe mode next |
+| 10 Project management | Luke | 0:50 | 7:30 | Plan, setbacks, responses (Luke's contribution) |
+| 11 Using it on site | Luke | 0:50 | 8:20 | Safety, cost, health, carbon, people, standards |
+| 12 Answer and next steps | Luke | 0:40 | 9:00 | Answer to the question, industry meaning, why pick this topic |
 
 **Prepared handovers** (also at the end of the notes on slides 4 and 8):
 
-- End of slide 4, Zenan: "Michael will now show you the rig we tested on and what we found."
-- End of slide 8, Michael: "Luke will now explain how we managed the project and what it would take to use this on a real site."
+- End of slide 4, Zenan: "Michael will now show you how we tested it and what we found."
+- End of slide 8, Michael: "Luke will now take us through what this means and how we ran the project."
 
 Pass the clicker with the last sentence, not after it.
 
@@ -45,15 +43,15 @@ Pass the clicker with the last sentence, not after it.
 
 | Category | Weight | Where it is covered |
 |---|---:|---|
-| Individual contribution (per student) | 10% | Each speaker opens with their own role (slides 3, 5, 9); roles repeated on slide 11. Speak, don't read; dress for a business setting; no filler words. |
-| Technical elements, constraints and contextual factors, adaptability | 60% | Why care and who benefits (2); solution chosen and justified (3); design and conduct for a general audience (4, 5); honest results including the flaw we found (6, 7, 8); project management with setbacks (9); safety, whole-life cost, health, net zero carbon and social factors (10); answer to the research question and why another student should pick this topic (11). |
-| Structural and visual elements | 15% | Problem, solution, test, results, management, context, answer. Photos, native charts, diagrams; text kept short. Two prepared handovers. Target 9:30. |
+| Individual contribution (per student) | 10% | Each speaker states their own role (slides 4, 6, 10); roles repeated on slide 12. Speak, don't read; dress for a business setting; no filler words. |
+| Technical elements, constraints and contextual factors, adaptability | 60% | Why care, who benefits and the research question (2); solution chosen and justified (3); what we built (4); design and conduct for a general audience (5, 6); honest results, each tagged with the part of the question it answers (7, 8, 9); project management with setbacks (10); safety, whole-life cost, health, net zero carbon and social factors (11); answer to the research question and why another student should pick this topic (12). |
+| Structural and visual elements | 15% | Problem, solution, test, results, management, context, answer. Photos, native charts, diagrams; text kept short. Two prepared handovers. Target 9:00, three minutes each. |
 | Responsive elements (answers to questions) | 15% | Prepared answers below. Keep each to two or three sentences, then stop. |
 
 Points the old guide covered that the new rubric now stresses:
 
 - "The presentation should not be a summary of your paper." v4 leads with why it matters, the choices we made and what it would take to use on site, not the paper's section order.
-- "Could have convinced other students to choose this topic." Luke's closing line on slide 11 does this.
+- "Could have convinced other students to choose this topic." Luke's closing line on slide 12 does this.
 - "Questions about problems or adversity were answered honestly and constructively." See the setback questions below.
 
 ## Prepared questions
