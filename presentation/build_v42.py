@@ -108,77 +108,77 @@ def build():
 SCRIPTS = [
 """ZENAN | 0:25
 
-Good afternoon. I'm Zenan, and with Luke and Michael I'll show you how we taught a robot to understand what a construction worker is doing, so it keeps them safe without stopping all the time. I'll cover the problem and what we built, Michael the testing and results, and Luke the project and what it takes to use this on site.""",
+Good afternoon. I am Zenan, and with Luke and Michael I will present our project: a context-aware safety system that lets a collaborative robot recognise what a construction worker is doing, so it can keep them safe without stopping unnecessarily. I will introduce the problem and the system we developed, Michael will present our testing and results, and Luke will cover project management and deployment on site.""",
 
 """ZENAN | 0:45
 
-Installing ceiling panels means holding heavy boards above your head. A collaborative robot can take the weight while the worker aligns and fixes the panel.
+Installing ceiling panels requires workers to hold heavy boards overhead. A collaborative robot can support the panel while the worker aligns and fixes it.
 
-The catch: the worker now stands next to a moving robot. Today's standard draws fixed zones around the robot and stops it whenever someone is inside. It can't tell someone walking in to work from someone walking away. Stop too late and someone gets hurt; stop too often and crews switch the robot off. Getting it right helps installation crews, contractors and the engineers who certify these robots.
+However, the worker now stands beside a moving robot. Current practice defines fixed safety zones around the robot and stops it whenever a person is inside. These zones cannot distinguish a worker approaching to begin a task from one moving away. If the robot stops too late, the worker may be injured; if it stops too often, crews are likely to disable it. Solving this benefits installation crews, contractors and the engineers who certify these systems.
 
-So our question, in the dark box: can a robot that knows the task phase keep workers as safe as fixed zones, and still keep the work efficient?""",
-
-"""ZENAN | 0:55
-
-To answer it we compared three controllers, each adding one piece of information. Fixed zones use distance only; that's today's practice, so it's our baseline. Reactive control also looks at how fast you're approaching. Ours, the predictive controller, adds the task phase, whether you're approaching, working or walking away, plus a predictor that flags when you're about to step into the stop zone.
-
-The key rule is the dark bar: the learned parts can only slow the robot, never speed it up. So a wrong guess can never make it less safe, and safety never depends on the machine learning being right.""",
+This leads to our research question, shown in the dark box: can a robot that is aware of the task phase keep workers as safe as fixed zones, while maintaining task efficiency?""",
 
 """ZENAN | 0:55
 
-My part was the software, and this is what it looks like. On the left is the console we built to run every session: it checks every sensor before a trial, assigns the controller, and records everything the robot and the person did.
+To answer this, we compared three controllers, each adding one source of information. The fixed-zone controller uses separation distance only; this is current practice and our baseline. The reactive controller also considers approach speed. Our predictive controller adds the task phase, whether the worker is approaching, working or moving away, together with a predictor that anticipates entry into the stop zone.
 
-On the right is our trained model on a person it never saw during training. The top bar is what they were actually doing, the bottom bar is what the model said live. It follows the long working phase well and only hesitates at the changeovers.
+The key design principle is shown in the dark bar: the learned components can only reduce the robot's speed, never increase it. An incorrect prediction therefore cannot make the system less safe, and safety never depends on the machine-learning model being correct.""",
 
-Michael will now show you how we tested it and what we found.""",
+"""ZENAN | 0:55
+
+My contribution was the software. On the left is the operator console we developed to run each session. It verifies every sensor before a trial, assigns the controller, and records the motion of both the robot and the participant.
+
+On the right is our trained phase model, evaluated on a participant it never saw during training. The upper bar shows what the participant was actually doing, and the lower bar shows the model's live prediction. It tracks the long working phase closely, with uncertainty mainly at the transitions between phases.
+
+Michael will now present how we tested the system and what we found.""",
 
 """MICHAEL | 0:40
 
-Thanks Zenan. Twelve people took part under Monash ethics approval. Each did three blocks of the panel task, one controller per block in rotated order, with cued movements like a quick step toward the robot, and a short questionnaire after each block.
+Thank you, Zenan. Twelve participants took part under Monash ethics approval. Each completed three blocks of the panel task, with one controller per block in a rotated order. The task included cued movements, such as a quick step towards the robot, and a short questionnaire followed each block.
 
-Our key method decision was logging every sensor input. That let us replay all three controllers on exactly the same movement, like three referees judging the same match footage, so any difference comes from the controller, not the person.""",
+Our key methodological decision was to log every sensor input. This allowed us to replay all three controllers on identical movement data, much like three referees reviewing the same match footage, so any difference in outcome comes from the controller rather than the participant.""",
 
 """MICHAEL | 0:40
 
-My main contribution was this physical setup: I positioned the robot and built the PVC pipe structure you can see.
+My main contribution was the physical setup: I positioned the robot and built the PVC pipe structure shown here.
 
-The UR10 arm lifts a panel stand-in to ceiling height and holds it while the participant works underneath. Cameras on the frame track the head to about a millimetre, and the suit gives 23 body segments. [Click the video.] Here is a participant walking in while the suit streams every body segment to the controller. The controller reads all of this about sixty times a second and decides how fast the robot may move.""",
-
-"""MICHAEL | 0:50
-
-This answers the first half of our question: is it as safe? Each time someone stepped into the stop zone, 970 times in total, all three controllers had already asked the robot to stop. On the measured distance, none of them failed.
-
-The difference is timing. Ours asked for the stop about a tenth of a second earlier, for every one of the twelve people. That matters because the distance is always measured a little wrong: if it was five centimetres off, fixed zones would still have covered 31 percent of entries and ours 67. So yes, it is as safe, with more margin.""",
+The UR10 arm raises a panel substitute to ceiling height and holds it while the participant works beneath it. Cameras on the frame track the participant's head to about one millimetre, and the motion-capture suit records 23 body segments. [Click the video.] This clip shows a participant approaching while the suit streams their movement to the controller. The controller reads these data about sixty times per second and sets the speed the robot is permitted to move at.""",
 
 """MICHAEL | 0:50
 
-The second half: is it still efficient? Partly. Ours flicked between stop and go more often, because it releases the stop as soon as the risk dips, so a noisy speed estimate makes it flicker. A short release delay should fix most of that.
+This answers the first part of our question: is it as safe? Across all 970 entries into the stop zone, every controller had already commanded the robot to stop. On the measured distance, none of them failed.
 
-Overall it added under a second of unnecessary stopping per minute, and participants didn't notice: their picks for the safest block were spread three, five and three, which is chance. And once asked, the robot stopped within a quarter of a second.
+The difference is timing. Our controller requested the stop about a tenth of a second earlier, for every one of the twelve participants. This matters because distance measurement always carries some error. With a five-centimetre error, the fixed zones would still have covered 31 per cent of entries, compared with 67 per cent for our controller. It is therefore as safe, with a larger margin.""",
 
-Luke will now take us through what this means and how we ran the project.""",
+"""MICHAEL | 0:50
 
-"""LUKE | 0:40
+The second part: is it still efficient? Partly. Our controller switched between stopping and resuming more often, because it releases the stop as soon as the estimated risk falls, so noise in the speed estimate causes it to toggle. A short release delay should resolve most of this.
 
-Thanks Michael. The biggest lesson was not which controller is best. Under all three, the robot was stopped for about a third of every trial, because the task itself puts the worker in the stop zone: you have to be close to load the panel, work under it and unload it.
+Overall, it added less than one second of unnecessary stopping per minute, and participants did not notice a difference: their choices of the safest block were split three, five and three, consistent with chance. When a stop was commanded, the robot halted within a quarter of a second.
 
-So the next real gain is switching to a contact-safe mode, like hand guiding, while the worker is under the panel. Our system already knows the phase, so it can make that switch.""",
-
-"""LUKE | 0:50
-
-My role was coordinating with the lab staff and our supervisors, Yihai and Will. We planned four stages: design and simulation in July, building and pilot-testing the rig in August, twelve participant sessions in September, and analysis and writing in October.
-
-Three setbacks shaped the project. Some sessions restarted under a new ID, so we worked out from the data who was who. Midway, the distance reference changed, so we analysed the two versions separately and replayed the exact code that ran. And the paper was too technical, so we rewrote it in plain language.""",
-
-"""LUKE | 0:50
-
-Moving from the lab to a site brings real constraints. Safety: this is a research prototype on the robot's ordinary speed controls, not a certified safety function, and we'd allow half a second to react. Cost: cameras and suits need calibration, maintenance and training for every crew, weighed against the labour saved. Health: it takes overhead lifting off workers, and the suit was rated only mildly restrictive. Carbon: we didn't measure energy, so we make no claim. People and standards: crews have to accept a robot co-worker, and any site system must meet the robot safety standards.""",
+Luke will now discuss what these results mean and how we managed the project.""",
 
 """LUKE | 0:40
 
-So, back to our question. Can a task-aware robot be as safe as fixed zones and still efficient? On safety, yes: as safe on every measure, with more margin when the sensors are wrong. On efficiency, partly: same trial time, slightly more stopping. For industry, that means task awareness can sit on top of a standard safety limit without weakening it.
+Thank you, Michael. Our most important finding was not which controller was best. Under all three, the robot was stopped for about one third of every trial, because the task itself requires the worker to be inside the stop zone: to load the panel, to work beneath it and to unload it.
 
-Next: a release delay, a contact-safe mode under the panel, and trials with real crews. If you're choosing an FYP, this mixes robotics, sensing, people and construction, and there's plenty left to do. Thank you, we welcome your questions.""",
+The next real gain is therefore to switch to a contact-safe mode, such as hand guiding, while the worker is beneath the panel. Because our system already identifies the task phase, it provides the information needed to make that switch.""",
+
+"""LUKE | 0:50
+
+My role was coordinating with the laboratory staff and our supervisors, Yihai and Will. We planned four stages: design and simulation in July, building and pilot testing the rig in August, twelve participant sessions in September, and analysis and writing in October.
+
+Three setbacks shaped the project. First, some sessions were restarted under a new participant ID, so we matched sessions to participants using the recorded data. Second, the distance reference changed midway through testing, so we analysed the two versions separately and replayed the exact code that had run. Third, our paper was initially too technical, so we rewrote it for a broader audience.""",
+
+"""LUKE | 0:50
+
+Moving from the laboratory to a site introduces real constraints. For safety, this is a research prototype running on the robot's standard speed controls, not a certified safety function, and we would allow half a second to react. For cost, the cameras and suits require calibration, maintenance and training for every crew, weighed against the labour saved. For health, it removes overhead lifting from workers, and participants rated the suit as only mildly restrictive. For carbon, we did not measure energy use, so we make no claim. Finally, crews must accept a robotic co-worker, and any site system must meet the relevant robot safety standards.""",
+
+"""LUKE | 0:40
+
+To return to our research question: can a task-aware robot be as safe as fixed zones and remain efficient? On safety, yes: it was as safe on every measure, with a larger margin under sensor error. On efficiency, partly: trial times were unchanged, with slightly more stopping. For industry, this shows that task awareness can be layered on top of a standard safety limit without weakening it.
+
+Next steps are a release delay, a contact-safe mode beneath the panel, and trials with real installation crews. For students choosing a final-year project, it combines robotics, sensing, human factors and construction, with plenty left to do. Thank you; we welcome your questions.""",
 ]
 
 
