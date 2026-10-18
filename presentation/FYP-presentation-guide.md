@@ -10,7 +10,7 @@ v4.2 (14 Oct 2026) adds, from supervisor feedback:
 
 ## Running order
 
-**Three minutes each, 9:00 in total**, leaving a minute of buffer before the hard 10-minute stop. Each speaker's script is about 360 words, roughly 2:40 at 140 words a minute; slide changes and pauses fill the rest. These are allocations, not a timed rehearsal: time a real run and aim to land between 8:45 and 9:30.
+**Three minutes each, 9:00 in total**, leaving a minute of buffer before the hard 10-minute stop. Each speaker's script is about 400 words, roughly 2:50 at 140 words a minute; slide changes and pauses fill the rest. These are allocations, not a timed rehearsal: time a real run and aim to land between 8:45 and 9:30.
 
 | Slide | Speaker | Time | Ends at | Focus |
 |---|---|---:|---:|---|
