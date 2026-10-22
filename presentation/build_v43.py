@@ -19,6 +19,8 @@ Zenan's script stays at about 400 words: the opening and slide 2 grew, slides
 
     python3 presentation/build_v43.py
 """
+import copy
+
 from pptx import Presentation
 from pptx.enum.text import MSO_ANCHOR
 from pptx.util import Inches, Pt
@@ -50,15 +52,23 @@ def build():
     s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, s12 = prs.slides
 
     # Two wording edits the team made in the Drive copy of v4.2 (21 Oct):
-    # the subtitle is the paper's title, and the 3 · 5 · 3 caption
+    # the subtitle is the paper's title, broken where it balances, and the
+    # 3 · 5 · 3 caption
     sub = shape(s1, "Human–robot ceiling-panel installation").text_frame
     sub.word_wrap = True
-    run = sub.paragraphs[0].runs[0]
-    run.text = ("Safety and Efficiency of Context-Aware Speed and Separation Monitoring "
-                "in Human–Robot Ceiling-Panel Installation")
+    p = sub.paragraphs[0]
+    run = p.runs[0]
+    run.text = "Safety and Efficiency of Context-Aware Speed and Separation Monitoring"
     run.font.size = Pt(20)
+    p.add_line_break()
+    line2 = p.add_run()
+    line2._r.remove(line2._r.get_or_add_rPr())
+    line2._r.insert(0, copy.deepcopy(run._r.rPr))
+    line2.text = "in Human–Robot Ceiling-Panel Installation"
     shape(s8, "TextBox 7").text_frame.paragraphs[0].runs[0].text = (
-        "times each controller was picked as 'safest': perceived equally as safe")
+        "times each controller was picked as ‘safest’: perceived equally as safe")
+    shape(s8, "TextBox 9").text_frame.paragraphs[0].runs[0].text = (
+        "median time for the robot to stop (max 0.23 s)")
 
     # 02: the task on a real site, with our lab version below it
     remove(shape(s2, "Picture 3"))
