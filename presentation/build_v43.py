@@ -9,7 +9,10 @@ v4.3 (23 Oct 2026), from team feedback:
 - slide 4: the console screenshot and the model plot are cropped to their
   content;
 - carbon is off slide 11 and out of its script. The cost and carbon answer
-  stays in the guide's prepared questions.
+  stays in the guide's prepared questions;
+- two edits the team made in the Drive copy of v4.2 are carried over: the
+  slide 1 subtitle is the paper's title, and slide 8 says the 3 · 5 · 3 picks
+  were "perceived equally as safe".
 
 Zenan's script stays at about 400 words: the opening and slide 2 grew, slides
 3 and 4 were tightened.
@@ -18,7 +21,7 @@ Zenan's script stays at about 400 words: the opening and slide 2 grew, slides
 """
 from pptx import Presentation
 from pptx.enum.text import MSO_ANCHOR
-from pptx.util import Inches
+from pptx.util import Inches, Pt
 
 from build_v4 import BLUE, GREY, HERE, NAVY, ROOT, WHITE, box, notes, text
 from build_v42 import shape
@@ -45,6 +48,17 @@ def crop(pic, left, top, right, bottom, x, y, w):
 def build():
     prs = Presentation(str(SRC))
     s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, s12 = prs.slides
+
+    # Two wording edits the team made in the Drive copy of v4.2 (21 Oct):
+    # the subtitle is the paper's title, and the 3 · 5 · 3 caption
+    sub = shape(s1, "Human–robot ceiling-panel installation").text_frame
+    sub.word_wrap = True
+    run = sub.paragraphs[0].runs[0]
+    run.text = ("Safety and Efficiency of Context-Aware Speed and Separation Monitoring "
+                "in Human–Robot Ceiling-Panel Installation")
+    run.font.size = Pt(20)
+    shape(s8, "TextBox 7").text_frame.paragraphs[0].runs[0].text = (
+        "times each controller was picked as 'safest': perceived equally as safe")
 
     # 02: the task on a real site, with our lab version below it
     remove(shape(s2, "Picture 3"))
