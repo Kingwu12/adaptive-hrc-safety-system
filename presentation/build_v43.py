@@ -3,11 +3,14 @@
 v4.3 (23 Oct 2026), from team feedback:
 - a quick Acknowledgement of Country opens Zenan's script (unit staff on Ed
   #112: "a quick one would suffice");
-- slide 2 shows the task on a real site above our lab version of it. Photo:
+- slide 2 shows the task on a real site beside our lab version of it, both
+  photos large enough to read from the back of the room. Photo:
   "Drywalling the Ceiling" by Qole Pejorian, CC BY 2.0,
   https://www.flickr.com/photos/36824782@N00/34589819 (credited on the slide);
-- slide 4: the console screenshot and the model plot are cropped to their
-  content;
+- bigger images on slides 4 and 6: the console is recaptured at a narrow
+  window on its ready card (presentation/media/dashboard-console-ready.png),
+  the model plot is redrawn at its size on the slide, and the rig slide shows
+  one large photo beside the video in place of two small ones;
 - carbon is off slide 11 and out of its script. The cost and carbon answer
   stays in the guide's prepared questions;
 - two edits the team made in the Drive copy of v4.2 are carried over: the
@@ -22,10 +25,11 @@ Zenan's script stays at about 400 words: the opening and slide 2 grew, slides
 import copy
 
 from pptx import Presentation
-from pptx.enum.text import MSO_ANCHOR
+from pptx.enum.text import PP_ALIGN
+from pptx.oxml.ns import qn
 from pptx.util import Inches, Pt
 
-from build_v4 import BLUE, GREY, HERE, NAVY, ROOT, WHITE, box, notes, text
+from build_v4 import BLUE, GREY, HERE, ROOT, box, notes, text
 from build_v42 import shape
 
 SRC = HERE / "FYP-assessment-presentation-v4.2.pptx"
@@ -35,6 +39,15 @@ MEDIA = HERE / "media"
 
 def remove(sh):
     sh._element.getparent().remove(sh._element)
+
+
+def add_line(run, line):
+    """Add a line break after run, then line in run's formatting."""
+    r = copy.deepcopy(run._r)
+    r.find(qn("a:t")).text = line
+    br = run._r.makeelement(qn("a:br"), {})
+    run._r.addnext(br)
+    br.addnext(r)
 
 
 def crop(pic, left, top, right, bottom, x, y, w):
@@ -56,42 +69,78 @@ def build():
     # 3 · 5 · 3 caption
     sub = shape(s1, "Human–robot ceiling-panel installation").text_frame
     sub.word_wrap = True
-    p = sub.paragraphs[0]
-    run = p.runs[0]
+    run = sub.paragraphs[0].runs[0]
     run.text = "Safety and Efficiency of Context-Aware Speed and Separation Monitoring"
     run.font.size = Pt(20)
-    p.add_line_break()
-    line2 = p.add_run()
-    line2._r.remove(line2._r.get_or_add_rPr())
-    line2._r.insert(0, copy.deepcopy(run._r.rPr))
-    line2.text = "in Human–Robot Ceiling-Panel Installation"
+    add_line(run, "in Human–Robot Ceiling-Panel Installation")
     shape(s8, "TextBox 7").text_frame.paragraphs[0].runs[0].text = (
         "times each controller was picked as ‘safest’: perceived equally as safe")
     shape(s8, "TextBox 9").text_frame.paragraphs[0].runs[0].text = (
         "median time for the robot to stop (max 0.23 s)")
 
-    # 02: the task on a real site, with our lab version below it
+    # 02: the task on a real site beside our lab version, both large and
+    # cropped square to the people and the panel; the three points narrow to
+    # the right, spaced by their line counts (3, 4, 3), and the question spans
+    # the bottom above the footer band
     remove(shape(s2, "Picture 3"))
-    site = s2.shapes.add_picture(str(MEDIA / "site-ceiling-board.jpg"), Inches(0.6), Inches(1.45))
-    crop(site, 0, 23, 1024, 694, 0.6, 1.45, 4.58)
-    box(s2, 0.72, 1.57, 1.75, 0.38, fill=NAVY)
-    text(s2, "On site today", 0.78, 1.6, 1.65, 0.34, size=13, bold=True, color=WHITE)
-    text(s2, "Photo: Qole Pejorian, CC BY 2.0", 0.6, 4.47, 4.58, 0.22, size=9, color=GREY)
-    s2.shapes.add_picture(str(ROOT / "paper/figures/task-frame.jpg"), Inches(0.6), Inches(4.75), height=Inches(1.65))
-    text(s2, [[("In our lab", {"bold": True, "color": BLUE})],
-              "The robot holds the panel; the worker aligns and fixes it."],
-         2.3, 4.75, 2.9, 1.65, size=15, anchor=MSO_ANCHOR.MIDDLE)
+    for path, (l, t, r, b), x, head, body in (
+            (MEDIA / "site-ceiling-board.jpg", (284, 60, 990, 766), 0.6,
+             "On site today", "A second worker holds the board."),
+            (ROOT / "paper/figures/task-frame.jpg", (80, 0, 800, 720), 4.3,
+             "In our lab", "The robot holds the panel.")):
+        crop(s2.shapes.add_picture(str(path), 0, 0), l, t, r, b, x, 1.3, 3.5)
+        text(s2, [[(head, {"bold": True, "color": BLUE})], body], x, 4.88, 3.5, 0.7, size=15)
+    text(s2, "Photo: Qole Pejorian, CC BY 2.0", 0.6, 4.96, 3.5, 0.22, size=9, color=GREY, align=PP_ALIGN.RIGHT)
+    bodies = ("A robot can take the weight.",
+              "Safety zones stop it whenever someone is close.",
+              "Crews need it right both ways.")
+    for i, (body, y) in enumerate(zip(bodies, (1.4, 2.82, 4.51))):
+        oval, tb = shape(s2, f"Oval {4 + 2 * i}"), shape(s2, f"TextBox {5 + 2 * i}")
+        oval.left, oval.top = Inches(8.4), Inches(y + 0.03)
+        tb.left, tb.top, tb.width = Inches(9.05), Inches(y), Inches(3.65)
+        tb.text_frame.paragraphs[1].runs[0].text = body
+        for p in tb.text_frame.paragraphs:
+            p.runs[0].font.size = Pt(16)
+    stop = shape(s2, "TextBox 9").text_frame.paragraphs[0].runs[0]
+    stop.text = "Stop too late: injury."
+    add_line(stop, "Stop too often: no one uses it.")
+    q, qt = shape(s2, "Rounded Rectangle 10"), shape(s2, "TextBox 11")
+    q.left, q.top, q.width, q.height = Inches(0.6), Inches(5.66), Inches(12.2), Inches(0.76)
+    qt.left, qt.top, qt.width, qt.height = Inches(0.75), Inches(5.68), Inches(11.9), Inches(0.72)
+    for r in qt.text_frame.paragraphs[0].runs:
+        r.font.size = Pt(18)
 
-    # 04: crop the console and the plot to their content; the console gets
-    # more of the width because it is text, and the shorter plot sits level
-    # with the console's middle
-    console, plot = shape(s4, "Picture 2"), shape(s4, "Picture 3")
-    crop(console, 330, 0, 2870, 1380, 0.6, 1.4, 6.0)
-    crop(plot, 20, 18, 2180, 815, 6.9, 1.4, 5.9)
-    plot.top = console.top + (console.height - plot.height) // 2
-    for name, x, w in (("TextBox 4", 0.6, 6.0), ("TextBox 5", 6.9, 5.9)):
+    # 04: both pictures 3.85 in tall. The console is recaptured at a narrow
+    # window so its text is large, showing its ready card as in a session
+    # (the old capture was taken with no lab hardware and read "0/5 systems
+    # ready"); a stand-in data feed supplied the ready state. The model plot is
+    # redrawn at its size on the slide (scripts/make_deck_model_figures.py)
+    remove(shape(s4, "Picture 2"))
+    console = s4.shapes.add_picture(str(MEDIA / "dashboard-console-ready.png"),
+                                    Inches(0.6), Inches(1.3), height=Inches(3.85))
+    console.line.color.rgb = GREY
+    console.line.width = Pt(0.75)
+    remove(shape(s4, "Picture 3"))
+    s4.shapes.add_picture(str(MEDIA / "model/held-out-trial-slide.png"),
+                          Inches(7.15), Inches(1.3), Inches(5.65), Inches(3.85))
+    for name, x, w in (("TextBox 4", 0.6, console.width / 914400), ("TextBox 5", 7.15, 5.65)):
         tb = shape(s4, name)
-        tb.left, tb.width = Inches(x), Inches(w)
+        tb.left, tb.top, tb.width = Inches(x), Inches(5.22), Inches(w)
+    shape(s4, "TextBox 5").text_frame.paragraphs[1].runs[0].text = (
+        "Upper bar: what they were doing. Lower bar: what the model said, live.")
+    shape(s4, "TextBox 6").top = Inches(6.2)
+
+    # 06: one large photo of the rig beside the video, in place of two small
+    # ones (the top one was a back view that repeated the video). The play
+    # label moves to the video's bottom right, off the participant's head, and
+    # the captions are reworded so no word sits alone on a line
+    remove(shape(s6, "Picture 4"))
+    crop(shape(s6, "Picture 3"), 340, 0, 927, 675, 8.45, 1.35, 4.4)
+    for name, x, y in (("Rounded Rectangle 11", 5.18, 4.92), ("TextBox 12", 5.24, 4.95)):
+        shape(s6, name).left, shape(s6, name).top = Inches(x), Inches(y)
+    for name, body in (("TextBox 7", "head position to about one millimetre"),
+                       ("TextBox 8", "tracks the motion of all 23 body segments")):
+        shape(s6, name).text_frame.paragraphs[1].runs[0].text = body
 
     # 11: five cards, carbon removed; the bottom two take the full width
     for sh in list(s11.shapes):
@@ -127,7 +176,7 @@ I am Zenan, and with Luke and Michael I will present our project: a context-awar
 
 2: """ZENAN | 0:50
 
-Installing ceiling panels requires workers to hold heavy boards overhead. On a typical site, shown here, one person simply holds the board while another fixes it. In our laboratory, below, a collaborative robot does the holding.
+Installing ceiling panels requires workers to hold heavy boards overhead. On a typical site, on the left, one person simply holds the board while another fixes it. In our laboratory, beside it, a collaborative robot does the holding.
 
 However, the worker now stands beside a moving robot. Current practice defines fixed safety zones around the robot and stops it whenever a person is inside. These zones cannot distinguish a worker approaching to begin a task from one moving away. If the robot stops too late, the worker may be injured; if it stops too often, crews are likely to disable it. Solving this benefits installation crews, contractors and the engineers who certify these systems.
 

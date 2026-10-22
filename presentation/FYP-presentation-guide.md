@@ -5,8 +5,8 @@
 v4.3 (23 Oct 2026) changes, from team feedback:
 
 1. **Acknowledgement of Country** as the first line of slide 1 (spoken, not on screen): "We acknowledge the Traditional Owners of the land we are meeting on, and pay our respects to their Elders." Unit staff on Ed #112: a quick one would suffice.
-2. **Slide 2 shows the task on a real site** (two people holding a board to a ceiling; photo by Qole Pejorian, CC BY 2.0, credited on the slide), with our lab version below it.
-3. **Slide 4 images cropped** to their content.
+2. **Slide 2 shows the task on a real site** (two people holding a board to a ceiling; photo by Qole Pejorian, CC BY 2.0, credited on the slide) beside our lab version of it. Both photos are large enough to read from the back of the room.
+3. **Bigger images on slides 4 and 6.** Slide 4 shows the console recaptured at a narrow window, so its text is large, on its ready card ("5/5 systems ready", next trial, controller, Start button). The old capture was taken with no lab hardware and read "0/5 systems ready" and "Robot control is switched off"; a stand-in data feed supplied the ready state, so if asked, it is the real console showing what it looks like before a trial. The model chart is redrawn at its size on the slide, so its labels read at 16 pt. Slide 6 shows one large photo of the rig beside the video in place of two small ones, with the play label moved off the participant.
 4. **Carbon removed** from slide 11 and its script. The prepared answer on cost and carbon stays below.
 5. **The team's Drive edits kept.** The Google Slides copy of v4.2 (edited 21 Oct) had two on-screen changes the repo lacked, and v4.3 has both: the slide 1 subtitle is the paper's title, and slide 8 says the picks were "perceived equally as safe". Its speaker notes matched the repo's. The Slides copy also drops slide 6's "Video: click to play" label; v4.3 keeps it because the video plays when the .pptx is presented in PowerPoint.
 
