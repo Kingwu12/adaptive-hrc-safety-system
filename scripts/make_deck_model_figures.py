@@ -70,7 +70,19 @@ def held_out(ts):
     _, test, pred, truth = scored[len(scored) // 2]
     X = np.concatenate(test.feature_sequences)
     t = np.arange(len(truth)) / 60.0
-    fig, axs = plt.subplots(3, 1, figsize=(11, 4.2), sharex=True,
+    acc = np.mean(np.array(pred) == np.array(truth))
+    title = (f'Held-out trial {test.participant_id} {test.trial_id}: model trained only on the other two operators '
+             f'({acc:.0%} of frames correct)')
+    plot_held_out(t, X, truth, pred, 'held-out-trial.png', (11, 4.2), title=title)
+    # The deck's slide 4 shows it at its full on-slide size, so text reads at 16 pt when projected
+    with plt.rc_context({'font.size': 16}):
+        plot_held_out(t, X, truth, pred, 'held-out-trial-slide.png', (5.65, 3.85),
+                      xlabel='time (s)', legend_above=True)
+
+
+def plot_held_out(t, X, truth, pred, name, figsize, title=None, xlabel='time (s, labelled frames)',
+                  legend_above=False):
+    fig, axs = plt.subplots(3, 1, figsize=figsize, sharex=True,
                             gridspec_kw={'height_ratios': [2.2, .6, .6]})
     axs[0].plot(t, X[:, 0], color='#333', lw=1.2); axs[0].set_ylabel('distance (m)')
     axs[0].spines[['top', 'right']].set_visible(False)
@@ -78,13 +90,17 @@ def held_out(ts):
         ax.imshow([[STATES.index(s) for s in seq]], aspect='auto', extent=(t[0], t[-1], 0, 1),
                   cmap=matplotlib.colors.ListedColormap([COL[s] for s in STATES]), vmin=0, vmax=2)
         ax.set_yticks([.5], [lab]); ax.tick_params(left=False)
-    axs[2].set_xlabel('time (s, labelled frames)')
+    axs[2].set_xlabel(xlabel)
     handles = [plt.Rectangle((0, 0), 1, 1, color=COL[s]) for s in STATES]
-    axs[0].legend(handles, STATES, ncol=3, frameon=False, loc='upper right')
-    acc = np.mean(np.array(pred) == np.array(truth))
-    axs[0].set_title(f'Held-out trial {test.participant_id} {test.trial_id}: model trained only on the other two operators '
-                     f'({acc:.0%} of frames correct)', fontsize=12)
-    fig.tight_layout(); fig.savefig(OUT / 'held-out-trial.png', dpi=200); plt.close(fig)
+    if legend_above:
+        fig.legend(handles, STATES, ncol=3, frameon=False, loc='upper center',
+                   handlelength=1, columnspacing=1)
+        fig.tight_layout(rect=(0, 0, 1, .9))
+    else:
+        axs[0].legend(handles, STATES, ncol=3, frameon=False, loc='upper right')
+        axs[0].set_title(title, fontsize=12)
+        fig.tight_layout()
+    fig.savefig(OUT / name, dpi=200); plt.close(fig)
 
 
 def pipeline():
