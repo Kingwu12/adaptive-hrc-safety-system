@@ -8,6 +8,7 @@ v4.3 (23 Oct 2026) changes, from team feedback:
 2. **Slide 2 shows the task on a real site** (two people holding a board to a ceiling; photo by Qole Pejorian, CC BY 2.0, credited on the slide), with our lab version below it.
 3. **Slide 4 images cropped** to their content.
 4. **Carbon removed** from slide 11 and its script. The prepared answer on cost and carbon stays below.
+5. **The team's Drive edits kept.** The Google Slides copy of v4.2 (edited 21 Oct) had two on-screen changes the repo lacked, and v4.3 has both: the slide 1 subtitle is the paper's title, and slide 8 says the picks were "perceived equally as safe". Its speaker notes matched the repo's. The Slides copy also drops slide 6's "Video: click to play" label; v4.3 keeps it because the video plays when the .pptx is presented in PowerPoint.
 
 v4.2 (14 Oct 2026) added, from supervisor feedback:
 
@@ -36,8 +37,8 @@ v4.2 (14 Oct 2026) added, from supervisor feedback:
 
 **Prepared handovers** (also at the end of the notes on slides 4 and 8):
 
-- End of slide 4, Zenan: "Michael will now show you how we tested it and what we found."
-- End of slide 8, Michael: "Luke will now take us through what this means and how we ran the project."
+- End of slide 4, Zenan: "Michael will now present how we tested the system and what we found."
+- End of slide 8, Michael: "Luke will now discuss what these results mean and how we managed the project."
 
 Pass the clicker with the last sentence, not after it.
 
@@ -106,4 +107,4 @@ AI tools helped with analysis code, figures and editing, and this is declared in
 
 ## Media and setup
 
-The deck is self-contained: photos and native charts, no video or internet needed. Faces are blurred in all photos. If you add a video clip, check consent, blur faces and re-time the run.
+The deck is self-contained: photos, native charts and one embedded 16-second video on slide 6, with no internet needed. Present from the .pptx in PowerPoint and click the video once to check it plays on the presentation machine; Google Slides may not play it. Faces are blurred in all photos.
