@@ -1,8 +1,15 @@
 # Final presentation: rehearsal and rubric guide
 
-**Thursday 29 October 2026, 2:00 pm.** Use **FYP-assessment-presentation-v4.2.pptx**. It is built by `python3 presentation/build_v42.py` from v4 (the 6 Oct deck, uploaded to Drive as v4.1), which is rebuilt by `build_v4.py`. The speaker notes hold the full script for each slide. Rehearse from them until you can say each slide in your own words; reading from the slides is a fail item in the rubric.
+**Thursday 29 October 2026, 2:00 pm.** Use **FYP-assessment-presentation-v4.3.pptx**. It is built by `python3 presentation/build_v43.py` from v4.2, which `build_v42.py` builds from v4 (the 6 Oct deck, uploaded to Drive as v4.1), which is rebuilt by `build_v4.py`. The speaker notes hold the full script for each slide. Rehearse from them until you can say each slide in your own words; reading from the slides is a fail item in the rubric.
 
-v4.2 (14 Oct 2026) adds, from supervisor feedback:
+v4.3 (23 Oct 2026) changes, from team feedback:
+
+1. **Acknowledgement of Country** as the first line of slide 1 (spoken, not on screen): "We acknowledge the Traditional Owners of the land we are meeting on, and pay our respects to their Elders." Unit staff on Ed #112: a quick one would suffice.
+2. **Slide 2 shows the task on a real site** (two people holding a board to a ceiling; photo by Qole Pejorian, CC BY 2.0, credited on the slide), with our lab version below it.
+3. **Slide 4 images cropped** to their content.
+4. **Carbon removed** from slide 11 and its script. The prepared answer on cost and carbon stays below.
+
+v4.2 (14 Oct 2026) added, from supervisor feedback:
 
 1. **The research question on screen early** (slide 2), and a tag on each result slide saying which part of the question it answers; slide 12 answers it back.
 2. **More of the actual work:** the participant video on the rig slide, and a new slide 4 with our operator console and the trained phase model running on a person it never saw.
@@ -10,22 +17,22 @@ v4.2 (14 Oct 2026) adds, from supervisor feedback:
 
 ## Running order
 
-**Three minutes each, 9:00 in total**, leaving a minute of buffer before the hard 10-minute stop. Each speaker's script is about 400 words, roughly 2:50 at 140 words a minute; slide changes and pauses fill the rest. These are allocations, not a timed rehearsal: time a real run and aim to land between 8:45 and 9:30.
+**About three minutes each, 8:55 in total**, leaving a minute of buffer before the hard 10-minute stop. Each speaker's script is about 400 words, roughly 2:50 at 140 words a minute; slide changes and pauses fill the rest. These are allocations, not a timed rehearsal: time a real run and aim to land between 8:45 and 9:30.
 
 | Slide | Speaker | Time | Ends at | Focus |
 |---|---|---:|---:|---|
-| 1 Title | Zenan | 0:25 | 0:25 | Who we are, roadmap |
-| 2 Why this problem matters | Zenan | 0:45 | 1:10 | Why care, who benefits, **the research question** |
-| 3 Our solution | Zenan | 0:55 | 2:05 | Three controllers, slow-only rule |
-| 4 What we built | Zenan | 0:55 | 3:00 | Operator console and trained model (Zenan's contribution) |
+| 1 Title | Zenan | 0:30 | 0:30 | Acknowledgement of Country, who we are, roadmap |
+| 2 Why this problem matters | Zenan | 0:50 | 1:20 | The task on site and in our lab, why care, who benefits, **the research question** |
+| 3 Our solution | Zenan | 0:50 | 2:10 | Three controllers, slow-only rule |
+| 4 What we built | Zenan | 0:50 | 3:00 | Operator console and trained model (Zenan's contribution) |
 | 5 How we tested it | Michael | 0:40 | 3:40 | 12 people, rotated blocks, same-input replay |
 | 6 The test rig | Michael | 0:40 | 4:20 | Robot position and PVC pipe structure (Michael's contribution), video |
 | 7 Result 1: as safe? | Michael | 0:50 | 5:10 | 970/970, earlier stop, margin under distance error |
 | 8 Result 2: still efficient? | Michael | 0:50 | 6:00 | Brief extra stops, unnoticed, robot stopping time |
 | 9 The task is the limit | Luke | 0:40 | 6:40 | A third of each trial stopped; contact-safe mode next |
 | 10 Project management | Luke | 0:50 | 7:30 | Plan, setbacks, responses (Luke's contribution) |
-| 11 Using it on site | Luke | 0:50 | 8:20 | Safety, cost, health, carbon, people, standards |
-| 12 Answer and next steps | Luke | 0:40 | 9:00 | Answer to the question, industry meaning, why pick this topic |
+| 11 Using it on site | Luke | 0:45 | 8:15 | Safety, cost, health, people, standards |
+| 12 Answer and next steps | Luke | 0:40 | 8:55 | Answer to the question, industry meaning, why pick this topic |
 
 **Prepared handovers** (also at the end of the notes on slides 4 and 8):
 
@@ -44,8 +51,8 @@ Pass the clicker with the last sentence, not after it.
 | Category | Weight | Where it is covered |
 |---|---:|---|
 | Individual contribution (per student) | 10% | Each speaker states their own role (slides 4, 6, 10); roles repeated on slide 12. Speak, don't read; dress for a business setting; no filler words. |
-| Technical elements, constraints and contextual factors, adaptability | 60% | Why care, who benefits and the research question (2); solution chosen and justified (3); what we built (4); design and conduct for a general audience (5, 6); honest results, each tagged with the part of the question it answers (7, 8, 9); project management with setbacks (10); safety, whole-life cost, health, net zero carbon and social factors (11); answer to the research question and why another student should pick this topic (12). |
-| Structural and visual elements | 15% | Problem, solution, test, results, management, context, answer. Photos, native charts, diagrams; text kept short. Two prepared handovers. Target 9:00, three minutes each. |
+| Technical elements, constraints and contextual factors, adaptability | 60% | Why care, who benefits and the research question (2); solution chosen and justified (3); what we built (4); design and conduct for a general audience (5, 6); honest results, each tagged with the part of the question it answers (7, 8, 9); project management with setbacks (10); safety, whole-life cost, health and social factors (11; the rubric also names net zero carbon, which v4.3 took off the slide, so it is covered only by the prepared answer below); answer to the research question and why another student should pick this topic (12). |
+| Structural and visual elements | 15% | Problem, solution, test, results, management, context, answer. Photos, native charts, diagrams; text kept short. Two prepared handovers. Target 8:55, about three minutes each. |
 | Responsive elements (answers to questions) | 15% | Prepared answers below. Keep each to two or three sentences, then stop. |
 
 Points the old guide covered that the new rubric now stresses:
