@@ -10,7 +10,8 @@ v4.3 (23 Oct 2026), from team feedback:
 - bigger images on slides 4 and 6: the console is recaptured at a narrow
   window on its ready card (presentation/media/dashboard-console-ready.png),
   the model plot is redrawn at its size on the slide, and the rig slide shows
-  one large photo beside the video in place of two small ones;
+  one large photo beside the video in place of two small ones, with the
+  OptiTrack camera, the Xsens suit and the UR10 arm circled and labelled on it;
 - carbon is off slide 11 and out of its script. The cost and carbon answer
   stays in the guide's prepared questions;
 - two edits the team made in the Drive copy of v4.2 are carried over: the
@@ -23,14 +24,19 @@ Zenan's script stays at about 400 words: the opening and slide 2 grew, slides
     python3 presentation/build_v43.py
 """
 import copy
+import math
 
 from pptx import Presentation
-from pptx.enum.text import PP_ALIGN
+from pptx.dml.color import RGBColor
+from pptx.enum.shapes import MSO_CONNECTOR, MSO_SHAPE
+from pptx.enum.text import MSO_ANCHOR, PP_ALIGN
 from pptx.oxml.ns import qn
 from pptx.util import Inches, Pt
 
-from build_v4 import BLUE, GREY, HERE, ROOT, box, notes, text
+from build_v4 import BLUE, GREY, HERE, NAVY, ROOT, WHITE, box, notes, text
 from build_v42 import shape
+
+AMBER = RGBColor(0xFF, 0xB8, 0x1C)
 
 SRC = HERE / "FYP-assessment-presentation-v4.2.pptx"
 OUT = HERE / "FYP-assessment-presentation-v4.3.pptx"
@@ -48,6 +54,34 @@ def add_line(run, line):
     br = run._r.makeelement(qn("a:br"), {})
     run._r.addnext(br)
     br.addnext(r)
+
+
+def callout(s, label, x, y, r, lx, ly, lw):
+    """Circle (x, y) with radius r and point at it from a dark label whose
+    top left is (lx, ly); all in inches. A newline in label breaks the line."""
+    lines = label.split("\n")
+    h = 0.16 + 0.24 * len(lines)
+    ring = s.shapes.add_shape(MSO_SHAPE.OVAL, Inches(x - r), Inches(y - r), Inches(2 * r), Inches(2 * r))
+    ring.fill.background()
+    ring.line.color.rgb = AMBER
+    ring.line.width = Pt(3)
+    ring.shadow.inherit = False
+    # the arrow runs from the label's edge to the circle's edge
+    cx, cy = lx + lw / 2, ly + h / 2
+    dx, dy = x - cx, y - cy
+    d = math.hypot(dx, dy)
+    t = min(lw / 2 / abs(dx) if dx else math.inf, h / 2 / abs(dy) if dy else math.inf)
+    line = s.shapes.add_connector(MSO_CONNECTOR.STRAIGHT, Inches(cx + dx * t), Inches(cy + dy * t),
+                                  Inches(x - dx / d * r), Inches(y - dy / d * r))
+    line.line.color.rgb = AMBER
+    line.line.width = Pt(2.5)
+    line.line._ln.append(line.line._ln.makeelement(qn("a:tailEnd"), {"type": "triangle"}))
+    box(s, lx, ly, lw, h, fill=NAVY)
+    tf = text(s, lines[0], lx, ly, lw, h, size=15, bold=True, color=WHITE,
+              align=PP_ALIGN.CENTER, anchor=MSO_ANCHOR.MIDDLE).text_frame
+    tf.word_wrap = False
+    for line in lines[1:]:
+        add_line(tf.paragraphs[0].runs[-1], line)
 
 
 def crop(pic, left, top, right, bottom, x, y, w):
@@ -141,6 +175,18 @@ def build():
     for name, body in (("TextBox 7", "head position to about one millimetre"),
                        ("TextBox 8", "tracks the motion of all 23 body segments")):
         shape(s6, name).text_frame.paragraphs[1].runs[0].text = body
+    # The hardware the captions name, circled on the photo (King, 23 Oct).
+    # Positions are photo pixels in apparatus-a.jpg: the camera on the
+    # overhead frame (clear of the silver box hanging beside it), the suit on
+    # the torso, and the arm's upper end below the panel, clear of the suit's
+    # circle and the head cap. Labels sit on plain ceiling, glass and wall.
+    # 587 px of photo span 4.4 in
+    k = 4.4 / 587
+    for label, (px, py, pr), (lx, ly, lw) in (
+            ("OptiTrack\ncamera", (655, 75, 20), (8.55, 1.45, 1.15)),
+            ("Xsens suit", (690, 385, 52), (8.55, 3.95, 1.2)),
+            ("UR10\nrobot arm", (730, 219, 40), (11.78, 3.55, 1.04))):
+        callout(s6, label, 8.45 + (px - 340) * k, 1.35 + py * k, pr * k, lx, ly, lw)
 
     # 11: five cards, carbon removed; the bottom two take the full width
     for sh in list(s11.shapes):
