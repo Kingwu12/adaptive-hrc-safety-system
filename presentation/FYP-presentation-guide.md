@@ -9,6 +9,7 @@ v4.3 (23 Oct 2026) changes, from team feedback:
 3. **Bigger images on slides 4 and 6.** Slide 4 shows the console recaptured at a narrow window, so its text is large, on its ready card ("5/5 systems ready", next trial, controller, Start button). The old capture was taken with no lab hardware and read "0/5 systems ready" and "Robot control is switched off"; a stand-in data feed supplied the ready state, so if asked, it is the real console showing what it looks like before a trial. The model chart is redrawn at its size on the slide, so its labels read at 16 pt. Slide 6 shows one large photo of the rig beside the video in place of two small ones, with the play label moved off the participant. On that photo, amber circles and arrows point out an OptiTrack camera on the overhead frame, the Xsens suit and the UR10 arm, so Michael can point at each one as he names it.
 4. **Carbon removed** from slide 11 and its script. The prepared answer on cost and carbon stays below.
 5. **The team's Drive edits kept.** The Google Slides copy of v4.2 (edited 21 Oct) had two on-screen changes the repo lacked, and v4.3 has both: the slide 1 subtitle is the paper's title, and slide 8 says the picks were "perceived equally as safe". Its speaker notes matched the repo's. The Slides copy also drops slide 6's "Video: click to play" label; v4.3 keeps it because the video plays when the .pptx is presented in PowerPoint.
+6. **The team's script edits kept.** The Drive doc "FYP presentation scripts v4.2" was edited on 21 Oct: Michael's slides 5 and 6 are simpler, Luke's slides 9, 10 and 11 are in his own words, and the "my contribution" sentences on slides 4, 6 and 10 are gone. The v4.3 speaker notes carry these word for word (slide 11 without carbon), and "FYP presentation scripts v4.3 (2026-10-23)" sits beside the deck in Drive with the same text.
 
 v4.2 (14 Oct 2026) added, from supervisor feedback:
 
@@ -18,7 +19,7 @@ v4.2 (14 Oct 2026) added, from supervisor feedback:
 
 ## Running order
 
-**About three minutes each, 8:55 in total**, leaving a minute of buffer before the hard 10-minute stop. Each speaker's script is about 400 words, roughly 2:50 at 140 words a minute; slide changes and pauses fill the rest. These are allocations, not a timed rehearsal: time a real run and aim to land between 8:45 and 9:30.
+**About three minutes each, 8:55 in total**, leaving a minute of buffer before the hard 10-minute stop. With the team's edits the scripts are 1,270 words, about 9:04 at 140 words a minute: Zenan 412 (2:57), Michael 379 (2:42), Luke 479 (3:25). Luke's slide 10 is 164 words, about 1:10 against its 0:50, so trim it or say it briskly. These are allocations, not a timed rehearsal: time a real run and aim to land between 8:45 and 9:30.
 
 | Slide | Speaker | Time | Ends at | Focus |
 |---|---|---:|---:|---|
@@ -51,7 +52,7 @@ Pass the clicker with the last sentence, not after it.
 
 | Category | Weight | Where it is covered |
 |---|---:|---|
-| Individual contribution (per student) | 10% | Each speaker states their own role (slides 4, 6, 10); roles repeated on slide 12. Speak, don't read; dress for a business setting; no filler words. |
+| Individual contribution (per student) | 10% | The team took the "my contribution" sentences out of slides 4, 6 and 10 on 21 Oct, so no script now says who did what. Each speaker should still name their own part in their own words, and be ready for "Who does what in the team?" below. Speak, don't read; dress for a business setting; no filler words. |
 | Technical elements, constraints and contextual factors, adaptability | 60% | Why care, who benefits and the research question (2); solution chosen and justified (3); what we built (4); design and conduct for a general audience (5, 6); honest results, each tagged with the part of the question it answers (7, 8, 9); project management with setbacks (10); safety, whole-life cost, health and social factors (11; the rubric also names net zero carbon, which v4.3 took off the slide, so it is covered only by the prepared answer below); answer to the research question and why another student should pick this topic (12). |
 | Structural and visual elements | 15% | Problem, solution, test, results, management, context, answer. Photos, native charts, diagrams; text kept short. Two prepared handovers. Target 8:55, about three minutes each. |
 | Responsive elements (answers to questions) | 15% | Prepared answers below. Keep each to two or three sentences, then stop. |

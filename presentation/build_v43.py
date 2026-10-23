@@ -236,15 +236,52 @@ The key design principle is shown in the dark bar: the learned components can on
 
 4: """ZENAN | 0:50
 
-My contribution was the software. On the left is the operator console we developed to run each session. It verifies every sensor, assigns the controller, and records both the robot and the participant.
+On the left is the operator console we developed to run each session. It verifies every sensor, assigns the controller, and records both the robot and the participant.
 
 On the right is our trained phase model, tested on a participant it never saw. The upper bar shows what the participant was actually doing, and the lower bar shows the model's live prediction. It tracks the long working phase closely and is least certain at the transitions.
 
 Michael will now present how we tested the system and what we found.""",
 
+# Slides 5 to 11 as the team edited them in the Drive scripts doc (21 Oct),
+# word for word, with carbon taken out of slide 11.
+5: """MICHAEL | 0:40
+
+Thank you, Zenan. Twelve participants took part under Monash ethics approval. Each completed three blocks of the panel task, with one controller per block in a rotated order. The task included cued movements, such as a quick step towards the robot, and a short questionnaire followed each block.
+
+Our key decision here was to use all the sensor inputs. This allowed us to see the same movement data from all three controllers, so any difference in outcome comes from the controller rather than the participant.""",
+
+6: """MICHAEL | 0:40
+
+We positioned the robot and built the PVC pipe structure shown here.
+
+The UR10 arm raises a panel substitute to ceiling height and holds it while the participant works beneath it. Cameras on the frame track the participant's head, and the motion-capture suit records the individual body segments. [Click the video.] This clip shows a participant approaching while the suit streams their movement to the controller. The controller reads the data and sets the speed the robot is permitted to move at.""",
+
+9: """LUKE | 0:40
+
+Thank you, Michael. Our most important finding was not which controller was best but rather that the bigger limit is the task itself, not our controller. Under all three controllers, the robot was stopped for about one third of every trial [as we can see here]. This is because the task itself requires the worker to be inside the stop zone: to load the panel, to work beneath it and to unload it.
+
+The next real gain is therefore to switch to a contact-safe mode, such as hand guiding, while the worker is beneath the panel. Because our system already identifies the task phase, it provides the information needed to make that switch.""",
+
+10: """LUKE | 0:50
+
+We planned four stages:
+In July we refined our design and tested our project in simulation,
+In August, we built the rig and undertook pilot testing.
+In September, we tested twelve participants across four sessions
+and conducted analysis and review as we wrote our paper in October.
+
+We faced three setbacks across the project.
+First, due to connection issues we had multiple sessions that restarted under a new participant ID. We then had to manually analyse the sessions and match participants using the recorded data of dimensions, answers etc.
+Second, during the first six participants, distance was measured from the worker’s head to a fixed reference above the robot base. For the final six, this changed to whole-body tracking relative to the moving tool centre point. To account for this, we analysed both versions separately and replayed the exact code used in each.
+Third, our paper was initially too technical, so we rewrote it for a broader audience and finalised this with our supervisors.""",
+
 11: """LUKE | 0:45
 
-Moving from the laboratory to a site introduces real constraints. For safety, this is a research prototype running on the robot's standard speed controls, not a certified safety function, and we would allow half a second to react. For cost, the cameras and suits require calibration, maintenance and training for every crew, weighed against the labour saved. For health, it removes overhead lifting from workers, and participants rated the suit as only mildly restrictive. Finally, crews must accept a robotic co-worker, and any site system must meet the relevant robot safety standards.""",
+Moving from the laboratory to a site introduces real constraints.
+For safety, this is a research prototype running on the robot's standard speed controls, not a certified safety function, and we would allow half a second to react.
+For cost, the cameras and suits require calibration, maintenance and training for every crew, weighed against the labour saved.
+For health, it removes overhead lifting from workers, and participants rated the suit as only mildly restrictive.
+Finally, crews must accept a robotic co-worker, and any site system must meet the relevant robot safety standards.""",
 }
 
 
